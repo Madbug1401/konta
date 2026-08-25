@@ -1,0 +1,398 @@
+// ============================================================================
+// KONTA — Schema de dados (Prisma DSL)
+//
+// Este ficheiro é a FONTE DE VERDADE do modelo de dados do Konta.
+// Ver docs/architecture/DECISIONS.md para a justificação de cada decisão
+// marcada com [DECISÃO N] nos comentários abaixo.
+//
+// NOTA DE AMBIENTE: neste sandbox de desenvolvimento, o CLI da Prisma (versão
+// 7.10.0) não conseguiu descarregar os binários do "schema-engine" a partir de
+// binaries.prisma.sh — o domínio está bloqueado pela política de rede deste
+// ambiente isolado (qualquer subcomando, incluindo `--help`, falha com 403).
+// Isto é uma limitação do sandbox, não do schema. Para validar o modelo aqui,
+// o mesmo desenho foi traduzido para SQL puro em prisma/manual-sql/0001_init.sql
+// e aplicado a um Postgres local real (ver docs/architecture/DECISIONS.md,
+// secção "Prisma neste ambiente"). Num ambiente com rede normal (a tua máquina,
+// CI, Vercel), basta correr:
+//   npx prisma generate && npx prisma migrate dev --name init
+// e o Prisma Client passa a ser gerado normalmente a partir deste ficheiro.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------------------------
+
+enum AccountType {
+  WALLET // dinheiro físico
+  BANK // conta corrente / à ordem
+  SAVINGS // conta poupança
+  CREDIT_CARD // cartão de crédito (saldo negativo = dívida)
+  INVESTMENT // conta de investimento
+  EMERGENCY_FUND // cofre de emergência
+  OTHER
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER // movimento entre duas Accounts do mesmo utilizador — nunca é despesa
+}
+
+enum TransactionStatus {
+  COMPLETED // já aconteceu e afeta o saldo
+  PENDING // agendado/previsto, ainda não afeta o saldo (ex: parcela futura)
+  CANCELED
+}
+
+enum CategoryKind {
+  INCOME
+  EXPENSE
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum DebtStatus {
+  ACTIVE
+  PAID_OFF
+  DEFAULTED
+}
+
+enum InstallmentStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+enum GoalStatus {
+  ACTIVE
+  ACHIEVED
+  ABANDONED
+}
+
+// ----------------------------------------------------------------------------
+// UTILIZADOR
+// ----------------------------------------------------------------------------
+
+// [DECISÃO 1] Multi-utilizador desde o início: TODAS as entidades abaixo têm
+// userId obrigatório e toda a query da aplicação é filtrada por userId vindo
+// da sessão autenticada — nunca por um id recebido do cliente sem cruzar com
+// o utilizador autenticado. Ver src/lib/db/*.ts (todas as funções recebem
+// userId explícito) e src/lib/auth (extração do userId a partir do token).
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String?
+  // [DECISÃO 2] timezone é um dado de primeira classe do utilizador, usado por
+  // todo o Financial Engine para calcular "hoje", limites de mês/semana/ano,
+  // etc. Nunca se usa new Date().toISOString() para representar o dia local.
+  timezone      String   @default("Atlantic/Cape_Verde")
+  locale        String   @default("pt-CV")
+  defaultCurrency String @default("CVE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  accounts             Account[]
+  categories           Category[]
+  transactions         Transaction[]
+  recurringTransactions RecurringTransaction[]
+  debts                Debt[]
+  goals                Goal[]
+}
+
+// ----------------------------------------------------------------------------
+// CONTAS
+// ----------------------------------------------------------------------------
+
+// [DECISÃO 3] Uma Account representa "onde o dinheiro está" (carteira, banco,
+// poupança, investimento, cofre de emergência, cartão de crédito). O saldo
+// NUNCA é um campo gravado diretamente — é sempre calculado pelo Financial
+// Engine como initialBalanceMinor + soma das Transactions que a afetam. Isto
+// elimina a classe de bug encontrada na auditoria (cofre de emergência a somar
+// valores absolutos): já não existe um "amount com sinal ambíguo", existe um
+// razão (ledger) de entradas e saídas por conta.
+model Account {
+  id                 String      @id @default(cuid())
+  userId             String
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  type               AccountType
+  currency           String      @default("CVE")
+  // [DECISÃO 4] Dinheiro é sempre inteiro em unidade mínima (cêntimos), nunca
+  // float. 1000.00 CVE se a moeda tivesse cêntimos seria 100000; para CVE
+  // (sem subunidade corrente em uso diário) usamos minorUnitFactor=1, mas o
+  // campo continua a chamar-se *Minor para manter o código igual entre moedas.
+  initialBalanceMinor BigInt     @default(0)
+  isArchived         Boolean     @default(false)
+  color              String?
+  icon               String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  transactionsOut   Transaction[]      @relation("SourceAccount")
+  transactionsIn    Transaction[]      @relation("DestinationAccount")
+  recurringOut      RecurringTransaction[] @relation("RecurringSourceAccount")
+  goals             Goal[]
+  investmentDetail  InvestmentDetail?
+
+  @@index([userId])
+}
+
+// ----------------------------------------------------------------------------
+// CATEGORIAS
+// ----------------------------------------------------------------------------
+
+// [DECISÃO 5] Categoria é independente da conta e independente de "tipo" de
+// conta — é só uma etiqueta de gasto/receita (Alimentação, Transporte, Salário,
+// ...). userId nulo = categoria de sistema (seed, partilhada por todos).
+// Transferências (TRANSFER) não usam categoria (categoryId fica null).
+model Category {
+  id        String       @id @default(cuid())
+  userId    String? // null = categoria de sistema
+  user      User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  kind      CategoryKind
+  icon      String?
+  color     String?
+  isSystem  Boolean      @default(false)
+  createdAt DateTime     @default(now())
+
+  transactions          Transaction[]
+  recurringTransactions RecurringTransaction[]
+
+  @@index([userId])
+}
+
+// ----------------------------------------------------------------------------
+// TRANSAÇÕES
+// ----------------------------------------------------------------------------
+
+// [DECISÃO 6] "date" é um Postgres DATE puro (sem hora/timezone) representando
+// o dia local em que a transação aconteceu, decidido no momento da criação
+// usando o timezone do utilizador (ver getTodayInTimezone no Financial
+// Engine). Isto elimina o bug de UTC da auditoria: já não há conversão
+// implícita para UTC a meio da noite a mudar o "dia" de uma transação.
+model Transaction {
+  id     String            @id @default(cuid())
+  userId String
+  user   User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type   TransactionType
+  status TransactionStatus @default(COMPLETED)
+
+  // Conta de origem (de onde o dinheiro sai, em EXPENSE e TRANSFER;
+  // em INCOME é a conta que recebe).
+  accountId String
+  account   Account @relation("SourceAccount", fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Só preenchido quando type = TRANSFER: conta de destino.
+  destinationAccountId String?
+  destinationAccount   Account? @relation("DestinationAccount", fields: [destinationAccountId], references: [id])
+
+  amountMinor BigInt // sempre positivo; a direção vem de "type"
+  currency    String
+
+  categoryId String? // obrigatório (a nível de aplicação) para INCOME/EXPENSE, null para TRANSFER
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  description String
+  date        DateTime @db.Date // dia local, ver [DECISÃO 6]
+
+  // Ligações opcionais a outras entidades de domínio
+  debtId               String?
+  debt                 Debt?                 @relation(fields: [debtId], references: [id])
+  debtInstallmentId    String?               @unique
+  debtInstallment      DebtInstallment?      @relation(fields: [debtInstallmentId], references: [id])
+  goalId               String?
+  goal                 Goal?                 @relation(fields: [goalId], references: [id])
+  recurringTransactionId String?
+  recurringTransaction RecurringTransaction? @relation(fields: [recurringTransactionId], references: [id])
+
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, date])
+  @@index([accountId])
+  @@index([recurringTransactionId])
+}
+
+// ----------------------------------------------------------------------------
+// RECORRÊNCIAS
+// ----------------------------------------------------------------------------
+
+// [DECISÃO 7] Corrige diretamente o bug da auditoria em que "remover todas as
+// ocorrências" identificava a série por título+valor. Aqui a série TEM
+// identidade própria (esta tabela); cada Transaction gerada guarda
+// recurringTransactionId. "Remover todas as ocorrências" = apagar todas as
+// Transaction com este id. Duas séries com o mesmo título nunca se confundem.
+model RecurringTransaction {
+  id     String          @id @default(cuid())
+  userId String
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type      TransactionType
+  accountId String
+  account   Account         @relation("RecurringSourceAccount", fields: [accountId], references: [id])
+  destinationAccountId String?
+
+  amountMinor BigInt
+  currency    String
+  categoryId  String?
+  category    Category?       @relation(fields: [categoryId], references: [id])
+  description String
+
+  frequency RecurrenceFrequency
+  interval  Int                 @default(1) // a cada N períodos
+  startDate DateTime            @db.Date
+  endDate   DateTime?           @db.Date // null = sem fim definido
+  occurrencesTotal Int?         // alternativa a endDate: nº fixo de ocorrências
+  occurrencesGenerated Int      @default(0)
+  nextRunDate DateTime          @db.Date
+  isActive  Boolean             @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@index([userId])
+  @@index([nextRunDate, isActive])
+}
+
+// ----------------------------------------------------------------------------
+// DÍVIDAS
+// ----------------------------------------------------------------------------
+
+// [DECISÃO 8] Dívida deixa de ser "uma categoria de despesa" e passa a ser uma
+// entidade própria com plano de parcelas (DebtInstallment) como filhos
+// explícitos — em vez de N Transaction soltas com título "Parcela X/Y". O
+// saldo em dívida é sempre calculado (originalAmountMinor - soma dos
+// pagamentos), nunca guardado de forma redundante que possa dessincronizar.
+model Debt {
+  id     String     @id @default(cuid())
+  userId String
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  creditorName       String
+  description        String?
+  originalAmountMinor BigInt
+  currency           String     @default("CVE")
+  // Taxa de juro anual, em percentagem, com precisão decimal exata (nunca float).
+  interestRate       Decimal?   @db.Decimal(6, 3)
+  status             DebtStatus @default(ACTIVE)
+  startDate          DateTime   @db.Date
+  finalDueDate       DateTime?  @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  installments DebtInstallment[]
+  transactions Transaction[]
+
+  @@index([userId])
+}
+
+// [DECISÃO 9] Cada parcela é a unidade de planeamento (data de vencimento,
+// valor, estado). Quando paga, liga-se à Transaction real do pagamento
+// (paidTransactionId) via a relação inversa em Transaction.debtInstallmentId.
+// A soma dos installmentAmountMinor é construída para bater certo com
+// originalAmountMinor por CONSTRUÇÃO matemática (divisão inteira + resto na
+// última parcela) — ver generateInstallmentPlan() no Financial Engine — e não
+// por uma comparação de floats como no protótipo antigo.
+model DebtInstallment {
+  id       String            @id @default(cuid())
+  debtId   String
+  debt     Debt              @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  sequence Int // 1, 2, 3... dentro da dívida
+  dueDate  DateTime          @db.Date
+  amountMinor BigInt
+  status   InstallmentStatus @default(PENDING)
+
+  paidTransaction Transaction?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([debtId, sequence])
+  @@index([debtId, status])
+}
+
+// ----------------------------------------------------------------------------
+// METAS
+// ----------------------------------------------------------------------------
+
+// [DECISÃO 10] Múltiplas metas em paralelo (corrige a limitação da auditoria
+// de só existir uma meta global de poupança/investimento). v1: cada meta
+// associa-se a UMA Account dedicada (ex: "Poupança Férias") e o progresso é o
+// saldo dessa conta. É o padrão mais simples que resolve o caso de uso real
+// sem overengineering; o padrão alternativo (contribuições marcadas por
+// goalId sem conta dedicada) fica documentado como fast-follow em
+// docs/architecture/DECISIONS.md em vez de ser implementado já.
+model Goal {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  targetAmountMinor BigInt
+  currency    String     @default("CVE")
+  targetDate  DateTime?  @db.Date
+  linkedAccountId String?
+  linkedAccount   Account? @relation(fields: [linkedAccountId], references: [id])
+  status      GoalStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@index([userId])
+}
+
+// ----------------------------------------------------------------------------
+// INVESTIMENTOS
+// ----------------------------------------------------------------------------
+
+// [DECISÃO 11] Um investimento é uma Account do tipo INVESTMENT + um detalhe
+// 1:1 (esta tabela) com metadados (tipo de investimento, retorno esperado,
+// vencimento). Corrige diretamente o bug da auditoria: "capital aportado"
+// (soma das Transaction TRANSFER para esta conta) e "valor atual" (última
+// InvestmentValuation registada) são SEMPRE dois números guardados/calculados
+// separadamente — nunca se apresenta um como se fosse o outro. Sem avaliação
+// registada, a UI mostra "sem avaliação" em vez de inventar uma rentabilidade.
+model InvestmentDetail {
+  id              String    @id @default(cuid())
+  accountId       String    @unique
+  account         Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  investmentType  String // ex: "Ações", "Títulos", "Fundo"
+  expectedReturnRate Decimal? @db.Decimal(6, 3) // % anual esperada, informativa
+  maturityDate    DateTime? @db.Date
+
+  valuations InvestmentValuation[]
+}
+
+model InvestmentValuation {
+  id                 String           @id @default(cuid())
+  investmentDetailId String
+  investmentDetail   InvestmentDetail @relation(fields: [investmentDetailId], references: [id], onDelete: Cascade)
+  date               DateTime         @db.Date
+  valueMinor         BigInt // valor de mercado registado manualmente nesta data
+  createdAt          DateTime         @default(now())
+
+  @@index([investmentDetailId, date])
+}
