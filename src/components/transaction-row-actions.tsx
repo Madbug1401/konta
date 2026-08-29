@@ -21,11 +21,16 @@ export function TransactionRowActions({ id }: { id: string }) {
   }
 
   return (
+    // [Correção — Pre-Beta Hardening, Prioridade 11] 36×36px (h-9 w-9) fica
+    // abaixo do alvo de toque mínimo recomendado (~44px) — difícil de acertar
+    // em mobile, especialmente numa linha de tabela densa. 44×44px (h-11
+    // w-11) sem mudar mais nada (ícone, cor, espaçamento entre os dois
+    // botões continuam iguais).
     <div className="flex items-center gap-1">
       <Link
         href={`/transactions/${id}/edit`}
         aria-label="Editar transação"
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+        className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
       >
         <Pencil className="h-4 w-4" />
       </Link>
@@ -34,7 +39,7 @@ export function TransactionRowActions({ id }: { id: string }) {
         onClick={handleDelete}
         disabled={pending}
         aria-label="Remover transação"
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-danger/10 hover:text-danger disabled:opacity-50"
+        className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-danger/10 hover:text-danger disabled:opacity-50"
       >
         <Trash2 className="h-4 w-4" />
       </button>

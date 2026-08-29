@@ -1,0 +1,44 @@
+# ============================================================================
+# KONTA — Caddyfile (reverse proxy + HTTPS), preparação Oracle Cloud.
+#
+# [DECISÃO — ver docs/architecture/DECISIONS.md, "Reverse proxy: Caddy em vez
+# de Nginx"] Caddy foi escolhido especificamente porque emite e renova
+# certificados HTTPS automaticamente (Let's Encrypt/ZeroSSL), sem nenhum
+# script de renovação nem Certbot — e porque isso funciona tanto SEM domínio
+# (usando um hostname sslip.io gerado a partir do IP público da VM, ver
+# docs/operations/ORACLE-CLOUD.md) como, mais tarde, COM um domínio real,
+# mudando só o valor de SITE_ADDRESS em .env.production. Nenhuma outra parte
+# desta configuração muda quando o domínio for comprado.
+#
+# SITE_ADDRESS vem de .env.production (ver .env.production.example):
+#   - Sem domínio ainda:  SITE_ADDRESS=203-0-113-10.sslip.io
+#     (203-0-113-10 = o IP público real da VM, com pontos trocados por
+#     hífenes — ver docs/operations/ORACLE-CLOUD.md secção HTTPS)
+#   - Com domínio real:   SITE_ADDRESS=konta.exemplo.com
+#
+# Nada neste ficheiro precisa de mudar quando o domínio mudar.
+# ============================================================================
+
+{$SITE_ADDRESS} {
+	# Encaminha tudo para o serviço "app" (Next.js standalone) na rede
+	# interna do Docker Compose — o serviço app não publica a porta 3000
+	# para o host/internet, só o Caddy está exposto (80/443).
+	reverse_proxy app:3000
+
+	# Cabeçalhos de segurança básicos, sem inventar nada exótico para uma
+	# Beta pequena — HSTS só faz sentido depois de HTTPS estar
+	# confirmado a funcionar de forma estável (evita trancar utilizadores
+	# fora de http:// antes de o certificado estar validado).
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	encode gzip
+
+	log {
+		output stdout
+		format console
+	}
+}

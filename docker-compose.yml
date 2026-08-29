@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: konta
+      POSTGRES_PASSWORD: konta_dev_pw
+      POSTGRES_DB: konta_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - konta_pg_data:/var/lib/postgresql/data
+      - ./prisma/manual-sql:/migrations:ro
+
+volumes:
+  konta_pg_data:

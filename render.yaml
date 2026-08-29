@@ -1,0 +1,33 @@
+# ============================================================================
+# KONTA — Render Blueprint (deploy ZERO-COST, ver docs/ZERO_COST_DEPLOYMENT_AUDIT.md
+# e docs/operations/RENDER-NEON.md).
+#
+# Descreve UM serviço: a aplicação Next.js completa (frontend + rotas de
+# API, o mesmo processo — ver a análise de arquitetura no audit acima do
+# porquê de ser um único serviço, não um "frontend"+"backend" separados).
+# Construído a partir do `Dockerfile` já existente neste repositório (o
+# mesmo que foi preparado para a Oracle Cloud) — sem alterações.
+#
+# Não descreve nenhuma base de dados aqui de propósito: o Postgres é o Neon
+# (externo, gerido), não um serviço Render — ver DECISIONS.md, "Render
+# Postgres Free expira ao fim de 30 dias", a razão de não o usarmos.
+#
+# Uso: no painel do Render, "New +" → "Blueprint" → apontar a este
+# repositório. O Render lê este ficheiro e propõe criar o serviço abaixo.
+# As variáveis marcadas "sync: false" são pedidas no momento da criação —
+# nunca ficam guardadas neste ficheiro nem no Git.
+# ============================================================================
+services:
+  - type: web
+    name: konta
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: AUTH_SECRET
+        sync: false
+      - key: NODE_ENV
+        value: production

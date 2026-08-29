@@ -49,20 +49,46 @@ export default async function TransactionsPage({
       </div>
 
       <Card>
+        {/* [Correção — Pre-Beta Hardening, Prioridade 11] Cada campo tinha só
+            placeholder, sem nenhum label associado (falha de acessibilidade —
+            um leitor de ecrã não anunciava o que cada campo representa). Os
+            labels são `sr-only` de propósito: mantêm o layout compacto atual
+            exatamente igual (não é um redesign), só acrescentam o nome
+            acessível que já devia existir. */}
         <form className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" method="get">
+          <label htmlFor="filter-search" className="sr-only">
+            Pesquisar transações
+          </label>
           <input
+            id="filter-search"
             name="search"
             defaultValue={params.search ?? ""}
             placeholder="Pesquisar..."
             className="col-span-2 rounded-lg border border-border bg-surface px-3 text-sm sm:col-span-1 lg:col-span-2"
           />
-          <select name="type" defaultValue={params.type ?? ""} className="rounded-lg border border-border bg-surface px-2 text-sm">
+          <label htmlFor="filter-type" className="sr-only">
+            Tipo de transação
+          </label>
+          <select
+            id="filter-type"
+            name="type"
+            defaultValue={params.type ?? ""}
+            className="rounded-lg border border-border bg-surface px-2 text-sm"
+          >
             <option value="">Todos os tipos</option>
             <option value="INCOME">Receita</option>
             <option value="EXPENSE">Despesa</option>
             <option value="TRANSFER">Transferência</option>
           </select>
-          <select name="accountId" defaultValue={params.accountId ?? ""} className="rounded-lg border border-border bg-surface px-2 text-sm">
+          <label htmlFor="filter-account" className="sr-only">
+            Conta
+          </label>
+          <select
+            id="filter-account"
+            name="accountId"
+            defaultValue={params.accountId ?? ""}
+            className="rounded-lg border border-border bg-surface px-2 text-sm"
+          >
             <option value="">Todas as contas</option>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
@@ -70,8 +96,26 @@ export default async function TransactionsPage({
               </option>
             ))}
           </select>
-          <input type="date" name="from" defaultValue={params.from ?? ""} className="rounded-lg border border-border bg-surface px-2 text-sm" />
-          <input type="date" name="to" defaultValue={params.to ?? ""} className="rounded-lg border border-border bg-surface px-2 text-sm" />
+          <label htmlFor="filter-from" className="sr-only">
+            Data inicial
+          </label>
+          <input
+            id="filter-from"
+            type="date"
+            name="from"
+            defaultValue={params.from ?? ""}
+            className="rounded-lg border border-border bg-surface px-2 text-sm"
+          />
+          <label htmlFor="filter-to" className="sr-only">
+            Data final
+          </label>
+          <input
+            id="filter-to"
+            type="date"
+            name="to"
+            defaultValue={params.to ?? ""}
+            className="rounded-lg border border-border bg-surface px-2 text-sm"
+          />
           <button type="submit" className="col-span-2 rounded-lg bg-surface-hover text-sm font-medium sm:col-span-1 lg:col-span-6">
             Filtrar
           </button>

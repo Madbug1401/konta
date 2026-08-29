@@ -48,8 +48,22 @@ export function getAccountBalance(
       (t.type === "EXPENSE" && t.accountId === account.id) ||
       (t.type === "TRANSFER" && t.accountId === account.id);
 
+    // [Correção — bug crítico encontrado em auditoria Go-to-Beta, 29/08/2026]
+    // Isto era "if / else if": para uma TRANSFER em que accountId ===
+    // destinationAccountId (auto-transferência), isIncoming e isOutgoing
+    // eram AMBOS verdadeiros, mas só o ramo isIncoming corria — a conta
+    // ganhava amountMinor do nada, sem a dedução correspondente. A defesa
+    // principal é rejeitar isto na API (ver CreateTransactionSchema em
+    // src/app/api/transactions/route.ts), mas o Financial Engine é a fonte
+    // de verdade partilhada por Web/Mobile/relatórios/IA — não deve poder
+    // ser enganado por um registo destas, seja qual for a origem dele. Com
+    // dois `if` independentes, uma auto-transferência soma e subtrai o
+    // mesmo valor e o efeito líquido é zero, por construção; para todos os
+    // outros casos (já cobertos pelos testes existentes) isIncoming e
+    // isOutgoing nunca são verdadeiros ao mesmo tempo, por isso este troca
+    // não muda nenhum comportamento anterior.
     if (isIncoming) balance += t.amountMinor;
-    else if (isOutgoing) balance -= t.amountMinor;
+    if (isOutgoing) balance -= t.amountMinor;
   }
   return balance;
 }

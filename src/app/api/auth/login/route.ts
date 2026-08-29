@@ -3,13 +3,30 @@ import { z } from "zod";
 import { findUserByEmail } from "@/lib/db/users";
 import { verifyPassword } from "@/lib/auth/password";
 import { signSessionToken, SESSION_COOKIE_NAME, SESSION_TTL_SECONDS } from "@/lib/auth/jwt";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { withErrorHandling } from "@/lib/api-error";
 
 const LoginSchema = z.object({
   email: z.string().trim().email().max(255),
   password: z.string().min(1).max(200),
 });
 
-export async function POST(request: Request) {
+// [Correção — Pre-Beta Hardening, Prioridade 3] Proteção contra força bruta:
+// 10 tentativas por IP a cada 15 minutos. Ver src/lib/rate-limit.ts para a
+// justificação completa (porquê em memória, porquê sem CAPTCHA por agora).
+const LOGIN_RATE_LIMIT = 10;
+const LOGIN_RATE_WINDOW_MS = 15 * 60 * 1000;
+
+export const POST = withErrorHandling("api.auth.login.post", async (request: Request) => {
+  const ip = getClientIp(request);
+  const rateLimit = checkRateLimit(`login:${ip}`, LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW_MS);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Demasiadas tentativas. Tenta novamente mais tarde." },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = LoginSchema.safeParse(body);
   if (!parsed.success) {
@@ -36,4 +53,4 @@ export async function POST(request: Request) {
     maxAge: SESSION_TTL_SECONDS,
   });
   return response;
-}
+});

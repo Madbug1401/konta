@@ -32,6 +32,13 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# [Correção — Pre-Beta Hardening, Prioridade 12] os *.example são modelos
+# sem segredos reais e têm de ficar no repositório — sem isto, "npm run
+# build"/deploy num checkout novo nem tinha o ficheiro de onde copiar as
+# variáveis. Os .env/.env.production reais continuam ignorados acima.
+!.env.example
+!.env.production.example
+!.env.render.example
 
 # vercel
 .vercel
@@ -39,3 +46,27 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# [Correção — preparação do repositório GitHub] backups/dumps reais nunca
+# devem ir para o Git — contêm dados financeiros dos utilizadores (ver
+# docs/architecture/BACKUP.md e scripts/backup/*.sh, que escrevem aqui por
+# omissão).
+backups/
+*.dump
+*.sql.gz
+
+# logs locais
+logs/
+*.log
+
+# ficheiros de sistema (desenvolvimento em Windows)
+Thumbs.db
+desktop.ini
+
+# [Correção — preparação do repositório GitHub] script de demonstração de
+# screenshots: tem caminhos absolutos deste sandbox de desenvolvimento
+# (não portável para outra máquina) e existe só para gerar as imagens em
+# screenshots/, que também não fazem parte do produto nem são necessárias
+# para correr/fazer deploy do Konta.
+scripts/screenshot-demo.mjs
+screenshots/

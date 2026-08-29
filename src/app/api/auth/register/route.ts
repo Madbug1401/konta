@@ -3,6 +3,8 @@ import { z } from "zod";
 import { createUser, findUserByEmail } from "@/lib/db/users";
 import { hashPassword } from "@/lib/auth/password";
 import { signSessionToken, SESSION_COOKIE_NAME, SESSION_TTL_SECONDS } from "@/lib/auth/jwt";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { withErrorHandling } from "@/lib/api-error";
 
 // [Regra 10/11 do briefing] Toda a entrada do utilizador é tratada como não
 // confiável: validação estrita com zod antes de tocar em qualquer lógica de
@@ -13,7 +15,23 @@ const RegisterSchema = z.object({
   name: z.string().trim().max(120).optional(),
 });
 
-export async function POST(request: Request) {
+// [Correção — Pre-Beta Hardening, Prioridade 3] Limite mais apertado do que
+// o login: criar conta é muito menos frequente para um utilizador legítimo,
+// e é a rota mais atrativa para um bot criar contas em massa. Ver
+// src/lib/rate-limit.ts.
+const REGISTER_RATE_LIMIT = 5;
+const REGISTER_RATE_WINDOW_MS = 60 * 60 * 1000;
+
+export const POST = withErrorHandling("api.auth.register.post", async (request: Request) => {
+  const ip = getClientIp(request);
+  const rateLimit = checkRateLimit(`register:${ip}`, REGISTER_RATE_LIMIT, REGISTER_RATE_WINDOW_MS);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Demasiadas tentativas. Tenta novamente mais tarde." },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = RegisterSchema.safeParse(body);
   if (!parsed.success) {
@@ -41,4 +59,4 @@ export async function POST(request: Request) {
     maxAge: SESSION_TTL_SECONDS,
   });
   return response;
-}
+});

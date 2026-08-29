@@ -78,6 +78,39 @@ describe("getAccountBalance", () => {
   });
 });
 
+describe("bug reportado em uso real: transação futura não pode inflacionar o saldo", () => {
+  it("uma receita datada no futuro não conta para o saldo disponível de hoje", () => {
+    // Reproduz exatamente o caso reportado: "Salário Estágio IEFP" datado de
+    // 2026-09-15, registado enquanto "hoje" ainda é 2026-08-25. Antes da
+    // correção, getAccountBalance/getNetWorth/getAvailableBalance eram
+    // chamadas nas páginas sem `asOfDate`, o que fazia esta receita futura
+    // já aparecer somada ao saldo do Banco BCA e ao "Saldo disponível".
+    const futureIncome = income("t1", "acc_bank", 15_000n, "2026-09-15");
+    expect(getAccountBalance(bank, [futureIncome], "2026-08-25")).toBe(10_000n);
+    expect(getAvailableBalance([bank, savings], [futureIncome], "2026-08-25")).toBe(10_000n);
+    expect(getNetWorth([bank, savings], [futureIncome], "2026-08-25")).toBe(10_000n);
+
+    // Assim que "hoje" alcança a data da transação, ela passa a contar —
+    // sem precisar de nenhum job/cron a "ativar" nada: asOfDate é sempre
+    // calculado a partir da hora real no momento do pedido.
+    expect(getAccountBalance(bank, [futureIncome], "2026-09-15")).toBe(25_000n);
+  });
+});
+
+describe("bug crítico encontrado em auditoria Go-to-Beta: auto-transferência não pode criar dinheiro", () => {
+  it("uma TRANSFER com accountId === destinationAccountId tem efeito líquido zero no saldo", () => {
+    // Antes da correção, isIncoming era verificado num "if" e isOutgoing num
+    // "else if": para esta conta, ambos eram verdadeiros (é origem E destino
+    // da mesma transferência), mas só o ramo isIncoming corria — a conta
+    // ganhava 5000 do nada. A defesa principal é a API rejeitar isto na
+    // criação (ver .refine() em src/app/api/transactions/route.ts), mas o
+    // motor de cálculo também não pode poder ser enganado por um registo
+    // destes, seja qual for a origem dele (ex: um dado antigo, uma migração).
+    const selfTransfer = transfer("t1", "acc_bank", "acc_bank", 5_000n, "2026-01-01");
+    expect(getAccountBalance(bank, [selfTransfer])).toBe(10_000n); // inalterado, não 15_000n
+  });
+});
+
 describe("getNetWorth / getAvailableBalance", () => {
   it("soma todas as contas não arquivadas para o património total", () => {
     const txs = [transfer("t1", "acc_bank", "acc_savings", 3_000n, "2026-01-01")];

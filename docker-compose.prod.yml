@@ -1,0 +1,103 @@
+# ============================================================================
+# KONTA — Docker Compose de PRODUÇÃO (Pre-Beta Hardening, Prioridade 12;
+# atualizado na preparação de deploy Oracle Cloud Always Free — ver
+# docs/operations/ORACLE-CLOUD.md).
+#
+# Não substitui docker-compose.yml (esse continua a ser só a base de dados,
+# para desenvolvimento local — ver WINDOWS_SETUP.md). Este ficheiro é para
+# correr no servidor real (VM Oracle Cloud, ou qualquer VPS com Docker)
+# escolhido para a Beta: sobe a base de dados, a aplicação e o reverse proxy
+# HTTPS, já a partir da imagem construída pelo Dockerfile.
+#
+# [DECISÃO — deploy Oracle Cloud Always Free, ver DECISIONS.md] Adicionado o
+# serviço "caddy": passa a ser o único serviço com portas publicadas para a
+# internet (80/443). O serviço "app" deixou de publicar a porta 3000
+# diretamente — só é alcançável pelo "caddy" através da rede interna do
+# Compose (hostname "app"). Isto corresponde exatamente à regra de firewall
+# pedida: só 22 (SSH, fora do Docker)/80/443 devem ficar expostos; nem a app
+# nem o Postgres diretamente.
+#
+# Ver docs/architecture/DEPLOYMENT.md para o raciocínio completo e
+# docs/operations/ORACLE-CLOUD.md para o procedimento de deploy passo a
+# passo específico da Oracle Cloud.
+#
+# Uso no servidor:
+#   cp .env.production.example .env.production   # e preencher valores reais
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# ============================================================================
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-konta}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD em .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:-konta}
+    volumes:
+      - konta_pg_data:/var/lib/postgresql/data
+      - ./prisma/manual-sql:/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-konta} -d ${POSTGRES_DB:-konta}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # De propósito SEM "ports:" publicado — só o serviço "app", na mesma rede
+    # interna do compose, precisa de lhe aceder (hostname "db"). Publicar
+    # 5432 para a internet não tem nenhum benefício aqui e é risco a menos.
+    # Para uma ligação manual pontual a partir do servidor: `docker compose
+    # -f docker-compose.prod.yml exec db psql -U konta -d konta`.
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-konta}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-konta}
+      AUTH_SECRET: ${AUTH_SECRET:?define AUTH_SECRET em .env.production (openssl rand -base64 48)}
+      NODE_ENV: production
+    # [ALTERADO — preparação Oracle Cloud] Já não publica "3000:3000" para o
+    # host. Só o serviço "caddy" (abaixo) precisa de lhe aceder, através da
+    # rede interna do Compose — ver Caddyfile ("reverse_proxy app:3000").
+    # Continua acessível para depuração pontual a partir do próprio servidor
+    # com: `docker compose -f docker-compose.prod.yml exec app wget -qO- http://127.0.0.1:3000/api/health`.
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # [NOVO — preparação Oracle Cloud, ver docs/architecture/DECISIONS.md,
+  # "Reverse proxy: Caddy em vez de Nginx"] Único serviço exposto à
+  # internet. Obtém e renova certificados HTTPS automaticamente (Let's
+  # Encrypt), tanto para o hostname sslip.io inicial (sem domínio, sem
+  # custo) como, mais tarde, para um domínio real — só SITE_ADDRESS em
+  # .env.production muda; nada neste compose nem no Caddyfile precisa de
+  # mudar. Ver docs/operations/ORACLE-CLOUD.md para o procedimento completo.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?define SITE_ADDRESS em .env.production, ex. 203-0-113-10.sslip.io ou o teu domínio}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificados TLS e estado interno do Caddy — têm de sobreviver a
+      # `docker compose down`/atualizações, senão cada reinício pediria
+      # certificados novos ao Let's Encrypt e arriscaria o limite de taxa
+      # (rate limit) deles.
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  konta_pg_data:
+  caddy_data:
+  caddy_config:

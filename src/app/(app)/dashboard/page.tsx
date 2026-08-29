@@ -1,4 +1,5 @@
 import { AccountCard } from "@/components/account-card";
+import { AccountForm } from "@/components/account-form";
 import { MoneyDisplay } from "@/components/money-display";
 import { TransactionItem } from "@/components/transaction-item";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,7 @@ import {
   getMonthBounds,
   getNetWorth,
   getSavingsRate,
+  getTodayInTimezone,
 } from "@/lib/financial-engine";
 
 // [Regra 11 do briefing — "não invente números"] Esta página não mostra
@@ -36,9 +38,16 @@ export default async function DashboardPage() {
     listTransactions(session!.userId, { limit: 8 }),
   ]);
 
+  // [Correção — bug reportado em uso real, ver DECISIONS.md] Uma transação
+  // datada no futuro (ex: salário a receber só no próximo mês) não pode
+  // contar já para o saldo "de hoje" — senão bastava registar um recebimento
+  // futuro para o dinheiro parecer disponível antes de existir. `asOfDate`
+  // já existia em getAccountBalance/getNetWorth/getAvailableBalance
+  // precisamente para isto; esta página é que não o estava a usar.
+  const today = getTodayInTimezone(timezone);
   const monthBounds = getMonthBounds(timezone);
-  const netWorth = getNetWorth(accounts, allTransactions);
-  const availableBalance = getAvailableBalance(accounts, allTransactions);
+  const netWorth = getNetWorth(accounts, allTransactions, today);
+  const availableBalance = getAvailableBalance(accounts, allTransactions, today);
   const monthlyIncome = getIncomeTotal(allTransactions, monthBounds);
   const monthlyExpense = getExpenseTotal(allTransactions, monthBounds);
   const monthlyCashflow = getCashflow(allTransactions, monthBounds);
@@ -77,9 +86,13 @@ export default async function DashboardPage() {
       <section>
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">As tuas contas</h2>
         {accounts.length === 0 ? (
+          // [Correção — Pre-Beta Hardening, Prioridade 11] Ao contrário da
+          // página Contas, o Dashboard não tinha nenhum botão de criar conta
+          // — quem chegasse aqui sem contas ficava sem ação nenhuma a seguir.
           <EmptyState
             title="Ainda não tens nenhuma conta"
             description="Cria a tua primeira conta (carteira, banco, poupança...) para começares a registar movimentos."
+            action={<AccountForm />}
           />
         ) : (
           <div className="flex flex-wrap gap-3 sm:gap-4">
@@ -88,7 +101,7 @@ export default async function DashboardPage() {
                 key={account.id}
                 name={account.name}
                 type={account.type}
-                balanceMinor={getAccountBalance(account, allTransactions)}
+                balanceMinor={getAccountBalance(account, allTransactions, today)}
                 currency={account.currency}
               />
             ))}

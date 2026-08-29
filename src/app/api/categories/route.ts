@@ -2,21 +2,22 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { createCategory, listCategories } from "@/lib/db/categories";
+import { withErrorHandling } from "@/lib/api-error";
 
-export async function GET() {
+export const GET = withErrorHandling("api.categories.get", async () => {
   const session = await getSessionUser();
   if (!session) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
 
   const categories = await listCategories(session.userId);
   return NextResponse.json({ categories });
-}
+});
 
 const CreateCategorySchema = z.object({
   name: z.string().trim().min(1).max(60),
   kind: z.enum(["INCOME", "EXPENSE"]),
 });
 
-export async function POST(request: Request) {
+export const POST = withErrorHandling("api.categories.post", async (request: Request) => {
   const session = await getSessionUser();
   if (!session) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
 
@@ -26,4 +27,4 @@ export async function POST(request: Request) {
 
   const category = await createCategory({ userId: session.userId, ...parsed.data });
   return NextResponse.json(category, { status: 201 });
-}
+});

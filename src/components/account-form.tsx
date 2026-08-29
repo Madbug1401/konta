@@ -59,24 +59,39 @@ export function AccountForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
-      <Input placeholder="Nome (ex: Banco BCA)" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
-      <select
-        className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
-        value={type}
-        onChange={(e) => setType(e.target.value as AccountType)}
-      >
-        {TYPE_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <Input
-        type="number"
-        placeholder="Saldo inicial (CVE)"
-        value={initialBalance}
-        onChange={(e) => setInitialBalance(e.target.value)}
-      />
+      {/* [Correção — Pre-Beta Hardening, Prioridade 11] Faltavam labels
+          associados aos campos (só placeholder, que desaparece ao escrever e
+          não é lido como nome do campo por leitores de ecrã). Mesmo padrão
+          visual já usado em transaction-form.tsx — não é um elemento novo no
+          design, só aplicado aqui também. */}
+      <label className="text-xs font-medium text-muted-foreground">
+        Nome
+        <Input placeholder="Ex: Banco BCA" value={name} onChange={(e) => setName(e.target.value)} required autoFocus className="mt-1" />
+      </label>
+      <label className="text-xs font-medium text-muted-foreground">
+        Tipo de conta
+        <select
+          className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+          value={type}
+          onChange={(e) => setType(e.target.value as AccountType)}
+        >
+          {TYPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="text-xs font-medium text-muted-foreground">
+        Saldo inicial (CVE)
+        <Input
+          type="number"
+          placeholder="0"
+          value={initialBalance}
+          onChange={(e) => setInitialBalance(e.target.value)}
+          className="mt-1"
+        />
+      </label>
       {error ? <p className="text-sm text-danger">{error}</p> : null}
       <div className="flex gap-2">
         <Button type="submit" disabled={loading}>

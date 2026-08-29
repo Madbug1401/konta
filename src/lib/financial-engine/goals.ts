@@ -21,8 +21,13 @@ export function getGoalProgress(
   goal: GoalRecord,
   linkedAccount: AccountRecord | undefined,
   transactions: TransactionRecord[],
+  asOfDate?: string,
 ): GoalProgress {
-  const currentAmountMinor = linkedAccount ? getAccountBalance(linkedAccount, transactions) : 0n;
+  // [Correção — ver DECISIONS.md "Saldo não pode incluir o futuro"] Tal como
+  // o saldo de uma conta, o progresso de uma meta nunca deve contar dinheiro
+  // datado no futuro como já "guardado" — daí receber e propagar `asOfDate`
+  // em vez de deixar getAccountBalance somar tudo sem filtro de data.
+  const currentAmountMinor = linkedAccount ? getAccountBalance(linkedAccount, transactions, asOfDate) : 0n;
   const progressPercent =
     goal.targetAmountMinor === 0n
       ? 0

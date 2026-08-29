@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { findUserById } from "@/lib/db/users";
+import { withErrorHandling } from "@/lib/api-error";
 
-export async function GET() {
+export const GET = withErrorHandling("api.auth.me.get", async () => {
   const session = await getSessionUser();
   if (!session) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
 
@@ -17,4 +18,4 @@ export async function GET() {
     locale: user.locale,
     defaultCurrency: user.defaultCurrency,
   });
-}
+});

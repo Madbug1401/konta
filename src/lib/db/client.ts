@@ -20,6 +20,7 @@
 // ============================================================================
 
 import { Pool } from "pg";
+import { logError } from "@/lib/logger";
 
 declare global {
   var __kontaPgPool: Pool | undefined;
@@ -27,10 +28,32 @@ declare global {
 
 export function getPool(): Pool {
   if (!global.__kontaPgPool) {
-    global.__kontaPgPool = new Pool({
+    const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       max: 5,
     });
+
+    // [Correção — Pre-Beta Hardening, Prioridade 2] O `pg.Pool` é um
+    // EventEmitter: quando um cliente IDLE na pool perde a ligação (rede
+    // instável, o Postgres reiniciou, um firewall cortou a ligação), o `pg`
+    // emite um evento 'error' nesse Pool. Sem NENHUM listener 'error'
+    // registado, o comportamento por omissão do Node para um EventEmitter é
+    // lançar essa exceção como não tratada — o que derruba o processo
+    // Next.js inteiro, para TODOS os pedidos em curso, por causa de UMA
+    // ligação ociosa que falhou (não um pedido específico a correr mal).
+    // Isto era exatamente o achado 5.3 do GO_TO_BETA_AUDIT.md.
+    //
+    // A correção é registar o listener e só REGISTAR o erro — nunca
+    // silenciá-lo (teria o mesmo problema de "falha silenciosa" que o
+    // utilizador pediu explicitamente para evitar), e nunca voltar a lançar
+    // (isso reproduziria o crash que estamos a corrigir). O `pg` já
+    // substitui internamente o cliente com falha por um novo na próxima
+    // ligação — não é preciso fazer mais nada aqui para a pool recuperar.
+    pool.on("error", (err) => {
+      logError("db.pool", err);
+    });
+
+    global.__kontaPgPool = pool;
   }
   return global.__kontaPgPool;
 }

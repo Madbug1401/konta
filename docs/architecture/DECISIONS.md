@@ -196,3 +196,667 @@ fizer sentido, sem depender de rede em build-time.
 
 Ver `docs/architecture/MIGRATION.md` para o mapeamento completo
 `financeEvents`/`financeSettings` → o novo modelo.
+
+## Saldo não pode incluir o futuro (bug encontrado em uso real, 2026-08-25)
+
+**Sintoma**: ao testar a app corrida localmente, uma transação de receita
+datada no mês seguinte (`Salário Estágio IEFP`, +15 000 CVE, data
+2026-09-15, registada com "hoje" ainda em 2026-08-25) apareceu já somada ao
+saldo da conta e ao "Saldo disponível" do dashboard, antes de essa data
+chegar.
+
+**Causa**: `getAccountBalance`/`getNetWorth`/`getAvailableBalance`
+(`src/lib/financial-engine/balance.ts`) já aceitavam um parâmetro opcional
+`asOfDate` desde o início, precisamente para filtrar transações futuras —
+mas era opcional, e nenhuma das páginas/rotas que mostram saldo "atual"
+(`dashboard/page.tsx`, `accounts/page.tsx`, `api/accounts/route.ts`,
+`financial-engine/goals.ts`) o estava a passar. Sem `asOfDate`, o filtro em
+`relevantTransactions` não exclui nada por data — só por `status`.
+
+**Opções consideradas**:
+1. Marcar transações futuras com `status = 'PENDING'` em vez de
+   `'COMPLETED'` na criação, e deixar o filtro de status existente
+   encarregar-se disto.
+2. Continuar a criar tudo como `COMPLETED` (é um facto registado, não uma
+   previsão) e passar sempre `asOfDate = getTodayInTimezone(timezone)` nos
+   sítios que calculam saldo "de agora".
+
+**Decisão**: opção 2. A opção 1 exigiria depois um mecanismo (job/cron) para
+"promover" a transação de `PENDING` para `COMPLETED` quando a data chegasse
+— exatamente o tipo de infraestrutura que ainda não existe neste projeto
+(ver nota sobre materialização de transações recorrentes) e que seria
+prematuro introduzir só para isto. A opção 2 usa um mecanismo que já existia
+e já estava testado, calculado sempre a partir da hora real do pedido — não
+precisa de nenhum passo de manutenção para se manter correta à medida que os
+dias passam. `PENDING` continua reservado para o que já representava
+(ex: parcelas de dívida ainda não pagas).
+
+**O que mudou**: `dashboard/page.tsx`, `accounts/page.tsx`,
+`api/accounts/route.ts` passam agora `today = getTodayInTimezone(timezone)`
+a todas as chamadas de saldo; `getGoalProgress` (`financial-engine/goals.ts`)
+passou a aceitar e propagar `asOfDate`. Teste de regressão novo em
+`balance.test.ts` reproduz exatamente este caso.
+
+## BLOCKER corrigido na auditoria Go-to-Beta (29/08/2026): auto-transferência criava dinheiro
+
+**Sintoma encontrado durante a auditoria** (não em uso real, mas facilmente
+acionável por qualquer utilizador autenticado): criar uma TRANSFER com
+`accountId === destinationAccountId` (transferir de uma conta para ela
+própria) fazia o saldo dessa conta aumentar em `amountMinor`, sem qualquer
+dedução correspondente.
+
+**Causa**: `getAccountBalance` (`financial-engine/balance.ts`) calculava
+`isIncoming` e `isOutgoing` como dois booleanos independentes, mas aplicava-os
+com `if (isIncoming) ...; else if (isOutgoing) ...`. Para a conta envolvida
+numa auto-transferência, `isIncoming` (destino) e `isOutgoing` (origem) eram
+ambos verdadeiros — mas por ser `else if`, só a soma corria. Nada na API
+impedia `accountId === destinationAccountId` de chegar até ali.
+
+**Correção, duas camadas** (defesa principal + defesa em profundidade,
+deliberado — nenhuma delas seria suficiente sozinha para todos os casos
+futuros):
+1. `api/transactions/route.ts` — novo `.refine()` no `CreateTransactionSchema`
+   rejeita `accountId === destinationAccountId` com 400 antes de qualquer
+   escrita na base de dados. Esta é a defesa principal: uma auto-transferência
+   não tem significado real, não há razão para a aceitar.
+2. `financial-engine/balance.ts` — `if (isIncoming) ...` e
+   `if (isOutgoing) ...` deixaram de ser `if/else if` e passaram a ser dois
+   `if` independentes. Para todos os casos que já existiam (INCOME, EXPENSE,
+   TRANSFER entre contas diferentes) `isIncoming`/`isOutgoing` nunca eram
+   ambos verdadeiros ao mesmo tempo, por isso esta mudança não altera nenhum
+   resultado já coberto pelos testes existentes — só passa a dar o resultado
+   certo (efeito líquido zero) se algum dia um registo de auto-transferência
+   chegar ao motor de cálculo por outro caminho que não a API (um dado
+   antigo, uma migração, um script). O Financial Engine é a fonte de verdade
+   partilhada por Web/Mobile/relatórios/futura IA — não deve depender só da
+   validação de um formulário para se manter correto.
+
+**Relacionado, corrigido na mesma passagem**: os schemas Zod de
+`amountMinor` (criação e edição de transação) e `initialBalanceMinor`
+(criação de conta) não tinham limite superior. Um número JS "inteiro" mas
+acima de `Number.MAX_SAFE_INTEGER` já perde precisão no `JSON.parse` antes
+de o Zod o validar, e um valor ainda maior rebenta o `BIGINT` do Postgres a
+meio do `INSERT` (erro não tratado). Adicionado `.max(Number.MAX_SAFE_INTEGER)`
+— um limite técnico de precisão, não uma regra de negócio sobre "quanto
+dinheiro alguém pode ter" (essa decisão não é minha para tomar aqui).
+
+Teste de regressão novo em `balance.test.ts` ("bug crítico encontrado em
+auditoria Go-to-Beta") reproduz exatamente o cenário de auto-transferência.
+
+## Hosting de produção: VPS + Docker Compose, não plataforma gerida (Pre-Beta Hardening, 29/08/2026)
+
+**Sintoma**: `GO_TO_BETA_AUDIT.md` (achado 6.1) — sem Dockerfile, sem
+`output: "standalone"`, sem processo de deploy documentado, sem backups
+reais (achado 5.7). Duas perguntas que não podiam ser respondidas em
+silêncio: onde é que isto corre, e onde ficam os backups.
+
+**Decisão**: um único VPS (qualquer fornecedor com Docker + disco
+persistente — Hetzner/DigitalOcean/Linode servem igualmente; a escolha do
+fornecedor concreto é operacional) a correr `docker-compose.prod.yml`
+(Postgres + a app, construída pelo `Dockerfile` novo) e
+`scripts/backup/backup.sh` num cron diário, com cópia externa opcional via
+`rclone`. Ver `docs/architecture/DEPLOYMENT.md` e
+`docs/architecture/BACKUP.md` para o raciocínio completo e o procedimento.
+
+**Porque não uma plataforma gerida (Vercel + Postgres gerido) já agora**:
+a Prioridade 1 exige backups reais e **verificáveis por nós** — direto de
+garantir quando controlamos o Postgres, difícil de auditar de fora com um
+serviço gerido de terceiros. Um servidor único e o `docker-compose.yml`
+já validado localmente pelo utilizador (`WINDOWS_SETUP.md`) evita também
+duplicar operação (duas contas, duas faturas) para uma aplicação pequena.
+Não é uma rejeição definitiva — só não faz sentido para 10–30 utilizadores;
+ver critérios de reconsideração em `DEPLOYMENT.md`.
+
+**O que mudou**: `next.config.ts` (`output: "standalone"`, confirmado com
+`npm run build` real — gera `.next/standalone/server.js`, testado a correr
+e a responder HTTP 200), `Dockerfile` novo (multi-stage, utilizador não-root
+na imagem final), `.dockerignore` novo, `docker-compose.prod.yml` novo
+(serviço `app` + `db`, sem publicar a porta do Postgres),
+`.env.production.example` novo, `scripts/backup/{backup,restore,verify-backup}.sh`
+novos (testados de facto contra um Postgres 16 real com o schema do Konta —
+ciclo completo dump → restauro para base de dados de verificação → limpeza
+automática, e um segundo teste confirmando que `restore.sh` substitui
+corretamente dados existentes), e `.gitignore` corrigido para os `*.example`
+deixarem de ser apanhados pela regra `.env*` (sem isto, um checkout novo do
+repositório nem tinha o modelo de onde copiar as variáveis).
+
+**Limitação honesta**: não foi possível correr `docker build`/`docker pull`
+dentro deste sandbox de desenvolvimento — o registo `docker.io` (e também
+`gcr.io`, `public.ecr.aws`) está bloqueado pela mesma política de rede que
+já impede `binaries.prisma.sh`/`fonts.googleapis.com` (ver secção "Prisma
+neste ambiente" acima). O `Dockerfile` segue o padrão oficial da Next.js
+para `output: "standalone"` e o resultado do build (`.next/standalone`) foi
+verificado a correr de facto; falta só confirmar o `docker build` completo
+numa máquina com acesso normal ao Docker Hub — primeiro passo a fazer no
+VPS real, não um risco novo desta tarefa.
+
+**Ainda em aberto, documentado explicitamente em vez de ignorado**: HTTPS.
+`process.env.NODE_ENV === "production"` já liga o cookie de sessão como
+`secure` (`src/app/api/auth/login/route.ts`/`register/route.ts`) — em
+produção sem TLS à frente da app, ninguém consegue manter sessão iniciada.
+Não implementado nesta tarefa (é infraestrutura nova, não hardening do que
+já existe); documentado em `DEPLOYMENT.md` como pré-requisito de
+lançamento e repetido no `BETA_GATE` final.
+
+## Erro de ligação à base de dados não pode derrubar o processo (Pre-Beta Hardening, Prioridade 2, 29/08/2026)
+
+**Sintoma** (`GO_TO_BETA_AUDIT.md`, achado 5.3): `src/lib/db/client.ts`
+criava o `pg.Pool` sem nenhum listener `'error'`. `pg.Pool` é um
+`EventEmitter`; quando um cliente ocioso da pool perde a ligação ao Postgres
+(rede instável, o Postgres reiniciou, uma ligação cortada por um firewall),
+o driver emite `'error'` nesse Pool. O comportamento por omissão do Node
+para um evento `'error'` sem listener é lançar essa exceção como não
+tratada — o que derruba o processo Next.js inteiro, para todos os pedidos
+em curso, por causa de uma única ligação ociosa que falhou.
+
+**Decisão**: registar `pool.on("error", ...)` assim que a pool é criada,
+chamando `logError("db.pool", err)` (novo `src/lib/logger.ts`, ver
+Prioridade 5). Não silencia o erro (perderíamos visibilidade de problemas
+reais de rede/base de dados) nem volta a lançá-lo (reproduziria o crash). O
+`pg` já substitui internamente o cliente com falha por um novo na próxima
+ligação pedida à pool — não é preciso gerir isso manualmente.
+
+**O que mudou**: `src/lib/db/client.ts` (`pool.on("error", ...)`),
+`src/lib/logger.ts` novo (módulo de logging mínimo partilhado — introduzido
+já aqui, embora a Prioridade 5 completa venha no grupo seguinte, para o
+`pool.on("error")` já ter algo real a chamar em vez de um `console.error`
+avulso que teria de ser reescrito depois).
+
+**Teste de regressão**: `src/lib/db/client.test.ts` — obtém a pool via
+`getPool()`, emite `pool.emit("error", new Error(...))` diretamente (o mesmo
+evento que o driver `pg` emitiria), e confirma duas coisas: (1)
+`expect(() => pool.emit(...)).not.toThrow()` — antes da correção, isto teria
+lançado a exceção não tratada; (2) `logError` foi mesmo chamado com o erro —
+o erro não desaparece silenciosamente.
+
+## Rate limiting em login/registo: em memória, sem CAPTCHA (Pre-Beta Hardening, Prioridade 3, 29/08/2026)
+
+**Sintoma**: `GO_TO_BETA_AUDIT.md` — `POST /api/auth/login` e
+`POST /api/auth/register` não tinham nenhum limite de tentativas, abertos a
+força bruta e a registo em massa.
+
+**Decisão**: `src/lib/rate-limit.ts` — um limitador por janela fixa,
+guardado num `Map` em memória do próprio processo, chaveado por
+`"<rota>:<ip>"`. Sem nenhuma dependência nova (nada de Redis) e sem CAPTCHA,
+por pedido explícito do utilizador ("a Beta vai ter poucos utilizadores").
+Limites escolhidos: login 10 tentativas/15 min por IP (permissivo o
+suficiente para um utilizador legítimo que erra a password), registo 5/hora
+por IP (mais apertado — criar conta é raro para um utilizador legítimo e é o
+alvo mais atrativo para um bot). Resposta ao exceder: `429` com
+`Retry-After` em segundos.
+
+**Limitação conhecida, documentada e não escondida**: isto só funciona
+corretamente numa única instância do processo (perde a contagem num
+restart; não é partilhado entre instâncias atrás de um load balancer). É
+consistente com a decisão de hosting desta fase — um único VPS, uma única
+instância (ver `DEPLOYMENT.md`) — e passa a precisar de revisão (ex: mover
+para um store partilhado) só se/quando isso mudar.
+
+**O IP do pedido** vem de `x-forwarded-for`/`x-real-ip` (`getClientIp()`) —
+cabeçalhos que só existem de facto quando a app corre atrás de um proxy
+reverso, que é já um pré-requisito de produção por causa do HTTPS (ver
+decisão de hosting acima). Sem esses cabeçalhos, todos os pedidos caem em
+`"unknown"`, o que é mais restritivo (todos partilham a mesma contagem),
+nunca mais permissivo.
+
+**Testes**: `src/lib/rate-limit.test.ts` — permite até ao limite, bloqueia
+a partir daí com `retryAfterSeconds > 0`, volta a permitir depois de a
+janela expirar, mantém contagens independentes por IP e por rota; mais
+`getClientIp()` para os três casos (`x-forwarded-for`, `x-real-ip`,
+nenhum). `checkRateLimit` aceita um `now` opcional exatamente para estes
+testes não dependerem de tempo real/`setTimeout`.
+
+## Tratamento de erros uniforme nas rotas de API + error boundaries (Pre-Beta Hardening, Prioridade 4, 29/08/2026)
+
+**Sintoma** (`GO_TO_BETA_AUDIT.md`, achados 5.4/5.5): nenhuma das 8 rotas de
+API tinha `try/catch` — uma falha inesperada (ex: base de dados em baixo)
+propagava-se como exceção não tratada; a Web não tinha `error.tsx`, por isso
+um erro de renderização mostrava a página de erro genérica do Next.js.
+
+**Decisão**: em vez de repetir `try/catch` em cada rota (risco de esquecer
+uma, ou de cada uma responder de forma ligeiramente diferente),
+`src/lib/api-error.ts` exporta `withErrorHandling(context, handler)` — um
+wrapper único aplicado às 8 rotas (`accounts`, `auth/{login,register,
+logout,me}`, `categories`, `transactions`, `transactions/[id]`). Qualquer
+exceção não apanhada é registada com `logError(context, error)` (nunca
+silenciada) e transformada sempre na mesma resposta segura: `500 { error:
+"Algo correu mal. Tenta novamente." }` — texto exigido explicitamente pelo
+utilizador, nunca a mensagem técnica nem o stack trace. `NotFoundError` é um
+atalho para rotas sinalizarem "não encontrado" só com `throw`, sem obrigar
+a reescrever as verificações manuais já existentes (`if (!x) return
+NextResponse.json(...)`), que continuam a funcionar sem alterações.
+
+Do lado da Web: `src/app/error.tsx` (apanha erros de renderização de
+qualquer página) e `src/app/global-error.tsx` (só para o caso extremo do
+próprio `layout.tsx` raiz falhar — tem de renderizar o seu próprio
+`<html>/<body>`, por exigência do Next.js). Ambos mostram exatamente "Algo
+correu mal. Tenta novamente." e registam o erro técnico (`logError`) antes
+de mais nada.
+
+**Verificado de facto, não só por inspeção de código**: build de produção
+(`.next/standalone`) arrancado com um `DATABASE_URL` deliberadamente
+inválido (porta sem nada a ouvir), pedido real a `GET /api/categories` com
+um JWT válido — resposta ao cliente foi `500 {"error":"Algo correu mal.
+Tenta novamente."}`, e o log do servidor mostrou a linha JSON completa do
+`logError` (`context: "api.categories.get"`, `message: "connect
+ECONNREFUSED ..."`, `code: "ECONNREFUSED"`) seguida do stack trace real —
+confirma as duas exigências ao mesmo tempo: nada vaza para o cliente, nada
+desaparece do log do servidor.
+
+**Testes**: `src/lib/api-error.test.ts` — uma resposta normal passa sem
+alterações; um `NotFoundError` vira `404` com a sua mensagem; um erro
+inesperado não rebenta para fora do handler (`resolves.toBeInstanceOf
+(Response)`, nunca lança); a mensagem técnica nunca aparece na resposta
+(`JSON.stringify(body)` não contém o texto original do erro) mas
+`logError` é mesmo chamado com o erro completo.
+
+## Health check (Pre-Beta Hardening, Prioridade 6, 29/08/2026)
+
+**Sintoma** (`GO_TO_BETA_AUDIT.md`, achado 5.6): não havia forma de saber
+que a app tinha caído sem um utilizador reportar.
+
+**Decisão**: `GET /api/health` (`src/app/api/health/route.ts`) — sem
+autenticação (um healthcheck de infraestrutura não tem sessão de
+utilizador) e sem devolver nenhum dado sensível. Verifica as duas coisas
+mínimas exigidas: o processo está a responder (só por chegar à rota, já
+está) e a base de dados está acessível (`SELECT 1` real através da mesma
+`getPool()` de `src/lib/db/client.ts` — não assumido). `200 {"status":
+"healthy"}` quando a query passa; `503 {"status": "unhealthy"}` quando
+falha, com o erro técnico registado via `logError` (nunca silenciado, nunca
+exposto na resposta). `docker-compose.prod.yml` (Prioridade 12) já usa este
+endpoint no `healthcheck:` do serviço `app`.
+
+**Verificado de facto**: build de produção arrancado duas vezes — uma
+ligada ao Postgres real (`200 {"status":"healthy"}`) e outra com
+`DATABASE_URL` deliberadamente inválido (`503 {"status":"unhealthy"}`, com
+o `ECONNREFUSED` completo no log do servidor e nada na resposta HTTP).
+
+**Testes**: `src/app/api/health/route.test.ts` — `getPool` mockado para
+devolver sucesso (`200`/`healthy`) e falha (`503`/`unhealthy`, confirmando
+que o IP/porto do erro simulado não aparece na resposta).
+
+## Ownership de categoryId (Pre-Beta Hardening, Prioridade 7, 29/08/2026)
+
+**Sintoma** (`GO_TO_BETA_AUDIT.md`): `accountId`/`destinationAccountId`
+já eram validados contra o utilizador autenticado (`getAccountById`), mas
+`categoryId` não — `createTransaction`/`updateTransaction` aceitavam
+qualquer id de categoria que existisse na base de dados, incluindo uma
+categoria privada de outro utilizador. Um utilizador conseguia "etiquetar"
+as próprias transações com a categoria privada de outra pessoa (BOLA —
+Broken Object Level Authorization).
+
+**Decisão**: `getCategoryById(userId, categoryId)` novo em
+`src/lib/db/categories.ts`, espelhando exatamente o princípio já usado em
+`getAccountById` — só devolve a categoria se for de sistema (`userId IS
+NULL`, partilhada) ou pertencer a este utilizador; caso contrário devolve
+`null`. Chamado em `POST /api/transactions` e `PATCH
+/api/transactions/[id]` sempre que um `categoryId` é fornecido, antes de
+persistir — `404 { error: "Categoria não encontrada." }` se a categoria não
+for visível para este utilizador (mesma mensagem/padrão já usado para
+`accountId` inválido).
+
+**Verificado de facto contra uma base de dados real** (não só com mocks):
+criada uma categoria privada para um utilizador, tentativa de a usar
+autenticado como outro utilizador → `404 {"error":"Categoria não
+encontrada."}`, zero linhas escritas em `Transaction` (confirmado por
+`SELECT count(*)`); o mesmo pedido com uma categoria do próprio utilizador
+→ `201`, transação criada corretamente.
+
+**Testes**: `src/app/api/transactions/route.test.ts` (POST) e
+`src/app/api/transactions/[id]/route.test.ts` (PATCH) — rejeita uma
+categoria de outro utilizador sem chamar `createTransaction`/
+`updateTransaction`; aceita uma categoria de sistema ou própria; não chama
+`getCategoryById` quando a transação não envolve `categoryId` (ex:
+TRANSFER, ou um PATCH que não altera a categoria).
+
+## Validação de limit/offset em GET /api/transactions (Pre-Beta Hardening, Prioridade 8, 29/08/2026)
+
+**Sintoma**: `limit`/`offset` da query string eram convertidos com
+`Number(...)` sem nenhuma validação — `?limit=abc` produzia `NaN`, um
+`offset` negativo ou um `limit` astronomicamente grande seguiam direto para
+`listTransactions()` e chegavam ao Postgres como parâmetros de
+`LIMIT`/`OFFSET`. Na prática isto virava um `500` genérico (o Postgres
+rejeita `NaN`/negativo, e a exceção não era tratada antes da Prioridade 4)
+em vez de um `400` claro, e um `limit` sem limite superior era uma via
+aberta para pedir um número absurdo de linhas de uma vez.
+
+**Decisão**: `src/lib/pagination.ts` — `parsePagination(rawLimit,
+rawOffset)`, uma função pura (fácil de testar sem HTTP): `limit` tem de ser
+um inteiro entre 1 e 200, `offset` entre 0 e 1 000 000; qualquer valor fora
+disto (incluindo `NaN`, decimais, `Infinity`) é rejeitado com uma mensagem
+específica. `GET /api/transactions` chama-a antes de tocar na base de
+dados e devolve `400` se falhar — `listTransactions` nunca chega a correr
+com um valor inválido.
+
+**Verificado de facto contra uma base de dados real**: `?limit=abc` → `400`
+com mensagem clara (antes: seria um erro do Postgres não tratado);
+`?offset=-1` → `400`; `?limit=99999999` → `400`; `?limit=5&offset=0` → `200`
+normal.
+
+**Testes**: `src/lib/pagination.test.ts` (11 casos — valores por omissão,
+válidos, `NaN`, negativos, acima do máximo, decimais, `Infinity`) e três
+testes de rota em `src/app/api/transactions/route.test.ts` confirmando que
+`listTransactions` nunca é chamado com paginação inválida.
+
+## Normalização de email (Pre-Beta Hardening, Prioridade 9, 29/08/2026)
+
+**Sintoma**: `email = $1` no Postgres é sensível a maiúsculas/minúsculas
+por omissão. `"Test@Example.com"` e `"test@example.com"` eram tratados como
+contas diferentes — tanto na comparação (`findUserByEmail`) como na
+unicidade (a própria constraint `UNIQUE` da coluna `email`) — permitindo
+duas contas para o mesmo endereço, e um utilizador a "perder" o acesso à
+sua conta só por escrever o email com uma capitalização diferente da usada
+no registo.
+
+**Decisão**: `normalizeEmail(email) = email.trim().toLowerCase()`, novo em
+`src/lib/db/users.ts`, aplicado dentro de `findUserByEmail` e `createUser`
+— um único sítio, não em cada rota que os chama (`login`, `register`, e
+qualquer futuro consumidor). Não foram alteradas outras regras de
+autenticação (comprimento mínimo da password, mensagens de erro, etc.),
+por pedido explícito do utilizador.
+
+**Limitação aceite, não migrada agora**: isto normaliza escrita e leitura
+a partir de agora; não reescreve retroativamente emails já gravados com
+maiúsculas (nenhum existia nos dados de desenvolvimento atuais). Se algum
+dia isso importar, é uma migração de dados de uma linha (`UPDATE "User" SET
+email = lower(email)`), não uma mudança de arquitetura — não fazer isso
+agora evita tocar em dados de produção sem necessidade.
+
+**Verificado de facto contra uma base de dados real**: registo com
+`CaseTest@Example.COM` → conta gravada como `casetest@example.com`; login
+imediato a seguir com `casetest@example.com` (minúsculas) → sucesso, mesma
+conta; nova tentativa de registo com `CASETEST@EXAMPLE.COM` → `409`
+("Não foi possível criar a conta.") — confirma que é reconhecida como a
+mesma conta, não uma duplicada.
+
+**Testes**: `src/lib/db/users.test.ts` — `normalizeEmail` isolado (mistura
+de maiúsculas, espaços à volta, já em minúsculas); `findUserByEmail`
+consulta sempre com o valor normalizado independentemente da capitalização
+recebida; `createUser` grava sempre o valor normalizado.
+
+## Correções pequenas de UX (Pre-Beta Hardening, Prioridade 11, 29/08/2026)
+
+Três correções pontuais, sem nenhum redesign — por pedido explícito do
+utilizador ("A UI atual está boa").
+
+1. **EmptyState sem contas, sem ação**: `src/app/(app)/accounts/page.tsx`,
+   `.../dashboard/page.tsx` e `.../transactions/new/page.tsx` mostravam
+   "ainda não tens contas" sem nenhuma forma de agir a partir dali (a
+   página `dashboard` nem tinha botão de criar conta nenhures, e
+   `transactions/new` só dizia "vai à página Contas", sem link). As três
+   passam a receber `action={<AccountForm />}` no `EmptyState` (prop que já
+   existia no componente, só não estava a ser usada) — o mesmo componente
+   já usado no cabeçalho de `accounts/page.tsx`, reaproveitado, não um
+   componente novo. Em `transactions/new`, criar a conta ali mesmo funciona
+   porque `AccountForm` chama `router.refresh()` no fim, que faz este
+   Server Component voltar a carregar `accounts` — o formulário de
+   transação aparece a seguir sem sair da página.
+
+2. **Labels em falta**: `src/app/(app)/transactions/page.tsx` (barra de
+   filtros) e `src/components/account-form.tsx` só tinham
+   `placeholder`/nenhum texto — sem nome acessível para leitores de ecrã, e
+   o placeholder desaparece ao escrever. Na barra de filtros (layout denso
+   em grelha) usaram-se labels `sr-only` — corrige a falta de nome
+   acessível sem alterar nada visualmente. Em `account-form.tsx`
+   (formulário vertical simples) usou-se o mesmo padrão visual **já
+   existente** em `transaction-form.tsx` (`<label
+   className="text-xs font-medium text-muted-foreground">Texto<Input
+   .../></label>`) — não é um estilo novo, é aplicar o que já existe
+   noutro formulário da mesma app.
+
+3. **Alvo de toque pequeno**: `src/components/transaction-row-actions.tsx`
+   — os botões de editar/remover eram `h-9 w-9` (36×36px), abaixo do
+   mínimo recomendado (~44px), especialmente numa linha de tabela densa em
+   mobile. Alterado para `h-11 w-11` (44×44px) — só o tamanho da área
+   clicável, ícone/cor/espaçamento entre os dois botões inalterados.
+
+**Verificado de facto com screenshots reais** (não só lido o código): app
+completa construída e corrida (`node .next/standalone/server.js`, com
+`.next/static` copiado manualmente — o mesmo passo que o `Dockerfile` já
+fazia, confirmando outra vez porque é necessário), autenticada via API
+direta (evita depender da hidratação do formulário de login só para uma
+verificação visual) — confirmado visualmente: as três páginas mostram
+"+ Nova conta" dentro da própria área vazia; a barra de filtros de
+transações mantém exatamente o layout compacto atual (os labels `sr-only`
+não mudam nada visível); os botões de editar/remover têm uma área
+claramente maior sem a lista ficar desproporcional.
+
+## Política de eliminação de dados documentada, nenhuma funcionalidade de delete implementada (Pre-Beta Hardening, Prioridade 10, 29/08/2026)
+
+O `GO_TO_BETA_AUDIT.md` identificou `Transaction.accountId REFERENCES
+"Account"(id) ON DELETE CASCADE` como um risco: apagar uma `Account`
+apagaria em cascata todas as `Transaction`s associadas, destruindo
+histórico financeiro. Por pedido explícito do utilizador, esta tarefa foi
+**apenas de documentação e decisão** — nenhuma rota de delete, componente
+de UI ou migração de schema foi implementada.
+
+Levantamento completo de todas as chaves estrangeiras do schema
+(`prisma/manual-sql/0001_init.sql`) confirmou que `Transaction.accountId`
+é a única relação de `Transaction` com `ON DELETE CASCADE`; todas as
+outras (`destinationAccountId`, `categoryId`, `debtId`,
+`debtInstallmentId`, `goalId`, `recurringTransactionId`) não têm ação
+explícita, o que em Postgres significa `NO ACTION` — o `DELETE` é recusado
+enquanto existirem transações a referenciar a linha-alvo, em vez de
+apagar ou corromper dados. `Transaction.accountId` é a exceção perigosa,
+e também inconsistente consigo própria: apagar a conta de origem de uma
+transferência apaga a transação inteira; apagar a conta de destino da
+mesma transação seria bloqueado pelo Postgres.
+
+Decisão registada em `docs/architecture/DELETE_POLICY.md`: quando a
+funcionalidade de "eliminar conta" for construída (fora do âmbito desta
+Beta), deve usar o campo `Account.isArchived` que **já existe no schema
+mas nunca foi usado por nenhuma rota ou componente** — soft-delete via
+arquivamento, nunca `DELETE FROM "Account"` físico. Recomenda-se também,
+nessa altura, migrar `Transaction.accountId` de `CASCADE` para
+`RESTRICT`/`NO ACTION`, como proteção adicional ao nível da própria base
+de dados contra um hard-delete acidental — não feito agora porque não há
+hoje nenhuma funcionalidade que dependa disso, e a migração de schema deve
+acontecer junto da funcionalidade que a testa, não isolada.
+
+## Hosting concretizado: Oracle Cloud Always Free, Ampere A1 ARM64 (Preparação de deploy $0, 29/08/2026)
+
+**Sintoma/pedido**: a decisão de hosting anterior ("Hosting de produção: VPS
++ Docker Compose, não plataforma gerida", acima) deixou o fornecedor
+concreto em aberto de propósito ("qualquer fornecedor... a escolha exata é
+operacional"). O utilizador definiu entretanto uma restrição dura: orçamento
+atual = $0, sem VPS pago, sem domínio pago, sem serviços cloud pagos.
+
+**Decisão**: Oracle Cloud Infrastructure, camada Always Free, uma VM Ampere
+A1 (ARM64) — não uma das duas alternativas x86 Always Free
+(`VM.Standard.E2.1.Micro`, 1/8 OCPU e 1 GB RAM cada), porque 1 GB de RAM é
+apertado para Postgres + Next.js + Caddy em simultâneo. Confirmado por
+pesquisa nesta tarefa (não por memória/suposição): a alocação Always Free
+do Ampere A1 foi **reduzida pela Oracle em 15/06/2026**, de 4 OCPU/24 GB
+para **2 OCPU/12 GB** (1.500 horas-OCPU e 9.000 horas-GB por mês) — a conta
+Oracle criada agora fica sujeita ao valor novo, não ao antigo. Ainda assim,
+2 OCPU/12 GB é largamente suficiente para 10–30 utilizadores (ver
+`docs/operations/ORACLE-CLOUD.md`, secção "Capacidade").
+
+**O que mudou**: `docker-compose.prod.yml` ganhou um terceiro serviço
+(`caddy`, ver decisão seguinte) e o serviço `app` deixou de publicar a porta
+3000 diretamente (só acessível pelo Caddy, via rede interna). `Caddyfile`
+novo. `.env.production.example` ganhou `SITE_ADDRESS`.
+`docs/architecture/DEPLOYMENT.md` atualizado (hosting concretizado, secção
+nova de compatibilidade ARM64, secção de HTTPS resolvida). `BACKUP.md`
+atualizado (Oracle Object Storage como destino externo concreto, em vez de
+"Backblaze B2 ou equivalente" genérico). Dois documentos novos:
+`docs/operations/ORACLE-CLOUD.md` (guia passo a passo) e
+`docs/operations/PRODUCTION-RUNBOOK.md` (operações do dia-a-dia).
+
+**O que NÃO mudou**: nenhuma linha de `src/`, nenhuma dependência nova no
+`package.json`, nenhuma alteração ao `Financial Engine`, nenhuma
+funcionalidade de produto. Esta tarefa é exclusivamente de infraestrutura,
+por pedido explícito ("Não implementar Dívidas/Metas/IA/...; não fazer
+redesign; não reescrever a aplicação").
+
+## ARM64: confirmado por inspeção e pesquisa, não testado por execução (Preparação de deploy $0, 29/08/2026)
+
+**Sintoma**: a VM Always Free escolhida acima é ARM64, não x86 — era preciso
+confirmar que a imagem Docker do Konta (`node:22-alpine` + `next build`)
+funciona nessa arquitetura, sem inventar essa confirmação.
+
+**Verificado (CONFIRMADO, por leitura direta do `package-lock.json` deste
+repositório)**: `@next/swc-linux-arm64-musl`, `@tailwindcss/oxide-linux-arm64-musl`,
+`lightningcss-linux-arm64-musl` e `@img/sharp-linuxmusl-arm64` — todas as
+dependências com binários nativos por plataforma usadas no build publicam
+variante ARM64/musl (Alpine usa musl, não glibc). `@prisma/client`/`prisma`
+(não usados em runtime) não têm nenhum `postinstall` que descarregue
+binários — o único script do pacote `prisma` que corre na instalação só
+verifica a versão do Node, confirmado por leitura direta desse script.
+
+**Verificado (CONFIRMADO, por pesquisa nesta tarefa)**: as imagens oficiais
+`node:22-alpine`, `postgres:16` e `caddy:2-alpine` publicam manifestos
+multi-arquitetura com `arm64v8`, confirmado nas páginas oficiais de cada
+imagem no Docker Hub.
+
+**Tentado e não conseguido (NÃO TESTADO — DEPENDE DA ORACLE CLOUD, honesto
+em vez de fingido)**: o daemon Docker foi arrancado de propósito neste
+sandbox para tentar `docker buildx build --platform linux/arm64` a sério.
+Todos os registos de imagens testados (`docker.io`, `gcr.io`,
+`public.ecr.aws`, `ghcr.io`, `quay.io`, `registry.k8s.io`,
+`mcr.microsoft.com`) devolveram bloqueio de rede (`403 Forbidden`/
+`connect_rejected`) da política deste ambiente de desenvolvimento — a mesma
+classe de restrição já documentada para o Prisma. Não foi possível, por
+isso, correr um build ARM64 real. O que foi verificado por execução real
+neste sandbox foi só a validação de sintaxe/semântica do
+`docker-compose.prod.yml` (`docker compose config`), que não depende de
+nenhum registo de imagens.
+
+**Conclusão**: nenhuma incompatibilidade ARM64 foi encontrada nem havia
+motivo para alterar o `Dockerfile`. A confirmação final por execução real só
+pode acontecer no primeiro `docker compose ... up --build` feito na própria
+VM Oracle — documentado como o primeiro passo do procedimento em
+`ORACLE-CLOUD.md`, não como risco novo introduzido por esta tarefa.
+
+## Reverse proxy: Caddy em vez de Nginx (Preparação de deploy $0, 29/08/2026)
+
+**Sintoma**: `DEPLOYMENT.md` já tinha identificado que HTTPS era um
+pré-requisito de lançamento (o cookie de sessão só é aceite pelo browser com
+`secure` sobre HTTPS) mas tinha deixado a escolha de proxy em aberto
+("Caddy ou Nginx + Certbot"). Com o requisito adicional de orçamento $0 e
+**sem domínio próprio ainda**, a escolha deixa de ser indiferente.
+
+**Decisão**: Caddy (`caddy:2-alpine`), não Nginx+Certbot. Um único critério
+decidiu isto, não preferência: Caddy obtém e renova certificados HTTPS
+automaticamente a partir de uma única linha de configuração (o hostname em
+`Caddyfile`), incluindo para hostnames sslip.io (ver decisão seguinte) — e
+quando um domínio real existir mais tarde, a transição é trocar um valor de
+variável de ambiente (`SITE_ADDRESS`), sem tocar em mais nada. Nginx exigiria
+Certbot como peça separada, com o próprio script de renovação e hook de
+reload — mais peças móveis para manter, sem nenhum benefício concreto para
+esta Beta pequena (nem Nginx nem Caddy introduzem risco de segurança um
+para o outro nesta escala).
+
+**O que mudou**: `docker-compose.prod.yml` ganhou o serviço `caddy`
+(único exposto a 80/443); `app` deixou de publicar a porta 3000
+diretamente. `Caddyfile` novo, com `reverse_proxy app:3000` e cabeçalhos de
+segurança básicos (`X-Content-Type-Options`, `X-Frame-Options`,
+`Referrer-Policy`) — nada que precise de ser mantido manualmente.
+
+## HTTPS sem domínio próprio: hostname sslip.io (Preparação de deploy $0, 29/08/2026)
+
+**Sintoma**: orçamento $0 significa não comprar um domínio agora — mas
+HTTPS continua a ser um requisito funcional (não só de segurança) desta
+aplicação, porque o cookie de sessão em produção é `secure`. Let's Encrypt
+(usado pelo Caddy) exige um hostname público real para validar um
+certificado — não aceita emitir para um IP nu.
+
+**Decisão**: usar um hostname `sslip.io` derivado do IP público da VM (ex.
+`203-0-113-10.sslip.io` para o IP `203.0.113.10`). Confirmado por pesquisa
+nesta tarefa: sslip.io é um serviço de DNS gratuito e público que resolve
+esse hostname para o próprio IP embutido no nome, e o próprio serviço
+confirma que isto é suficiente para o Let's Encrypt validar via desafio
+HTTP-01 e emitir um certificado real — não um workaround inseguro, é uma
+técnica estabelecida e amplamente documentada para exatamente este cenário
+("tenho um IP público, ainda não tenho domínio"). Único valor que muda entre
+"sem domínio" e "com domínio real, mais tarde": a variável `SITE_ADDRESS`.
+
+**Limitações aceites, documentadas**: sslip.io é um serviço de terceiros
+fora do controlo do projeto (se ficar indisponível, a resolução DNS desse
+hostname falha até voltar); Let's Encrypt tem limites de taxa por hostname
+(não relevante à escala de uma única VM/uma Beta pequena); sslip.io não
+suporta certificados wildcard (irrelevante aqui, só é usado um hostname).
+Nenhuma destas limitações impede o lançamento da Beta — todas são aceitáveis
+para $0 de orçamento, e a transição para um domínio próprio remove-as por
+completo sem exigir nenhuma mudança de código ou de arquitetura.
+
+## Oracle Cloud pausada; deploy ZERO-COST via Render + Neon (29/08/2026)
+
+**Sintoma**: a criação da conta Oracle Cloud ficou bloqueada numa
+verificação temporária de cartão que não foi possível concluir. O
+utilizador definiu um novo objetivo com prazo (utilizadores reais antes de
+~15/09/2026) e pediu para não esperar pela Oracle — encontrar o caminho
+$0 mais simples com os serviços já sugeridos (Vercel/Render/Neon),
+preservando a app tal como está.
+
+**Decisão**: **Render (um único Web Service Free, Docker, a correr a
+aplicação Next.js completa tal como já corre hoje) + Neon (Postgres Free)
+— sem usar a Vercel.** Análise completa em
+`docs/ZERO_COST_DEPLOYMENT_AUDIT.md`; resumo do porquê de não seguir o
+diagrama original (Vercel para o frontend, Render para a API):
+
+1. **Este projeto não é um frontend separado de uma API** — confirmado por
+   leitura direta do código: os Server Components (`dashboard/page.tsx`,
+   `accounts/page.tsx`, etc.) chamam `src/lib/db/*.ts` **diretamente**,
+   nunca fazem `fetch` a uma API interna. `getSessionUser()` lê o cookie de
+   sessão e verifica o JWT **no mesmo processo** que renderiza a página.
+   Só as mutações feitas por Client Components usam `fetch()` — sempre com
+   **URLs relativas** (`/api/...`), confirmado por grep em todo o `src/`.
+   Separar "frontend" (Vercel) de "API" (Render) exigiria ou dar acesso
+   direto à base de dados a partir da Vercel (dissolvendo a separação) ou
+   reescrever cada Server Component para passar a fazer `fetch` remoto —
+   uma reescrita real, fora do pedido explícito.
+2. **O cookie de sessão é `sameSite: "lax"`**, sem `domain` definido —
+   funciona perfeitamente em mesma origem (como é usado há sempre), mas
+   **não seria enviado** em `fetch` entre `vercel.app` e `onrender.com`.
+   Corrigir isso exigiria `sameSite: "none"` + CORS explícito com
+   `Access-Control-Allow-Credentials` em todas as rotas de mutação — o tipo
+   de alteração de segurança que o pedido explicitamente pediu para evitar
+   ("não fazer uma alteração insegura só para fazer funcionar").
+3. **A Vercel tem o seu próprio pipeline de build para Next.js e ignora o
+   `Dockerfile` deste repositório** — cada rota de API passaria a correr
+   como Vercel Serverless Function. Não é uma reescrita, mas é, de facto,
+   tornar o backend serverless — contra o pedido explícito.
+4. **A Vercel Hobby restringe a uso não-comercial/pessoal** — confirmado
+   por pesquisa nesta tarefa, diretamente na documentação oficial da
+   Vercel (`vercel.com/docs/plans/hobby`, atualizada em 11/08/2026): "the
+   Hobby plan restricts users to non-commercial, personal use only". Mais
+   um motivo concreto para não a usar aqui.
+5. **O Render, a correr a app inteira a partir do `Dockerfile` já
+   existente (o mesmo preparado para a Oracle), não exige nenhuma
+   alteração de código** — mantém o processo persistente (não serverless),
+   mantém as URLs relativas e o cookie `sameSite: "lax"` exatamente como
+   estão.
+
+**Confirmado por pesquisa nesta tarefa, fontes oficiais**: Render Free Web
+Service não exige cartão de crédito (`render.com/docs/free`: sem cartão,
+ultrapassar limites só suspende o serviço, nunca cobra); Render Free
+Postgres expira 30 dias após criação (por isso não é usado — o Postgres é
+inteiramente Neon); Neon Free não exige cartão e nunca apaga dados por
+inatividade (só o compute entra em autosuspend ao fim de 5 min, os dados
+persistem — "None of these limits delete your data", `neon.com/faqs/free-plan-limits-and-quotas`).
+
+**O que mudou**: `.env.render.example` novo (variáveis mínimas para este
+caminho: `DATABASE_URL`, `AUTH_SECRET`, `NODE_ENV`); `render.yaml` novo
+(Blueprint do Render, descreve o serviço a partir do `Dockerfile` já
+existente, sem alterações a ele); `scripts/backup/backup-neon.sh` novo
+(mesma lógica do `backup.sh` original, adaptado para `pg_dump` direto
+contra `DATABASE_URL`, sem `docker compose exec`, já que o Neon não é um
+container nosso); `docs/operations/RENDER-NEON.md` novo (guia passo a
+passo); `.gitignore` com a exceção nova `!.env.render.example`. **Zero
+alterações a `src/`.**
+
+**O que NÃO mudou / não foi descartado**: `docker-compose.prod.yml`,
+`Caddyfile`, `scripts/backup/backup.sh`/`restore.sh`/`verify-backup.sh`,
+e toda a documentação da Oracle (`docs/operations/ORACLE-CLOUD.md`,
+`docs/architecture/DEPLOYMENT.md`) continuam no repositório, válidos como
+caminho de self-host para o dia em que fizer sentido deixar de depender de
+free tiers de terceiros — não foram uma perda, ficam disponíveis.
+
+**Backups nesta fase**: manuais, não automáticos — decisão explícita do
+utilizador ("pode ser backup manual periódico para o computador do
+proprietário durante a Alpha/Beta inicial... não fingir que existe backup
+automático se não existe"). `backup-neon.sh` produz o `.dump`; cabe a quem
+gere o Konta correr isto periodicamente e guardar o ficheiro fora do Git,
+num local seguro do seu computador. Isto é uma limitação aceite e
+documentada, não escondida.
