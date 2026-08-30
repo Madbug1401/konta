@@ -1,17 +1,20 @@
 import { AccountCard } from "@/components/account-card";
 import { AccountForm } from "@/components/account-form";
+import { DashboardCategoryChart } from "@/components/dashboard-category-chart";
 import { MoneyDisplay } from "@/components/money-display";
 import { TransactionItem } from "@/components/transaction-item";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getSessionUser } from "@/lib/auth/session";
 import { listAccounts } from "@/lib/db/accounts";
+import { listCategories } from "@/lib/db/categories";
 import { listAllTransactionsForBalances, listTransactions } from "@/lib/db/transactions";
 import { findUserById } from "@/lib/db/users";
 import {
   getAccountBalance,
   getAvailableBalance,
   getCashflow,
+  getCategoryBreakdown,
   getExpenseTotal,
   getIncomeTotal,
   getMonthBounds,
@@ -19,6 +22,11 @@ import {
   getSavingsRate,
   getTodayInTimezone,
 } from "@/lib/financial-engine";
+
+// [Fase 6 — gráfico] A paleta ACCOUNT_COLORS tem exatamente 8 cores — nunca
+// esticada/repetida além disso. Top 7 categorias + "Outras" (a 8ª cor) é o
+// máximo que cabe sem repetir cor entre barras diferentes.
+const TOP_CATEGORIES = 7;
 
 // [Regra 11 do briefing — "não invente números"] Esta página não mostra
 // nenhum valor calculado no frontend a partir de dados fictícios: tudo o que
@@ -32,8 +40,9 @@ export default async function DashboardPage() {
   const timezone = user?.timezone ?? "Atlantic/Cape_Verde";
   const currency = user?.defaultCurrency ?? "CVE";
 
-  const [accounts, allTransactions, recentTransactions] = await Promise.all([
+  const [accounts, categories, allTransactions, recentTransactions] = await Promise.all([
     listAccounts(session!.userId),
+    listCategories(session!.userId),
     listAllTransactionsForBalances(session!.userId),
     listTransactions(session!.userId, { limit: 8 }),
   ]);
@@ -52,6 +61,24 @@ export default async function DashboardPage() {
   const monthlyExpense = getExpenseTotal(allTransactions, monthBounds);
   const monthlyCashflow = getCashflow(allTransactions, monthBounds);
   const savingsRate = getSavingsRate(allTransactions, monthBounds);
+
+  // [Fase 6 — gráfico] `getCategoryBreakdown` devolve bigint (MinorAmount) —
+  // só se converte para Number aqui, no último passo antes de desenhar
+  // (nunca antes, mesma regra já seguida por MoneyDisplay). Nomes de
+  // categoria vêm de `categories` (já carregadas nesta página); sem
+  // categoria (categoryId null, ex: algumas transações antigas) mostra-se
+  // "Sem categoria" — nunca omitido em silêncio.
+  const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
+  const expenseBreakdown = [...getCategoryBreakdown(allTransactions, "EXPENSE", monthBounds)].sort((a, b) =>
+    b.totalMinor > a.totalMinor ? 1 : b.totalMinor < a.totalMinor ? -1 : 0,
+  );
+  const topCategoryItems = expenseBreakdown.slice(0, TOP_CATEGORIES).map((item) => ({
+    name: item.categoryId ? (categoryNameById.get(item.categoryId) ?? "Categoria") : "Sem categoria",
+    amount: Number(item.totalMinor),
+  }));
+  const otherCategoriesTotal = expenseBreakdown.slice(TOP_CATEGORIES).reduce((total, item) => total + item.totalMinor, 0n);
+  const categoryChartItems =
+    otherCategoriesTotal > 0n ? [...topCategoryItems, { name: "Outras", amount: Number(otherCategoriesTotal) }] : topCategoryItems;
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -82,6 +109,15 @@ export default async function DashboardPage() {
           </span>
         </div>
       </Card>
+
+      {categoryChartItems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Despesas por categoria este mês</CardTitle>
+          </CardHeader>
+          <DashboardCategoryChart items={categoryChartItems} currency={currency} />
+        </Card>
+      )}
 
       <section>
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">As tuas contas</h2>
