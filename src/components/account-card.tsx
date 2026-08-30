@@ -66,7 +66,16 @@ export function AccountCard({ id, name, type, balanceMinor, currency, color, isA
         </Link>
       </div>
       <MoneyDisplay amountMinor={balanceMinor} currency={currency} size="lg" />
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2">
+        {/* [Fase 5 — Investimentos] Só contas de tipo INVESTMENT têm
+            InvestmentDetail — o link só aparece aqui, nunca noutro tipo. */}
+        {type === "INVESTMENT" ? (
+          <Link href={`/accounts/${id}/investment`} className="text-xs font-medium text-primary hover:underline">
+            Ver investimento
+          </Link>
+        ) : (
+          <span />
+        )}
         <AccountArchiveButton accountId={id} isArchived={isArchived} />
       </div>
     </Card>
