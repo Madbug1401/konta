@@ -10,6 +10,7 @@ const bank: AccountRecord = {
   currency: "CVE",
   initialBalanceMinor: 10_000n,
   isArchived: false,
+  color: null,
 };
 const savings: AccountRecord = {
   id: "acc_savings",
@@ -19,6 +20,7 @@ const savings: AccountRecord = {
   currency: "CVE",
   initialBalanceMinor: 0n,
   isArchived: false,
+  color: null,
 };
 
 function income(id: string, accountId: string, amount: bigint, date: string): TransactionRecord {

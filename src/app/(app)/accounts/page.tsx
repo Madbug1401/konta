@@ -45,6 +45,7 @@ export default async function AccountsPage() {
               type={account.type}
               balanceMinor={getAccountBalance(account, transactions, today)}
               currency={account.currency}
+              color={account.color}
             />
           ))}
         </div>

@@ -9,7 +9,7 @@ import { getPool, toBigInt } from "./client";
 
 export async function listAccounts(userId: string): Promise<AccountRecord[]> {
   const { rows } = await getPool().query(
-    `SELECT id, "userId", name, type, currency, "initialBalanceMinor", "isArchived"
+    `SELECT id, "userId", name, type, currency, "initialBalanceMinor", "isArchived", color
      FROM "Account" WHERE "userId" = $1 ORDER BY "createdAt" ASC`,
     [userId],
   );
@@ -18,7 +18,7 @@ export async function listAccounts(userId: string): Promise<AccountRecord[]> {
 
 export async function getAccountById(userId: string, accountId: string): Promise<AccountRecord | null> {
   const { rows } = await getPool().query(
-    `SELECT id, "userId", name, type, currency, "initialBalanceMinor", "isArchived"
+    `SELECT id, "userId", name, type, currency, "initialBalanceMinor", "isArchived", color
      FROM "Account" WHERE "userId" = $1 AND id = $2`,
     [userId, accountId],
   );
@@ -31,12 +31,15 @@ export async function createAccount(input: {
   type: AccountType;
   currency?: string;
   initialBalanceMinor?: bigint;
+  // Id de uma cor da paleta curada (ver src/lib/account-colors.ts) —
+  // validado pela rota de API antes de chegar aqui, nunca um hex livre.
+  color?: string | null;
 }): Promise<AccountRecord> {
   const { rows } = await getPool().query(
-    `INSERT INTO "Account" (id, "userId", name, type, currency, "initialBalanceMinor")
-     VALUES ('c' || replace(gen_random_uuid()::text, '-', ''), $1, $2, $3, COALESCE($4, 'CVE'), COALESCE($5, 0))
-     RETURNING id, "userId", name, type, currency, "initialBalanceMinor", "isArchived"`,
-    [input.userId, input.name, input.type, input.currency ?? null, input.initialBalanceMinor?.toString() ?? null],
+    `INSERT INTO "Account" (id, "userId", name, type, currency, "initialBalanceMinor", color)
+     VALUES ('c' || replace(gen_random_uuid()::text, '-', ''), $1, $2, $3, COALESCE($4, 'CVE'), COALESCE($5, 0), $6)
+     RETURNING id, "userId", name, type, currency, "initialBalanceMinor", "isArchived", color`,
+    [input.userId, input.name, input.type, input.currency ?? null, input.initialBalanceMinor?.toString() ?? null, input.color ?? null],
   );
   return mapAccount(rows[0]);
 }
@@ -49,6 +52,7 @@ interface AccountRow {
   currency: string;
   initialBalanceMinor: string;
   isArchived: boolean;
+  color: string | null;
 }
 
 function mapAccount(row: AccountRow): AccountRecord {
@@ -60,5 +64,6 @@ function mapAccount(row: AccountRow): AccountRecord {
     currency: row.currency,
     initialBalanceMinor: toBigInt(row.initialBalanceMinor),
     isArchived: row.isArchived,
+    color: row.color,
   };
 }

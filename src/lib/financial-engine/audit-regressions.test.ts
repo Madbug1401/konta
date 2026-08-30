@@ -25,6 +25,7 @@ describe("Bug 1 — Cofre de Emergência a somar valores absolutos", () => {
       currency: "CVE",
       initialBalanceMinor: 0n,
       isArchived: false,
+      color: null,
     };
     const transactions: TransactionRecord[] = [
       // Depósito de 50.000 CVE no cofre (transferência do banco para o cofre)

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { ACCOUNT_COLOR_IDS } from "@/lib/account-colors";
 import { getSessionUser } from "@/lib/auth/session";
 import { createAccount, listAccounts } from "@/lib/db/accounts";
 import { listAllTransactionsForBalances } from "@/lib/db/transactions";
@@ -48,6 +49,9 @@ const CreateAccountSchema = z.object({
   // precisão, não uma regra de negócio) — negativo continua permitido de
   // propósito (ex: saldo inicial de um cartão de crédito).
   initialBalanceMinor: z.number().int().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(),
+  // Só um id da paleta curada (ver src/lib/account-colors.ts) — nunca um hex
+  // livre vindo do cliente.
+  color: z.enum(ACCOUNT_COLOR_IDS).optional(),
 });
 
 export const POST = withErrorHandling("api.accounts.post", async (request: Request) => {
@@ -67,6 +71,7 @@ export const POST = withErrorHandling("api.accounts.post", async (request: Reque
     currency: parsed.data.currency,
     initialBalanceMinor:
       parsed.data.initialBalanceMinor !== undefined ? BigInt(parsed.data.initialBalanceMinor) : undefined,
+    color: parsed.data.color,
   });
 
   return NextResponse.json({ ...account, initialBalanceMinor: account.initialBalanceMinor.toString() }, { status: 201 });

@@ -103,6 +103,7 @@ export default async function DashboardPage() {
                 type={account.type}
                 balanceMinor={getAccountBalance(account, allTransactions, today)}
                 currency={account.currency}
+                color={account.color}
               />
             ))}
           </div>

@@ -42,6 +42,9 @@ export interface AccountRecord {
   currency: string;
   initialBalanceMinor: MinorAmount;
   isArchived: boolean;
+  // Id de uma cor da paleta curada (ver src/lib/account-colors.ts), não um
+  // hex livre — null para contas criadas antes desta funcionalidade existir.
+  color: string | null;
 }
 
 export interface TransactionRecord {

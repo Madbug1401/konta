@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ACCOUNT_COLORS, type AccountColorId } from "@/lib/account-colors";
 import type { AccountType } from "@/lib/financial-engine";
 
 const TYPE_OPTIONS: { value: AccountType; label: string }[] = [
@@ -21,6 +22,10 @@ export function AccountForm() {
   const [name, setName] = useState("");
   const [type, setType] = useState<AccountType>("BANK");
   const [initialBalance, setInitialBalance] = useState("0");
+  // [Correção — cor da conta] Começa já com a primeira cor da paleta
+  // selecionada (em vez de "sem cor") — o pedido era tornar a app mais
+  // visual por omissão, não obrigar a um passo extra para isso acontecer.
+  const [color, setColor] = useState<AccountColorId>(ACCOUNT_COLORS[0].id);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -33,7 +38,7 @@ export function AccountForm() {
       const res = await fetch("/api/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, type, initialBalanceMinor: Number(initialBalance) || 0 }),
+        body: JSON.stringify({ name, type, initialBalanceMinor: Number(initialBalance) || 0, color }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -42,6 +47,7 @@ export function AccountForm() {
       }
       setName("");
       setInitialBalance("0");
+      setColor(ACCOUNT_COLORS[0].id);
       setOpen(false);
       router.refresh();
     } finally {
@@ -92,6 +98,32 @@ export function AccountForm() {
           className="mt-1"
         />
       </label>
+      <div className="text-xs font-medium text-muted-foreground">
+        Cor da conta
+        <div className="mt-1 flex flex-wrap gap-2" role="radiogroup" aria-label="Cor da conta">
+          {ACCOUNT_COLORS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="radio"
+              aria-checked={color === c.id}
+              aria-label={c.label}
+              title={c.label}
+              onClick={() => setColor(c.id)}
+              className="h-7 w-7 rounded-full transition-transform"
+              style={{
+                backgroundColor: c.hex,
+                // "Halo" à volta da cor selecionada: um anel do tom da
+                // própria cor, com um respiro do fundo da app entre a bolinha
+                // e o anel — assim funciona em tema claro e escuro sem
+                // precisar de saber qual está ativo.
+                boxShadow: color === c.id ? `0 0 0 2px var(--color-surface), 0 0 0 4px ${c.hex}` : "none",
+                transform: color === c.id ? "scale(1.05)" : "scale(1)",
+              }}
+            />
+          ))}
+        </div>
+      </div>
       {error ? <p className="text-sm text-danger">{error}</p> : null}
       <div className="flex gap-2">
         <Button type="submit" disabled={loading}>
