@@ -70,6 +70,21 @@ export async function updateAccount(
   return rows[0] ? mapAccount(rows[0]) : null;
 }
 
+// [Fase 3 — arquivar/encerrar] Reversível de propósito (ao contrário de
+// DEFAULTED numa Dívida ou ACHIEVED/ABANDONED numa Meta) — arquivar uma
+// conta é um "esconder por agora", nunca uma decisão definitiva sobre o
+// próprio dinheiro. Ver DELETE_POLICY.md: isto é o mecanismo recomendado
+// em vez de qualquer DELETE físico.
+export async function setAccountArchived(userId: string, accountId: string, isArchived: boolean): Promise<AccountRecord | null> {
+  const { rows } = await getPool().query(
+    `UPDATE "Account" SET "isArchived" = $3, "updatedAt" = now()
+     WHERE "userId" = $1 AND id = $2
+     RETURNING id, "userId", name, type, currency, "initialBalanceMinor", "isArchived", color`,
+    [userId, accountId, isArchived],
+  );
+  return rows[0] ? mapAccount(rows[0]) : null;
+}
+
 interface AccountRow {
   id: string;
   userId: string;

@@ -1,7 +1,13 @@
+"use client";
+
 import { Pencil, Target } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { MoneyDisplay } from "@/components/money-display";
+import { useToast } from "@/components/toast-provider";
 import type { GoalStatus } from "@/lib/financial-engine";
 
 export interface GoalCardProps {
@@ -37,11 +43,43 @@ export function GoalCard({
   progressPercent,
   projection,
 }: GoalCardProps) {
+  const router = useRouter();
+  const toast = useToast();
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+
   // A barra nunca ultrapassa 100% visualmente, mesmo que o texto ao lado
   // (progressPercent, sem limite) já mostre "132%" quando a meta foi
   // superada — a barra cheia comunica "atingida", o número exato fica no
   // texto.
   const barWidth = Math.max(0, Math.min(100, progressPercent));
+
+  // [Fase 3 — arquivar/encerrar] Irreversível — a condição real (nunca
+  // reabrir uma meta já encerrada) é aplicada no SQL de `updateGoalStatus`
+  // (src/lib/db/goals.ts); esta função só decide o texto de confirmação.
+  async function handleSetStatus(newStatus: "ACHIEVED" | "ABANDONED") {
+    const confirmMessage =
+      newStatus === "ACHIEVED"
+        ? "Marcar esta meta como alcançada? Esta ação não pode ser revertida."
+        : "Abandonar esta meta? Esta ação não pode ser revertida.";
+    if (!window.confirm(confirmMessage)) return;
+    setUpdatingStatus(true);
+    try {
+      const res = await fetch(`/api/goals/${id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast.error(body.error ?? "Não foi possível atualizar a meta.");
+        return;
+      }
+      toast.success(newStatus === "ACHIEVED" ? "Meta marcada como alcançada." : "Meta abandonada.");
+      router.refresh();
+    } finally {
+      setUpdatingStatus(false);
+    }
+  }
 
   return (
     <Card className="flex flex-col gap-3">
@@ -87,6 +125,17 @@ export function GoalCard({
               }.`
             : "Ainda sem contribuições suficientes para projetar uma data."}
         </p>
+      )}
+
+      {status === "ACTIVE" && (
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={() => handleSetStatus("ABANDONED")} disabled={updatingStatus} className="text-muted-foreground">
+            Abandonar
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => handleSetStatus("ACHIEVED")} disabled={updatingStatus}>
+            {updatingStatus ? "A guardar..." : "Marcar como alcançada"}
+          </Button>
+        </div>
       )}
     </Card>
   );

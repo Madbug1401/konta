@@ -17,7 +17,10 @@ export default async function DebtsPage() {
     listAllTransactionsForBalances(session!.userId),
   ]);
   const today = getTodayInTimezone(user?.timezone ?? "Atlantic/Cape_Verde");
-  const accountOptions = accounts.map((a) => ({ id: a.id, name: a.name }));
+  // [Fase 3 — arquivar/encerrar] Uma conta arquivada não paga parcelas
+  // novas (ver .../installments/[installmentId]/pay/route.ts) — aqui só
+  // não a oferecemos no seletor.
+  const accountOptions = accounts.filter((a) => !a.isArchived).map((a) => ({ id: a.id, name: a.name }));
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">

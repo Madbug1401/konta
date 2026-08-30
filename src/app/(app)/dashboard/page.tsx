@@ -85,7 +85,12 @@ export default async function DashboardPage() {
 
       <section>
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">As tuas contas</h2>
-        {accounts.length === 0 ? (
+        {/* [Fase 3 — arquivar/encerrar] O saldo total acima (netWorth/
+            availableBalance) continua a somar TODAS as contas — o dinheiro
+            de uma conta arquivada não desapareceu. Esta grelha é só um
+            atalho visual, por isso esconde as arquivadas (a página Contas
+            tem a secção dedicada para as ver e reativar). */}
+        {accounts.filter((a) => !a.isArchived).length === 0 ? (
           // [Correção — Pre-Beta Hardening, Prioridade 11] Ao contrário da
           // página Contas, o Dashboard não tinha nenhum botão de criar conta
           // — quem chegasse aqui sem contas ficava sem ação nenhuma a seguir.
@@ -96,7 +101,7 @@ export default async function DashboardPage() {
           />
         ) : (
           <div className="flex flex-wrap gap-3 sm:gap-4">
-            {accounts.map((account) => (
+            {accounts.filter((a) => !a.isArchived).map((account) => (
               <AccountCard
                 key={account.id}
                 id={account.id}

@@ -37,6 +37,31 @@ const STATUS_LABEL: Record<DebtStatus, string> = {
 };
 
 export function DebtCard({ debtId, creditorName, description, currency, status, remainingMinor, installments, accounts }: DebtCardProps) {
+  const router = useRouter();
+  const toast = useToast();
+  const [markingDefaulted, setMarkingDefaulted] = useState(false);
+
+  // [Fase 3 — arquivar/encerrar] Irreversível — a condição real (nunca
+  // reabrir, nunca marcar uma já paga) é aplicada no SQL de
+  // `markDebtDefaulted` (src/lib/db/debts.ts); esta verificação de status
+  // aqui é só para não mostrar sequer o botão quando não faz sentido.
+  async function handleMarkDefaulted() {
+    if (!window.confirm("Marcar esta dívida como incumprida? Esta ação não pode ser revertida.")) return;
+    setMarkingDefaulted(true);
+    try {
+      const res = await fetch(`/api/debts/${debtId}/default`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast.error(body.error ?? "Não foi possível marcar a dívida como incumprida.");
+        return;
+      }
+      toast.success("Dívida marcada como incumprida.");
+      router.refresh();
+    } finally {
+      setMarkingDefaulted(false);
+    }
+  }
+
   return (
     <Card className="flex flex-col gap-3">
       <CardHeader>
@@ -78,6 +103,12 @@ export function DebtCard({ debtId, creditorName, description, currency, status, 
             />
           ))}
         </div>
+      )}
+
+      {status === "ACTIVE" && (
+        <Button size="sm" variant="ghost" onClick={handleMarkDefaulted} disabled={markingDefaulted} className="self-end text-danger hover:bg-danger/10">
+          {markingDefaulted ? "A marcar..." : "Marcar como incumprida"}
+        </Button>
       )}
     </Card>
   );

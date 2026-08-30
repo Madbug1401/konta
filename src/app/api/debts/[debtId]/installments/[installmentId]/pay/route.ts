@@ -32,6 +32,9 @@ export const POST = withErrorHandling(
     // src/app/api/transactions/route.ts.
     const account = await getAccountById(session.userId, input.accountId);
     if (!account) return NextResponse.json({ error: "Conta não encontrada." }, { status: 404 });
+    // [Fase 3 — arquivar/encerrar] Mesma regra de src/app/api/transactions/
+    // route.ts: uma conta arquivada não paga parcelas novas.
+    if (account.isArchived) return NextResponse.json({ error: "Esta conta está arquivada." }, { status: 400 });
 
     const user = await findUserById(session.userId);
     const date = input.date ?? getTodayInTimezone(user?.timezone ?? "Atlantic/Cape_Verde");

@@ -21,8 +21,12 @@ export default async function GoalsPage() {
   const timezone = user?.timezone ?? "Atlantic/Cape_Verde";
   const today = getTodayInTimezone(timezone);
   const lookbackStart = daysFromToday(timezone, -PROJECTION_LOOKBACK_DAYS);
+  // Mapa com TODAS as contas (incluindo arquivadas) — uma meta já ligada a
+  // uma conta entretanto arquivada continua a mostrar o progresso real,
+  // nunca desaparece. `accountOptions`, em baixo, é só para escolher a
+  // conta de uma meta NOVA — aí uma arquivada não faz sentido aparecer.
   const accountsById = new Map(accounts.map((a) => [a.id, a]));
-  const accountOptions = accounts.map((a) => ({ id: a.id, name: a.name }));
+  const accountOptions = accounts.filter((a) => !a.isArchived).map((a) => ({ id: a.id, name: a.name }));
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">

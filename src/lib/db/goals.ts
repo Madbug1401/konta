@@ -87,6 +87,25 @@ export async function updateGoal(
   return rows[0] ? mapGoal(rows[0]) : null;
 }
 
+// [Fase 3 — arquivar/encerrar] Mesmo padrão de `markDebtDefaulted` em
+// src/lib/db/debts.ts: a condição `AND status = 'ACTIVE'` no próprio SQL é
+// a defesa real (não só a UI) contra reabrir uma meta já encerrada ou
+// encerrá-la duas vezes com estados diferentes.
+export async function updateGoalStatus(
+  userId: string,
+  goalId: string,
+  status: Extract<GoalStatus, "ACHIEVED" | "ABANDONED">,
+): Promise<GoalRecord | null> {
+  const { rows } = await getPool().query(
+    `UPDATE "Goal" SET status = $3, "updatedAt" = now()
+     WHERE "userId" = $1 AND id = $2 AND status = 'ACTIVE'
+     RETURNING id, "userId", name, description, "targetAmountMinor", currency, "targetDate",
+               "linkedAccountId", status`,
+    [userId, goalId, status],
+  );
+  return rows[0] ? mapGoal(rows[0]) : null;
+}
+
 interface GoalRow {
   id: string;
   userId: string;

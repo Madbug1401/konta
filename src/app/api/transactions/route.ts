@@ -111,10 +111,15 @@ export const POST = withErrorHandling("api.transactions.post", async (request: R
   // pertencem ao utilizador autenticado — isolamento multi-utilizador (regra 6).
   const account = await getAccountById(session.userId, input.accountId);
   if (!account) return NextResponse.json({ error: "Conta não encontrada." }, { status: 404 });
+  // [Fase 3 — arquivar/encerrar] Aplicado a sério, não só escondido na UI:
+  // uma conta arquivada nunca pode receber um movimento novo, mesmo que
+  // alguém chame esta rota diretamente com o id certo.
+  if (account.isArchived) return NextResponse.json({ error: "Esta conta está arquivada." }, { status: 400 });
 
   if (input.destinationAccountId) {
     const destination = await getAccountById(session.userId, input.destinationAccountId);
     if (!destination) return NextResponse.json({ error: "Conta de destino não encontrada." }, { status: 404 });
+    if (destination.isArchived) return NextResponse.json({ error: "A conta de destino está arquivada." }, { status: 400 });
   }
 
   // [Correção — Pre-Beta Hardening, Prioridade 7] Mesmo princípio já

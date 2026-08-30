@@ -168,6 +168,23 @@ export async function updateDebt(
   return rows[0] ? mapDebt(rows[0]) : null;
 }
 
+// [Fase 3 — arquivar/encerrar] Irreversível de propósito (ao contrário de
+// arquivar uma Conta) — a condição `AND status = 'ACTIVE'` no próprio SQL é
+// o que impede, a sério (não só na UI), marcar como incumprida uma dívida
+// já paga, ou "reabrir" uma que já esteja DEFAULTED (esta query
+// simplesmente não afeta nenhuma linha nesses casos, `rows[0]` fica
+// undefined e a rota devolve 404/409 consoante o caso).
+export async function markDebtDefaulted(userId: string, debtId: string): Promise<DebtRecord | null> {
+  const { rows } = await getPool().query(
+    `UPDATE "Debt" SET status = 'DEFAULTED', "updatedAt" = now()
+     WHERE "userId" = $1 AND id = $2 AND status = 'ACTIVE'
+     RETURNING id, "userId", "creditorName", description, "originalAmountMinor", currency,
+               "interestRate", status, "startDate", "finalDueDate"`,
+    [userId, debtId],
+  );
+  return rows[0] ? mapDebt(rows[0]) : null;
+}
+
 export class InstallmentNotPayableError extends Error {
   constructor(message: string) {
     super(message);

@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { Landmark, PiggyBank, Pencil, Shield, TrendingUp, Wallet, CreditCard, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
+import { AccountArchiveButton } from "@/components/account-archive-button";
 import { Card } from "@/components/ui/card";
 import { MoneyDisplay } from "@/components/money-display";
 import { getAccountColorHex } from "@/lib/account-colors";
@@ -28,16 +29,20 @@ export interface AccountCardProps {
   // undefined para contas criadas antes desta funcionalidade existir, que
   // continuam a mostrar-se exatamente como antes (sem acento de cor).
   color?: string | null;
+  // [Fase 3 — arquivar/encerrar] Controla o botão Arquivar/Reativar no
+  // rodapé do cartão. Omitido (undefined) equivale a `false` — cartões
+  // antigos que ainda não passam esta prop continuam a mostrar-se iguais.
+  isArchived?: boolean;
 }
 
-export function AccountCard({ id, name, type, balanceMinor, currency, color }: AccountCardProps) {
+export function AccountCard({ id, name, type, balanceMinor, currency, color, isArchived = false }: AccountCardProps) {
   const Icon = ICONS[type];
   const hex = getAccountColorHex(color);
 
   return (
     <Card
       className="flex min-w-[200px] flex-1 flex-col gap-3 border-l-4 sm:min-w-[220px]"
-      style={hex ? { borderLeftColor: hex } : undefined}
+      style={hex ? { borderLeftColor: hex, opacity: isArchived ? 0.6 : 1 } : { opacity: isArchived ? 0.6 : 1 }}
     >
       <div className="flex items-center justify-between gap-2 text-muted-foreground">
         <div className="flex items-center gap-2">
@@ -61,6 +66,9 @@ export function AccountCard({ id, name, type, balanceMinor, currency, color }: A
         </Link>
       </div>
       <MoneyDisplay amountMinor={balanceMinor} currency={currency} size="lg" />
+      <div className="flex justify-end">
+        <AccountArchiveButton accountId={id} isArchived={isArchived} />
+      </div>
     </Card>
   );
 }

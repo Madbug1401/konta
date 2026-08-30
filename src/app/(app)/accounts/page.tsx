@@ -17,6 +17,11 @@ export default async function AccountsPage() {
   // [Correção — mesma causa do bug do dashboard] Ver DECISIONS.md: saldo
   // nunca conta transações datadas no futuro.
   const today = getTodayInTimezone(user?.timezone ?? "Atlantic/Cape_Verde");
+  // [Fase 3 — arquivar/encerrar] Duas secções, nunca uma lista só: uma
+  // arquivada nunca desaparece de vez (ver DELETE_POLICY.md), mas também
+  // não deve competir visualmente com as contas em uso.
+  const activeAccounts = accounts.filter((a) => !a.isArchived);
+  const archivedAccounts = accounts.filter((a) => a.isArchived);
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
@@ -37,19 +42,50 @@ export default async function AccountsPage() {
           action={<AccountForm />}
         />
       ) : (
-        <div className="flex flex-wrap gap-3 sm:gap-4">
-          {accounts.map((account) => (
-            <AccountCard
-              key={account.id}
-              id={account.id}
-              name={account.name}
-              type={account.type}
-              balanceMinor={getAccountBalance(account, transactions, today)}
-              currency={account.currency}
-              color={account.color}
+        <>
+          {activeAccounts.length === 0 ? (
+            <EmptyState
+              title="Todas as tuas contas estão arquivadas"
+              description="Reativa uma conta abaixo, ou cria uma nova."
+              action={<AccountForm />}
             />
-          ))}
-        </div>
+          ) : (
+            <div className="flex flex-wrap gap-3 sm:gap-4">
+              {activeAccounts.map((account) => (
+                <AccountCard
+                  key={account.id}
+                  id={account.id}
+                  name={account.name}
+                  type={account.type}
+                  balanceMinor={getAccountBalance(account, transactions, today)}
+                  currency={account.currency}
+                  color={account.color}
+                  isArchived={account.isArchived}
+                />
+              ))}
+            </div>
+          )}
+
+          {archivedAccounts.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <h2 className="text-sm font-semibold text-muted-foreground">Contas arquivadas</h2>
+              <div className="flex flex-wrap gap-3 sm:gap-4">
+                {archivedAccounts.map((account) => (
+                  <AccountCard
+                    key={account.id}
+                    id={account.id}
+                    name={account.name}
+                    type={account.type}
+                    balanceMinor={getAccountBalance(account, transactions, today)}
+                    currency={account.currency}
+                    color={account.color}
+                    isArchived={account.isArchived}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

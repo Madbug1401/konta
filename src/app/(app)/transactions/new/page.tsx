@@ -8,11 +8,15 @@ import { listGoals } from "@/lib/db/goals";
 
 export default async function NewTransactionPage() {
   const session = await getSessionUser();
-  const [accounts, categories, goals] = await Promise.all([
+  const [allAccounts, categories, goals] = await Promise.all([
     listAccounts(session!.userId),
     listCategories(session!.userId),
     listGoals(session!.userId),
   ]);
+  // [Fase 3 — arquivar/encerrar] Uma conta arquivada nunca é oferecida como
+  // origem/destino de um movimento novo — a rota já rejeita isto a sério
+  // (ver src/app/api/transactions/route.ts), aqui é só não a mostrar.
+  const accounts = allAccounts.filter((a) => !a.isArchived);
 
   return (
     <div className="mx-auto max-w-lg">
