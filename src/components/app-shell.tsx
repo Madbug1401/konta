@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, List, Wallet, Landmark, Target, Plus, LogOut } from "lucide-react";
+import { LayoutDashboard, List, Wallet, Landmark, Target, Repeat, Plus, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/accounts", label: "Contas", icon: Wallet },
   { href: "/debts", label: "Dívidas", icon: Landmark },
   { href: "/goals", label: "Metas", icon: Target },
+  { href: "/recurring", label: "Recorrências", icon: Repeat },
 ];
 
 // [Regra 14 do briefing — responsive é prioridade arquitetural, não um
@@ -64,7 +65,12 @@ export function AppShell({ children, userEmail }: { children: ReactNode; userEma
         <main className="flex-1 px-4 pb-24 pt-4 sm:px-6 sm:pb-6 md:pb-6">{children}</main>
 
         <nav className="fixed inset-x-0 bottom-0 z-10 flex items-center justify-around border-t border-border bg-surface py-2 md:hidden">
-          {NAV_ITEMS.slice(0, 2).map((item) => (
+          {/* [Fase 4 — Recorrências] Antes eram slice(0,2)/slice(2,4) — só 4
+              dos 5 itens cabiam, "Metas" já ficava de fora em mobile mesmo
+              antes desta funcionalidade existir. Com slice(0,3)/slice(3,6),
+              os 6 itens (incluindo Recorrências, novo) ficam todos
+              alcançáveis, sem inventar nenhum menu "mais" novo. */}
+          {NAV_ITEMS.slice(0, 3).map((item) => (
             <MobileNavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
           ))}
           <Link
@@ -74,7 +80,7 @@ export function AppShell({ children, userEmail }: { children: ReactNode; userEma
           >
             <Plus className="h-6 w-6" />
           </Link>
-          {NAV_ITEMS.slice(2, 4).map((item) => (
+          {NAV_ITEMS.slice(3, 6).map((item) => (
             <MobileNavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
           ))}
         </nav>

@@ -116,6 +116,10 @@ export interface RecurringTransactionRecord {
   accountId: string;
   destinationAccountId: string | null;
   amountMinor: MinorAmount;
+  // [Fase 4 — Recorrências] A coluna já existia na tabela (RecurringTransaction.currency),
+  // só faltava no tipo — mesma lacuna que AccountRecord/DebtRecord/GoalRecord
+  // já tinham antes de serem alargados.
+  currency: string;
   categoryId: string | null;
   description: string;
   frequency: RecurrenceFrequency;
