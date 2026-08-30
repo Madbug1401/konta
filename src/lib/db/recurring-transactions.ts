@@ -18,7 +18,7 @@ import {
   type RecurringTransactionRecord,
   type TransactionType,
 } from "@/lib/financial-engine";
-import { logError } from "@/lib/logger";
+import { logError, logInfo } from "@/lib/logger";
 import { getPool, toBigInt, toISODateString } from "./client";
 import { createTransaction } from "./transactions";
 
@@ -162,6 +162,34 @@ async function materializeSeries(userId: string, seriesId: string, todayIso: str
     }
 
     let series = mapRecurring(row);
+
+    // [Correção — auditoria de prontidão para Beta] `POST /api/transactions`
+    // e a rota de pagar parcela já rejeitam uma conta arquivada (Fase 3),
+    // mas isso só protege pedidos feitos por um humano num formulário. Uma
+    // série recorrente não passa por nenhuma rota quando é materializada —
+    // sem esta verificação, arquivar uma conta DEPOIS de já existir uma
+    // recorrência ativa sobre ela não a travava: `materializeSeries`
+    // continuaria a gerar Transactions novas para sempre contra uma conta
+    // arquivada, o que contradiz diretamente a política de arquivamento
+    // (DELETE_POLICY.md). Em vez de só ignorar em silêncio, a série é
+    // pausada (mesmo mecanismo de `setRecurringTransactionActive`) — o
+    // utilizador vê-a marcada "· em pausa" em /recurring, com o botão
+    // "Retomar" sempre disponível caso reative a conta (ou queira apontar a
+    // série a outra conta, editando-a).
+    const accountIds = [series.accountId, series.destinationAccountId].filter((id): id is string => Boolean(id));
+    const { rows: accountRows } = await client.query(`SELECT id FROM "Account" WHERE id = ANY($1::text[]) AND "isArchived" = true`, [
+      accountIds,
+    ]);
+    if (accountRows.length > 0) {
+      await client.query(`UPDATE "RecurringTransaction" SET "isActive" = false, "updatedAt" = now() WHERE id = $1`, [seriesId]);
+      await client.query("COMMIT");
+      logInfo("recurring.materialize.archived_account", "Conta arquivada — série pausada automaticamente.", {
+        userId,
+        recurringTransactionId: seriesId,
+      });
+      return;
+    }
+
     let generated = 0;
 
     while (generated < MAX_OCCURRENCES_PER_REQUEST) {
