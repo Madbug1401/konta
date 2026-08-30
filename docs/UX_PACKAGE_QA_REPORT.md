@@ -1,0 +1,40 @@
+# KONTA — QA do pacote UX pós-auditoria (logout, edição, arquivamento, recorrências, investimentos, gráfico)
+
+**Data**: 30/08/2026
+**Pedido**: "testa o aplicativo completo e diz-me se já está pronto para libertar a utilizadores".
+**Âmbito**: só o código deste pacote (as 6 fases do plano aprovado). `docs/GO_TO_BETA_AUDIT.md`, `docs/KONTA_BETA_GATE.md` e `docs/ZERO_COST_DEPLOYMENT_AUDIT.md` (todos de 29/08/2026) continuam válidos para tudo o resto — segurança base, hardening, decisão de deployment Render+Neon — e não foram re-auditados aqui.
+**Método**: teste manual ponta-a-ponta contra o `npm run dev` real do utilizador (Postgres real, não mocks) através do browser, mais leitura linha-a-linha das rotas/funções novas. Sempre que um bug real apareceu, foi corrigido, testado (automático quando fazia sentido) e sincronizado para o teu computador — não ficou só registado.
+
+## Bugs encontrados e corrigidos
+
+**1. Criar categoria a partir de Transações/Recorrências não funcionava (`<form>` aninhado).** Ao testar "+ Nova categoria" dentro do formulário de nova transação, a categoria parecia desaparecer em silêncio — o `<select>` voltava a "Sem categoria". A consola confirmou a causa: `CategoryQuickCreate` (novo neste pacote) tinha o seu próprio `<form onSubmit>`, montado dentro do `<form>` de `TransactionForm` — HTML não permite `<form>` aninhado, o browser reorganiza o DOM de forma imprevisível e React acusa erro de hidratação. O mesmo componente é reutilizado, sem alterações, dentro de `RecurringTransactionForm`, por isso o mesmo bug afetava as duas funcionalidades novas (Fase 1 e Fase 4). **Corrigido**: removido o `<form>` interno de `CategoryQuickCreate`; o botão "Criar" chama a submissão diretamente por `onClick`, e o campo de texto trata Enter à mão. Retestado ao vivo nas duas páginas — categoria criada e selecionada corretamente, confirmado também ao nível do DOM (`document.querySelectorAll('form form').length === 0`).
+
+**2. Arquivar uma conta não travava uma recorrência já ativa sobre ela.** `POST /api/transactions` e a rota de pagar parcela já rejeitam uma conta arquivada — mas só protegem pedidos feitos por um humano num formulário. `materializeSeries` (o job "materializar na leitura" das Transações Recorrentes) cria Transactions diretamente, sem passar por nenhuma rota; arquivar uma conta depois de já existir uma recorrência ativa apontada a ela nunca a travava — a série continuaria a gerar Transactions novas contra uma conta arquivada para sempre, contradizendo a própria política de arquivamento (`DELETE_POLICY.md`). **Corrigido**: `materializeSeries` verifica agora se a conta de origem (ou destino, numa transferência) está arquivada logo depois de bloquear a linha da série; se estiver, pausa a série automaticamente (mesmo mecanismo do botão "Pausar" manual) em vez de continuar. Esta era também a única peça de lógica com transação SQL própria no projeto sem nenhum teste automático — foram acrescentados 4 testes (caminho feliz com 3 ocorrências geradas, pausa por conta arquivada, rollback numa falha a meio, no-op sem séries devidas).
+
+Ambas as correções foram commitadas, verificadas (`tsc`, `eslint`, `vitest` — 71/71 testes, `next build`, todos limpos) e sincronizadas para o teu computador.
+
+## O que foi testado e confirmado a funcionar (contra Postgres real)
+
+- **Contas**: criar com cor, editar (nome/tipo/cor — moeda e saldo inicial corretamente bloqueados), arquivar e reativar, conta arquivada desaparece dos seletores e é rejeitada como origem/destino de uma transação nova.
+- **Transações**: criar despesa/receita/transferência, editar, remover (via API — ver nota sobre `window.confirm` abaixo), filtro por categoria (isolou corretamente a transação certa), paginação presente na UI.
+- **Dívidas**: criar com plano de parcelas gerado corretamente (12× 10 000 CVE), pagar uma parcela (saldo em falta desceu de 120 000 para 110 000, transação de despesa criada automaticamente na conta escolhida), editar credor/descrição/juro (valor original e parcelas corretamente bloqueados).
+- **Metas**: criar ligada a uma conta, progresso calculado em direto a partir do saldo real da conta, editar nome/descrição/valor/data alvo (conta ligada corretamente bloqueada), transição de estado para "Alcançada" e o SQL a impedir uma segunda transição sobre uma meta já não-ativa (`409 — Só uma meta ativa pode mudar de estado`).
+- **Transações Recorrentes**: criada uma série mensal com início no passado (30/06); ao navegar, o materializador gerou exatamente as 3 ocorrências em atraso (30/06, 30/07, 30/08) como Transactions reais, avançou o cursor para 30/09 e não gerou a 4ª antecipadamente — confirma que "materializar na leitura" funciona sem nenhum cron job.
+- **Investimentos**: criar detalhe de investimento, editar (a query `UPDATE ... FROM ... RETURNING`, nunca antes corrida contra Postgres real, funcionou à primeira), registar avaliação de mercado e ver a rentabilidade calculada corretamente (30 000 CVE investidos → avaliação de 33 000 → +3 000 CVE, +10.0%).
+- **Gráfico do dashboard**: barras horizontais de despesas por categoria do mês, cores da paleta `ACCOUNT_COLORS`, atualiza corretamente com as transações reais.
+- **Ownership e validação**: revistas todas as rotas novas (`accounts/[id]`, `.../archive`, `.../investment-detail`, `.../valuations`, `debts/[debtId]`, `.../default`, `goals/[id]`, `.../status`, `recurring-transactions`) — todas seguem o padrão já estabelecido (`withErrorHandling`, zod em toda a escrita, `getXById(userId, ...)` antes de usar qualquer id, e em Investimentos — que não tem `userId` próprio — posse sempre verificada por `JOIN "Account"`).
+
+Nota sobre `window.confirm`: as ações que pedem confirmação nativa do browser (remover transação, pagar parcela, marcar dívida como incumprida) não foram clicadas diretamente na interface durante este teste — para não bloquear a sessão de automação num diálogo nativo — mas a lógica por trás de cada botão foi exercitada diretamente contra a API real (mesmo endpoint, mesmos dados), com o mesmo resultado que um clique real produziria.
+
+## Nota de design (não é bug, mas vale a pena saberes)
+
+O **Património total** do Dashboard reflete sempre o livro de transações reais (`initialBalanceMinor` + entradas − saídas), nunca a avaliação de mercado de uma conta de Investimento. Ou seja: transferir 30 000 CVE para o "Fundo Ações" soma 30 000 ao património; registar depois uma avaliação de 33 000 (ganho de 3 000) não faz o património total subir — esse ganho só aparece na própria página do investimento ("Ganho/perda"). Isto é consistente com a regra do projeto de nunca inventar números a partir de dados que podem não representar dinheiro disponível de facto (uma avaliação é uma estimativa, não uma venda realizada) — mas é uma escolha deliberada que vale a pena confirmares que é o que queres, porque significa que o "património total" no Dashboard é sempre conservador (nunca conta ganhos de investimento ainda não realizados).
+
+## Veredito
+
+**O código deste pacote está pronto para libertar a utilizadores**, com os dois bugs reais encontrados já corrigidos, testados e sincronizados. Não apareceu nenhum outro problema de perda de dados, cálculo errado, ou falha de isolamento entre utilizadores nas seis funcionalidades novas.
+
+Duas coisas a não esquecer antes de dizeres "está no ar":
+
+1. **Nada disto foi ainda publicado no Beta em produção.** O deployment Render+Neon que já está a correr é anterior a todo este pacote (Dívidas, Metas, cores, e as seis fases de hoje) — este trabalho existe só nos commits locais/sandbox até fazeres o deploy real (push para o branch que o Render publica).
+2. **Os bloqueios de infraestrutura já identificados em `docs/KONTA_BETA_GATE.md` continuam a aplicar-se** (TLS — resolvido pelo Render, que dá HTTPS gerido —, mas confirma um ciclo real de backup/restauro contra a base de dados Neon de produção, e gera segredos (`AUTH_SECRET`, password da base de dados) novos e nunca os de desenvolvimento). Nenhum destes é um problema de código; são passos mecânicos de arranque que só fazem sentido no servidor real.
