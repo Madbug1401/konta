@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { MoneyDisplay } from "@/components/money-display";
+import { useToast } from "@/components/toast-provider";
 import type { DebtStatus, InstallmentStatus } from "@/lib/financial-engine";
 
 export interface DebtCardInstallment {
@@ -84,6 +85,7 @@ function InstallmentRow({
   accounts: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [payingOpen, setPayingOpen] = useState(false);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [loading, setLoading] = useState(false);
@@ -92,6 +94,14 @@ function InstallmentRow({
   async function handlePay() {
     if (!accountId) {
       setError("Escolhe a conta de onde sai o dinheiro.");
+      return;
+    }
+    // [Correção — pacote UX pós-auditoria] Pagar uma parcela é uma ação
+    // financeira real e irreversível (regista uma Transaction e pode fechar
+    // a dívida) — ao contrário de "apagar uma transação", isto nunca pedia
+    // confirmação. Mesmo padrão de window.confirm já usado em
+    // transaction-row-actions.tsx antes do DELETE.
+    if (!window.confirm("Confirmar o pagamento desta parcela? Esta ação regista uma despesa e não pode ser desfeita.")) {
       return;
     }
     setError(null);
@@ -107,6 +117,7 @@ function InstallmentRow({
         setError(body.error ?? "Não foi possível registar o pagamento.");
         return;
       }
+      toast.success("Pagamento registado.");
       setPayingOpen(false);
       router.refresh();
     } finally {

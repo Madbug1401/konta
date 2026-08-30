@@ -2,9 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { CategoryQuickCreate, type CreatedCategory } from "@/components/category-quick-create";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/toast-provider";
 import type { TransactionType } from "@/lib/financial-engine";
 
 export interface TransactionFormAccount {
@@ -49,18 +51,22 @@ export interface TransactionFormProps {
 // duas telas, evitando duas implementações a divergir.
 export function TransactionForm({ accounts, categories, goals = [], mode, transactionId, initialValues }: TransactionFormProps) {
   const router = useRouter();
+  const toast = useToast();
   const [type, setType] = useState<TransactionType>(initialValues?.type ?? "EXPENSE");
   const [accountId, setAccountId] = useState(initialValues?.accountId ?? accounts[0]?.id ?? "");
   const [destinationAccountId, setDestinationAccountId] = useState(initialValues?.destinationAccountId ?? "");
   const [amount, setAmount] = useState(initialValues ? String(initialValues.amountMinor) : "");
   const [categoryId, setCategoryId] = useState(initialValues?.categoryId ?? "");
+  // Categorias podem crescer em runtime via CategoryQuickCreate — por isso
+  // vivem em estado local (inicializado da prop), não só na prop diretamente.
+  const [categoryList, setCategoryList] = useState(categories);
   const [goalId, setGoalId] = useState("");
   const [description, setDescription] = useState(initialValues?.description ?? "");
   const [date, setDate] = useState(initialValues?.date ?? new Date().toISOString().slice(0, 10));
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const relevantCategories = categories.filter((c) => c.kind === type);
+  const relevantCategories = categoryList.filter((c) => c.kind === type);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -106,6 +112,7 @@ export function TransactionForm({ accounts, categories, goals = [], mode, transa
         setError(body.error ?? "Não foi possível guardar a transação.");
         return;
       }
+      toast.success(mode === "create" ? "Transação adicionada." : "Alterações guardadas.");
       router.push("/transactions");
       router.refresh();
     } finally {
@@ -198,6 +205,13 @@ export function TransactionForm({ accounts, categories, goals = [], mode, transa
                 </option>
               ))}
             </select>
+            <CategoryQuickCreate
+              kind={type === "INCOME" ? "INCOME" : "EXPENSE"}
+              onCreated={(category: CreatedCategory) => {
+                setCategoryList((current) => [...current, category]);
+                setCategoryId(category.id);
+              }}
+            />
           </label>
         )}
 

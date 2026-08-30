@@ -5,6 +5,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/toast-provider";
 import { generateInstallmentPlan } from "@/lib/financial-engine";
 
 const FREQUENCY_OPTIONS: { value: "MONTHLY" | "WEEKLY" | "DAILY" | "YEARLY"; label: string }[] = [
@@ -16,6 +17,7 @@ const FREQUENCY_OPTIONS: { value: "MONTHLY" | "WEEKLY" | "DAILY" | "YEARLY"; lab
 
 export function DebtForm() {
   const router = useRouter();
+  const toast = useToast();
   const [creditorName, setCreditorName] = useState("");
   const [description, setDescription] = useState("");
   const [originalAmount, setOriginalAmount] = useState("");
@@ -85,6 +87,7 @@ export function DebtForm() {
       setOriginalAmount("");
       setInterestRate("");
       setInstallmentCount("12");
+      toast.success("Dívida criada.");
       setOpen(false);
       router.refresh();
     } finally {

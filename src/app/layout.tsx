@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ToastProvider } from "@/components/toast-provider";
 
 // [NOTA DE AMBIENTE] O template original usava next/font/google (Geist), que
 // descarrega os ficheiros de fonte de fonts.googleapis.com em build-time.
@@ -21,7 +22,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="pt" data-theme="dark" className="h-full antialiased" style={{ fontFamily: FONT_STACK }}>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

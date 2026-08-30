@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/toast-provider";
 import { ACCOUNT_COLORS, type AccountColorId } from "@/lib/account-colors";
 import type { AccountType } from "@/lib/financial-engine";
 
@@ -19,6 +20,7 @@ const TYPE_OPTIONS: { value: AccountType; label: string }[] = [
 
 export function AccountForm() {
   const router = useRouter();
+  const toast = useToast();
   const [name, setName] = useState("");
   const [type, setType] = useState<AccountType>("BANK");
   const [initialBalance, setInitialBalance] = useState("0");
@@ -45,6 +47,7 @@ export function AccountForm() {
         setError(body.error ?? "Não foi possível criar a conta.");
         return;
       }
+      toast.success("Conta criada.");
       setName("");
       setInitialBalance("0");
       setColor(ACCOUNT_COLORS[0].id);

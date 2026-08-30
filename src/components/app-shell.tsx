@@ -1,10 +1,12 @@
 "use client";
 
-import { LayoutDashboard, List, Wallet, Landmark, Target, Plus } from "lucide-react";
+import { LayoutDashboard, List, Wallet, Landmark, Target, Plus, LogOut } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useToast } from "@/components/toast-provider";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -44,13 +46,19 @@ export function AppShell({ children, userEmail }: { children: ReactNode; userEma
         >
           <Plus className="h-4 w-4" /> Nova transação
         </Link>
-        <p className="mt-4 truncate px-2 text-xs text-muted-foreground">{userEmail}</p>
+        <div className="mt-4 flex items-center justify-between gap-2 px-2">
+          <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
+          <LogoutButton />
+        </div>
       </aside>
 
       <div className="flex min-h-screen flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 md:hidden">
           <span className="text-lg font-bold text-primary">Konta</span>
-          <ThemeToggle />
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <LogoutButton iconOnly />
+          </div>
         </header>
 
         <main className="flex-1 px-4 pb-24 pt-4 sm:px-6 sm:pb-6 md:pb-6">{children}</main>
@@ -72,6 +80,54 @@ export function AppShell({ children, userEmail }: { children: ReactNode; userEma
         </nav>
       </div>
     </div>
+  );
+}
+
+// [Correção — pacote UX pós-auditoria] `POST /api/auth/logout` já existia e
+// funcionava, mas nada na UI alguma vez o chamava — o email da sessão era só
+// texto inerte. Só navega para /login quando a resposta é `ok`: se o pedido
+// que limpa o cookie falhar, a sessão continua válida, e navegar na mesma
+// seria um logout falso (a pessoa pensa que saiu, mas o cookie continua lá).
+function LogoutButton({ iconOnly = false }: { iconOnly?: boolean }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      if (!res.ok) {
+        toast.error("Não foi possível terminar a sessão. Tenta novamente.");
+        return;
+      }
+      router.push("/login");
+      router.refresh();
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+
+  if (iconOnly) {
+    return (
+      <Button variant="ghost" size="sm" onClick={handleLogout} disabled={loggingOut} aria-label="Terminar sessão" className="w-9 px-0">
+        <LogOut className="h-4 w-4" />
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={handleLogout}
+      disabled={loggingOut}
+      aria-label="Terminar sessão"
+      title="Terminar sessão"
+      className="w-9 shrink-0 px-0 text-muted-foreground hover:text-danger"
+    >
+      <LogOut className="h-4 w-4" />
+    </Button>
   );
 }
 

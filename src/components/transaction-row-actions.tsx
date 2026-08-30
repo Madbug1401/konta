@@ -4,9 +4,11 @@ import { Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useToast } from "@/components/toast-provider";
 
 export function TransactionRowActions({ id }: { id: string }) {
   const router = useRouter();
+  const toast = useToast();
   const [pending, setPending] = useState(false);
 
   async function handleDelete() {
@@ -14,7 +16,15 @@ export function TransactionRowActions({ id }: { id: string }) {
     setPending(true);
     try {
       const res = await fetch(`/api/transactions/${id}`, { method: "DELETE" });
-      if (res.ok) router.refresh();
+      if (res.ok) {
+        toast.success("Transação removida.");
+        router.refresh();
+      } else {
+        // [Correção — pacote UX pós-auditoria] Antes, uma falha aqui não
+        // dizia nada — a pessoa clicava "remover" e nada parecia acontecer.
+        const body = await res.json().catch(() => ({}));
+        toast.error(body.error ?? "Não foi possível remover a transação.");
+      }
     } finally {
       setPending(false);
     }

@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/toast-provider";
 
 export interface GoalFormAccount {
   id: string;
@@ -13,6 +14,7 @@ export interface GoalFormAccount {
 
 export function GoalForm({ accounts }: { accounts: GoalFormAccount[] }) {
   const router = useRouter();
+  const toast = useToast();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [targetAmount, setTargetAmount] = useState("");
@@ -58,6 +60,7 @@ export function GoalForm({ accounts }: { accounts: GoalFormAccount[] }) {
       setDescription("");
       setTargetAmount("");
       setTargetDate("");
+      toast.success("Meta criada.");
       setOpen(false);
       router.refresh();
     } finally {

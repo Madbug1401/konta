@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { TransactionRowActions } from "@/components/transaction-row-actions";
 import { MoneyDisplay } from "@/components/money-display";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +9,7 @@ import { listAccounts } from "@/lib/db/accounts";
 import { listCategories } from "@/lib/db/categories";
 import { listTransactions } from "@/lib/db/transactions";
 import type { TransactionType } from "@/lib/financial-engine";
+import { DEFAULT_LIMIT } from "@/lib/pagination";
 
 const TYPE_LABEL: Record<TransactionType, string> = { INCOME: "Receita", EXPENSE: "Despesa", TRANSFER: "Transferência" };
 const TYPE_TONE: Record<TransactionType, "success" | "danger" | "info"> = { INCOME: "success", EXPENSE: "danger", TRANSFER: "info" };
@@ -25,7 +27,16 @@ export default async function TransactionsPage({
   const params = await searchParams;
   const session = await getSessionUser();
 
-  const [accounts, categories, transactions] = await Promise.all([
+  // [Correção — pacote UX pós-auditoria] `limit: 100` fixo escondia
+  // silenciosamente qualquer transação além da centésima, sem nenhum sinal na
+  // UI de que havia mais. Em vez de `COUNT(*)` (mais uma query, só para saber
+  // um número que não é usado em lado nenhum), pede-se sempre uma linha a
+  // mais do que o necessário: se vier, sabemos que há próxima página, e
+  // cortamos essa linha extra antes de mostrar.
+  const page = Math.max(1, Math.trunc(Number(params.page)) || 1);
+  const offset = (page - 1) * DEFAULT_LIMIT;
+
+  const [accounts, categories, fetchedTransactions] = await Promise.all([
     listAccounts(session!.userId),
     listCategories(session!.userId),
     listTransactions(session!.userId, {
@@ -35,9 +46,29 @@ export default async function TransactionsPage({
       from: params.from || undefined,
       to: params.to || undefined,
       search: params.search || undefined,
-      limit: 100,
+      limit: DEFAULT_LIMIT + 1,
+      offset,
     }),
   ]);
+
+  const hasNextPage = fetchedTransactions.length > DEFAULT_LIMIT;
+  const transactions = hasNextPage ? fetchedTransactions.slice(0, DEFAULT_LIMIT) : fetchedTransactions;
+  const hasPrevPage = page > 1;
+
+  // Reconstrói a query string atual trocando só `page` — usado pelos links
+  // Anterior/Seguinte, sem precisar de nenhum JavaScript novo no cliente.
+  function pageHref(targetPage: number) {
+    const qs = new URLSearchParams();
+    if (params.search) qs.set("search", params.search);
+    if (params.type) qs.set("type", params.type);
+    if (params.accountId) qs.set("accountId", params.accountId);
+    if (params.categoryId) qs.set("categoryId", params.categoryId);
+    if (params.from) qs.set("from", params.from);
+    if (params.to) qs.set("to", params.to);
+    if (targetPage > 1) qs.set("page", String(targetPage));
+    const query = qs.toString();
+    return query ? `/transactions?${query}` : "/transactions";
+  }
 
   const accountName = new Map(accounts.map((a) => [a.id, a.name]));
   const categoryName = new Map(categories.map((c) => [c.id, c.name]));
@@ -93,6 +124,22 @@ export default async function TransactionsPage({
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
+              </option>
+            ))}
+          </select>
+          <label htmlFor="filter-category" className="sr-only">
+            Categoria
+          </label>
+          <select
+            id="filter-category"
+            name="categoryId"
+            defaultValue={params.categoryId ?? ""}
+            className="rounded-lg border border-border bg-surface px-2 text-sm"
+          >
+            <option value="">Todas as categorias</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
               </option>
             ))}
           </select>
@@ -172,6 +219,26 @@ export default async function TransactionsPage({
           </div>
         )}
       </Card>
+
+      {(hasPrevPage || hasNextPage) && (
+        <div className="flex items-center justify-between">
+          {hasPrevPage ? (
+            <Link href={pageHref(page - 1)} className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-hover">
+              ← Anterior
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-xs text-muted-foreground">Página {page}</span>
+          {hasNextPage ? (
+            <Link href={pageHref(page + 1)} className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-hover">
+              Seguinte →
+            </Link>
+          ) : (
+            <span />
+          )}
+        </div>
+      )}
     </div>
   );
 }
