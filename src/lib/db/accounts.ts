@@ -44,6 +44,32 @@ export async function createAccount(input: {
   return mapAccount(rows[0]);
 }
 
+// [Fase 2 — editar Conta] Só `name`/`type`/`color` são editáveis (ver
+// plano): `currency` fica de fora porque cada Transação já gravada nesta
+// conta congelou a sua própria moeda na criação (o motor não converte
+// câmbio em lado nenhum — mudar a etiqueta da conta misturaria moedas em
+// silêncio); `initialBalanceMinor` fica de fora porque todo o saldo é
+// `initialBalanceMinor + entradas - saídas` — mudar isto agora deslocaria
+// retroativamente todo o histórico de saldos sem nenhum rasto (uma
+// transação corretiva é o mecanismo certo para isso, já existente).
+export async function updateAccount(
+  userId: string,
+  accountId: string,
+  input: { name?: string; type?: AccountType; color?: string | null },
+): Promise<AccountRecord | null> {
+  const { rows } = await getPool().query(
+    `UPDATE "Account"
+     SET name = COALESCE($3, name),
+         type = COALESCE($4, type),
+         color = CASE WHEN $5::boolean THEN $6 ELSE color END,
+         "updatedAt" = now()
+     WHERE "userId" = $1 AND id = $2
+     RETURNING id, "userId", name, type, currency, "initialBalanceMinor", "isArchived", color`,
+    [userId, accountId, input.name ?? null, input.type ?? null, input.color !== undefined, input.color ?? null],
+  );
+  return rows[0] ? mapAccount(rows[0]) : null;
+}
+
 interface AccountRow {
   id: string;
   userId: string;

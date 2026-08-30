@@ -121,6 +121,53 @@ export async function createDebtWithInstallments(input: {
   }
 }
 
+// [Fase 2 — editar Dívida] Só usado hoje pela rota de edição (para
+// confirmar posse antes de mostrar o formulário) e por `updateDebt` — as
+// listagens continuam a usar `listDebts` (já traz as parcelas juntas).
+export async function getDebtById(userId: string, debtId: string): Promise<DebtRecord | null> {
+  const { rows } = await getPool().query(
+    `SELECT id, "userId", "creditorName", description, "originalAmountMinor", currency,
+            "interestRate", status, "startDate", "finalDueDate"
+     FROM "Debt" WHERE "userId" = $1 AND id = $2`,
+    [userId, debtId],
+  );
+  return rows[0] ? mapDebt(rows[0]) : null;
+}
+
+// [Fase 2 — editar Dívida] Só campos informativos, nunca usados por
+// `generateInstallmentPlan`, são editáveis. `originalAmountMinor`,
+// `startDate`, `installmentCount` e `frequency` ficam de fora porque já
+// foram usados uma vez para gerar as `DebtInstallment` persistidas
+// (algumas podem já estar PAID) — editar isso agora desincronizaria do
+// plano real sem nenhuma regeneração. "Reestruturar" uma dívida é uma
+// funcionalidade à parte, fora deste plano.
+export async function updateDebt(
+  userId: string,
+  debtId: string,
+  input: { creditorName?: string; description?: string | null; interestRate?: number | null },
+): Promise<DebtRecord | null> {
+  const { rows } = await getPool().query(
+    `UPDATE "Debt"
+     SET "creditorName" = COALESCE($3, "creditorName"),
+         description = CASE WHEN $4::boolean THEN $5 ELSE description END,
+         "interestRate" = CASE WHEN $6::boolean THEN $7 ELSE "interestRate" END,
+         "updatedAt" = now()
+     WHERE "userId" = $1 AND id = $2
+     RETURNING id, "userId", "creditorName", description, "originalAmountMinor", currency,
+               "interestRate", status, "startDate", "finalDueDate"`,
+    [
+      userId,
+      debtId,
+      input.creditorName ?? null,
+      input.description !== undefined,
+      input.description ?? null,
+      input.interestRate !== undefined,
+      input.interestRate ?? null,
+    ],
+  );
+  return rows[0] ? mapDebt(rows[0]) : null;
+}
+
 export class InstallmentNotPayableError extends Error {
   constructor(message: string) {
     super(message);

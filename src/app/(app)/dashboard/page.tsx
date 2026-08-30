@@ -99,6 +99,7 @@ export default async function DashboardPage() {
             {accounts.map((account) => (
               <AccountCard
                 key={account.id}
+                id={account.id}
                 name={account.name}
                 type={account.type}
                 balanceMinor={getAccountBalance(account, allTransactions, today)}

@@ -1,6 +1,7 @@
 "use client";
 
-import { Landmark } from "lucide-react";
+import { Landmark, Pencil } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -46,9 +47,18 @@ export function DebtCard({ debtId, creditorName, description, currency, status, 
             {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
           </div>
         </div>
-        <span className="rounded-full bg-surface-hover px-2 py-1 text-xs font-medium text-muted-foreground">
-          {STATUS_LABEL[status]}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-surface-hover px-2 py-1 text-xs font-medium text-muted-foreground">
+            {STATUS_LABEL[status]}
+          </span>
+          <Link
+            href={`/debts/${debtId}/edit`}
+            aria-label="Editar dívida"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+          >
+            <Pencil className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </div>
       </CardHeader>
 
       <div>

@@ -71,6 +71,7 @@ export default async function GoalsPage() {
             return (
               <GoalCard
                 key={goal.id}
+                id={goal.id}
                 name={goal.name}
                 description={goal.description}
                 currency={goal.currency}

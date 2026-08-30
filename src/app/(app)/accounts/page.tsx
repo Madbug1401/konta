@@ -41,6 +41,7 @@ export default async function AccountsPage() {
           {accounts.map((account) => (
             <AccountCard
               key={account.id}
+              id={account.id}
               name={account.name}
               type={account.type}
               balanceMinor={getAccountBalance(account, transactions, today)}

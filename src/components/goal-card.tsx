@@ -1,9 +1,13 @@
-import { Target } from "lucide-react";
+import { Pencil, Target } from "lucide-react";
+import Link from "next/link";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { MoneyDisplay } from "@/components/money-display";
 import type { GoalStatus } from "@/lib/financial-engine";
 
 export interface GoalCardProps {
+  // [Fase 2 — editar Meta] Necessário para o link "Editar" abaixo — antes
+  // este cartão nunca precisava de saber o próprio id.
+  id: string;
   name: string;
   description: string | null;
   currency: string;
@@ -22,6 +26,7 @@ const STATUS_LABEL: Record<GoalStatus, string> = {
 };
 
 export function GoalCard({
+  id,
   name,
   description,
   currency,
@@ -48,9 +53,18 @@ export function GoalCard({
             {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
           </div>
         </div>
-        <span className="rounded-full bg-surface-hover px-2 py-1 text-xs font-medium text-muted-foreground">
-          {STATUS_LABEL[status]}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-surface-hover px-2 py-1 text-xs font-medium text-muted-foreground">
+            {STATUS_LABEL[status]}
+          </span>
+          <Link
+            href={`/goals/${id}/edit`}
+            aria-label="Editar meta"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+          >
+            <Pencil className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </div>
       </CardHeader>
 
       <div className="flex items-baseline justify-between">
