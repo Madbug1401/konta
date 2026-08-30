@@ -1,3 +1,4 @@
+import type { Pool, PoolClient } from "pg";
 import type { TransactionRecord, TransactionType } from "@/lib/financial-engine";
 import { getPool, toBigInt, toISODateString } from "./client";
 
@@ -64,25 +65,41 @@ export async function listTransactions(
   return rows.map(mapTransaction);
 }
 
-export async function createTransaction(input: {
-  userId: string;
-  type: TransactionType;
-  accountId: string;
-  destinationAccountId?: string | null;
-  amountMinor: bigint;
-  currency: string;
-  categoryId?: string | null;
-  description: string;
-  date: string;
-  debtId?: string | null;
-  goalId?: string | null;
-  recurringTransactionId?: string | null;
-}): Promise<TransactionRecord> {
-  const { rows } = await getPool().query(
+export async function createTransaction(
+  input: {
+    userId: string;
+    type: TransactionType;
+    accountId: string;
+    destinationAccountId?: string | null;
+    amountMinor: bigint;
+    currency: string;
+    categoryId?: string | null;
+    description: string;
+    date: string;
+    debtId?: string | null;
+    // [Correção — implementação da interface de Dívidas] Faltava esta
+    // coluna aqui: o schema já tinha `Transaction.debtInstallmentId` (FK
+    // única para "que parcela exata este pagamento liquidou"), mas nada
+    // neste ficheiro alguma vez a escrevia. Sem isto, pagar uma parcela
+    // nunca teria como ligar a Transaction criada à parcela específica.
+    debtInstallmentId?: string | null;
+    goalId?: string | null;
+    recurringTransactionId?: string | null;
+  },
+  // [Correção — implementação da interface de Dívidas] `payInstallment`
+  // (src/lib/db/debts.ts) precisa de criar esta Transaction DENTRO da mesma
+  // transação SQL que atualiza a parcela e, possivelmente, fecha a dívida —
+  // por isso aceita opcionalmente o PoolClient já aberto por quem chama, em
+  // vez de abrir sempre uma ligação nova via getPool(). Chamadas normais
+  // (fora de uma transação) continuam a não passar nada e funcionam como
+  // sempre funcionaram.
+  client: Pool | PoolClient = getPool(),
+): Promise<TransactionRecord> {
+  const { rows } = await client.query(
     `INSERT INTO "Transaction"
        (id, "userId", type, "accountId", "destinationAccountId", "amountMinor", currency,
-        "categoryId", description, date, "debtId", "goalId", "recurringTransactionId")
-     VALUES ('c' || replace(gen_random_uuid()::text, '-', ''), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        "categoryId", description, date, "debtId", "debtInstallmentId", "goalId", "recurringTransactionId")
+     VALUES ('c' || replace(gen_random_uuid()::text, '-', ''), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING id, "userId", type, status, "accountId", "destinationAccountId", "amountMinor",
                currency, "categoryId", description, date, "debtId", "debtInstallmentId",
                "goalId", "recurringTransactionId"`,
@@ -97,6 +114,7 @@ export async function createTransaction(input: {
       input.description,
       input.date,
       input.debtId ?? null,
+      input.debtInstallmentId ?? null,
       input.goalId ?? null,
       input.recurringTransactionId ?? null,
     ],

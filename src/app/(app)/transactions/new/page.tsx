@@ -4,10 +4,15 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { getSessionUser } from "@/lib/auth/session";
 import { listAccounts } from "@/lib/db/accounts";
 import { listCategories } from "@/lib/db/categories";
+import { listGoals } from "@/lib/db/goals";
 
 export default async function NewTransactionPage() {
   const session = await getSessionUser();
-  const [accounts, categories] = await Promise.all([listAccounts(session!.userId), listCategories(session!.userId)]);
+  const [accounts, categories, goals] = await Promise.all([
+    listAccounts(session!.userId),
+    listCategories(session!.userId),
+    listGoals(session!.userId),
+  ]);
 
   return (
     <div className="mx-auto max-w-lg">
@@ -24,7 +29,7 @@ export default async function NewTransactionPage() {
           action={<AccountForm />}
         />
       ) : (
-        <TransactionForm accounts={accounts} categories={categories} mode="create" />
+        <TransactionForm accounts={accounts} categories={categories} goals={goals} mode="create" />
       )}
     </div>
   );

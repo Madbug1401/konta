@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { getAccountById } from "@/lib/db/accounts";
 import { getCategoryById } from "@/lib/db/categories";
+import { getGoalById } from "@/lib/db/goals";
 import { createTransaction, listTransactions } from "@/lib/db/transactions";
 import { findUserById } from "@/lib/db/users";
 import { getTodayInTimezone, type TransactionType } from "@/lib/financial-engine";
@@ -65,6 +66,13 @@ const CreateTransactionSchema = z
     categoryId: z.string().min(1).optional(),
     description: z.string().trim().min(1).max(255),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    // [Correção — implementação da interface de Metas] Marca opcionalmente
+    // esta transação como uma contribuição para uma Meta — usado por
+    // `calculateGoalProjection` (financial-engine/goals.ts) para estimar o
+    // ritmo de contribuição real. Não afeta o progresso em si (esse vem
+    // sempre do saldo da conta ligada à meta, ver getGoalProgress) — é só
+    // um rótulo para análise.
+    goalId: z.string().min(1).optional(),
   })
   .refine((data) => (data.type === "TRANSFER" ? !!data.destinationAccountId : true), {
     message: "Uma transferência precisa de uma conta de destino.",
@@ -118,6 +126,11 @@ export const POST = withErrorHandling("api.transactions.post", async (request: R
     if (!category) return NextResponse.json({ error: "Categoria não encontrada." }, { status: 404 });
   }
 
+  if (input.goalId) {
+    const goal = await getGoalById(session.userId, input.goalId);
+    if (!goal) return NextResponse.json({ error: "Meta não encontrada." }, { status: 404 });
+  }
+
   const user = await findUserById(session.userId);
   const date = input.date ?? getTodayInTimezone(user?.timezone ?? "Atlantic/Cape_Verde");
 
@@ -131,6 +144,7 @@ export const POST = withErrorHandling("api.transactions.post", async (request: R
     categoryId: input.type === "TRANSFER" ? null : input.categoryId,
     description: input.description,
     date,
+    goalId: input.goalId,
   });
 
   return NextResponse.json({ ...transaction, amountMinor: transaction.amountMinor.toString() }, { status: 201 });

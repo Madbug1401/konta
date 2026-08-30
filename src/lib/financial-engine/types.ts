@@ -66,6 +66,16 @@ export interface TransactionRecord {
 export interface DebtRecord {
   id: string;
   userId: string;
+  // [Correção — implementação da interface de Dívidas] Estes três campos
+  // (creditorName, description, currency) existem no schema desde o
+  // início, mas não estavam neste tipo porque o Financial Engine em si
+  // nunca precisou deles para calcular nada. Ficam aqui agora para que
+  // exista um único tipo `DebtRecord` de ponta a ponta (DB → API → UI),
+  // tal como `AccountRecord` já faz — em vez de um segundo tipo paralelo
+  // só para apresentação.
+  creditorName: string;
+  description: string | null;
+  currency: string;
   originalAmountMinor: MinorAmount;
   interestRate: number | null;
   status: DebtStatus;
@@ -85,6 +95,11 @@ export interface DebtInstallmentRecord {
 export interface GoalRecord {
   id: string;
   userId: string;
+  // Mesma razão do DebtRecord acima: campos de apresentação que já existem
+  // no schema, agora incluídos no tipo único da entidade.
+  name: string;
+  description: string | null;
+  currency: string;
   targetAmountMinor: MinorAmount;
   targetDate: string | null;
   linkedAccountId: string | null;

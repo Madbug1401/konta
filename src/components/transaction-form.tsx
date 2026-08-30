@@ -16,10 +16,18 @@ export interface TransactionFormCategory {
   name: string;
   kind: "INCOME" | "EXPENSE";
 }
+export interface TransactionFormGoal {
+  id: string;
+  name: string;
+}
 
 export interface TransactionFormProps {
   accounts: TransactionFormAccount[];
   categories: TransactionFormCategory[];
+  // [Correção — implementação da interface de Metas] Opcional e só
+  // relevante na criação (ver comentário junto ao <select> abaixo) — omitir
+  // esta prop (ex: no modo "edit") simplesmente não mostra o campo.
+  goals?: TransactionFormGoal[];
   mode: "create" | "edit";
   transactionId?: string;
   initialValues?: {
@@ -39,13 +47,14 @@ export interface TransactionFormProps {
 // fundo, sem passos extra. É usado tal e qual em /transactions/new e em
 // /transactions/[id]/edit — a mesma lógica de validação/submissão serve as
 // duas telas, evitando duas implementações a divergir.
-export function TransactionForm({ accounts, categories, mode, transactionId, initialValues }: TransactionFormProps) {
+export function TransactionForm({ accounts, categories, goals = [], mode, transactionId, initialValues }: TransactionFormProps) {
   const router = useRouter();
   const [type, setType] = useState<TransactionType>(initialValues?.type ?? "EXPENSE");
   const [accountId, setAccountId] = useState(initialValues?.accountId ?? accounts[0]?.id ?? "");
   const [destinationAccountId, setDestinationAccountId] = useState(initialValues?.destinationAccountId ?? "");
   const [amount, setAmount] = useState(initialValues ? String(initialValues.amountMinor) : "");
   const [categoryId, setCategoryId] = useState(initialValues?.categoryId ?? "");
+  const [goalId, setGoalId] = useState("");
   const [description, setDescription] = useState(initialValues?.description ?? "");
   const [date, setDate] = useState(initialValues?.date ?? new Date().toISOString().slice(0, 10));
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +92,7 @@ export function TransactionForm({ accounts, categories, mode, transactionId, ini
               categoryId: type === "TRANSFER" ? undefined : categoryId || undefined,
               description,
               date,
+              goalId: goalId || undefined,
             }
           : { amountMinor, categoryId: categoryId || undefined, description, date };
 
@@ -185,6 +195,30 @@ export function TransactionForm({ accounts, categories, mode, transactionId, ini
               {relevantCategories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {mode === "create" && goals.length > 0 && (
+          // [Correção — implementação da interface de Metas] Só um rótulo
+          // opcional para análise de ritmo de contribuição
+          // (calculateGoalProjection) — o progresso real da meta vem sempre
+          // do saldo da conta ligada, nunca deste campo. Por isso só
+          // aparece na criação (editar isto depois não teria efeito no
+          // progresso, seria confuso oferecer a opção em "editar").
+          <label className="text-xs font-medium text-muted-foreground">
+            Meta associada (opcional)
+            <select
+              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              value={goalId}
+              onChange={(e) => setGoalId(e.target.value)}
+            >
+              <option value="">Nenhuma</option>
+              {goals.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
                 </option>
               ))}
             </select>
