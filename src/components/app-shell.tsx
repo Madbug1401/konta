@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, List, Wallet, Landmark, Target, Repeat, Plus, LogOut } from "lucide-react";
+import { LayoutDashboard, List, Wallet, Landmark, Target, Repeat, Plus, LogOut, HelpCircle } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -47,6 +47,15 @@ export function AppShell({ children, userEmail }: { children: ReactNode; userEma
         >
           <Plus className="h-4 w-4" /> Nova transação
         </Link>
+        {/* [Sugestão do utilizador — antes de abrir aos primeiros
+            utilizadores] "Ajuda" fica fora de NAV_ITEMS de propósito — essa
+            lista também define a barra inferior em mobile (slice(0,3)/
+            slice(3,6), já bem ajustada aos 6 itens existentes); um 7º item
+            ali obrigaria a redesenhar essa barra. Em mobile, o mesmo link
+            aparece no cabeçalho (ver abaixo). */}
+        <div className="mt-2">
+          <NavLink href="/help" label="Ajuda" icon={HelpCircle} active={pathname.startsWith("/help")} />
+        </div>
         <div className="mt-4 flex items-center justify-between gap-2 px-2">
           <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
           <LogoutButton />
@@ -57,6 +66,13 @@ export function AppShell({ children, userEmail }: { children: ReactNode; userEma
         <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 md:hidden">
           <span className="text-lg font-bold text-primary">Konta</span>
           <div className="flex items-center gap-1">
+            <Link
+              href="/help"
+              aria-label="Ajuda"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </Link>
             <ThemeToggle />
             <LogoutButton iconOnly />
           </div>

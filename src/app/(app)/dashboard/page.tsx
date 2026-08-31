@@ -1,6 +1,7 @@
 import { AccountCard } from "@/components/account-card";
 import { AccountForm } from "@/components/account-form";
 import { DashboardCategoryChart } from "@/components/dashboard-category-chart";
+import { FirstStepsCard } from "@/components/first-steps-card";
 import { MoneyDisplay } from "@/components/money-display";
 import { TransactionItem } from "@/components/transaction-item";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,6 +89,8 @@ export default async function DashboardPage() {
           {new Date().toLocaleDateString("pt-CV", { day: "numeric", month: "long", year: "numeric" })}
         </p>
       </div>
+
+      <FirstStepsCard hasAccounts={accounts.length > 0} hasTransactions={allTransactions.length > 0} />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard label="Saldo disponível" amountMinor={availableBalance} currency={currency} highlight />
