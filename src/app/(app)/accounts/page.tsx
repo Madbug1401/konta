@@ -61,6 +61,7 @@ export default async function AccountsPage() {
                   currency={account.currency}
                   color={account.color}
                   isArchived={account.isArchived}
+                  showDeleteButton
                 />
               ))}
             </div>
@@ -80,6 +81,7 @@ export default async function AccountsPage() {
                     currency={account.currency}
                     color={account.color}
                     isArchived={account.isArchived}
+                    showDeleteButton
                   />
                 ))}
               </div>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ACCOUNT_COLOR_IDS } from "@/lib/account-colors";
 import { getSessionUser } from "@/lib/auth/session";
-import { getAccountById, updateAccount } from "@/lib/db/accounts";
+import { AccountNotEmptyError, deleteAccount, getAccountById, updateAccount } from "@/lib/db/accounts";
 import { withErrorHandling } from "@/lib/api-error";
 
 export const GET = withErrorHandling(
@@ -45,5 +45,31 @@ export const PATCH = withErrorHandling(
     if (!updated) return NextResponse.json({ error: "Conta não encontrada." }, { status: 404 });
 
     return NextResponse.json({ ...updated, initialBalanceMinor: updated.initialBalanceMinor.toString() });
+  },
+);
+
+// [Correção — pedido explícito do utilizador, ver comentário em
+// deleteAccount, src/lib/db/accounts.ts] Ao contrário de arquivar (sempre
+// permitido, reversível), isto só é aceite quando a conta nunca foi usada —
+// AccountNotEmptyError vira um 409 claro em vez de deixar a base de dados
+// rebentar com um erro de foreign key cru, ou pior, apagar histórico em
+// cascata.
+export const DELETE = withErrorHandling(
+  "api.accounts.[id].delete",
+  async (_request: Request, { params }: { params: Promise<{ id: string }> }) => {
+    const session = await getSessionUser();
+    if (!session) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+
+    const { id } = await params;
+    try {
+      const deleted = await deleteAccount(session.userId, id);
+      if (!deleted) return NextResponse.json({ error: "Conta não encontrada." }, { status: 404 });
+      return NextResponse.json({ ok: true });
+    } catch (err) {
+      if (err instanceof AccountNotEmptyError) {
+        return NextResponse.json({ error: err.message }, { status: 409 });
+      }
+      throw err;
+    }
   },
 );

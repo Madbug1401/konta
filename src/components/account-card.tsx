@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { Landmark, PiggyBank, Pencil, Shield, TrendingUp, Wallet, CreditCard, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { AccountArchiveButton } from "@/components/account-archive-button";
+import { AccountDeleteButton } from "@/components/account-delete-button";
 import { Card } from "@/components/ui/card";
 import { MoneyDisplay } from "@/components/money-display";
 import { getAccountColorHex } from "@/lib/account-colors";
@@ -33,9 +34,28 @@ export interface AccountCardProps {
   // rodapé do cartão. Omitido (undefined) equivale a `false` — cartões
   // antigos que ainda não passam esta prop continuam a mostrar-se iguais.
   isArchived?: boolean;
+  // [Correção — pedido explícito do utilizador] O Dashboard mostra estes
+  // cartões só como atalho visual (a página Contas é que tem a gestão a
+  // sério) — por isso não deve ter "Arquivar" ali. Omitido equivale a
+  // `true`, para não quebrar nenhum sítio que já usa este cartão sem passar
+  // esta prop.
+  showArchiveButton?: boolean;
+  // Só a página Contas passa isto como `true` — "Apagar" nunca aparece no
+  // Dashboard. Omitido equivale a `false`.
+  showDeleteButton?: boolean;
 }
 
-export function AccountCard({ id, name, type, balanceMinor, currency, color, isArchived = false }: AccountCardProps) {
+export function AccountCard({
+  id,
+  name,
+  type,
+  balanceMinor,
+  currency,
+  color,
+  isArchived = false,
+  showArchiveButton = true,
+  showDeleteButton = false,
+}: AccountCardProps) {
   const Icon = ICONS[type];
   const hex = getAccountColorHex(color);
 
@@ -76,7 +96,10 @@ export function AccountCard({ id, name, type, balanceMinor, currency, color, isA
         ) : (
           <span />
         )}
-        <AccountArchiveButton accountId={id} isArchived={isArchived} />
+        <div className="flex items-center gap-1">
+          {showArchiveButton && <AccountArchiveButton accountId={id} isArchived={isArchived} />}
+          {showDeleteButton && <AccountDeleteButton accountId={id} />}
+        </div>
       </div>
     </Card>
   );

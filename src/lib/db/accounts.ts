@@ -85,6 +85,46 @@ export async function setAccountArchived(userId: string, accountId: string, isAr
   return rows[0] ? mapAccount(rows[0]) : null;
 }
 
+export class AccountNotEmptyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AccountNotEmptyError";
+  }
+}
+
+// [Correção — pedido explícito do utilizador, ver DELETE_POLICY.md]
+// DELETE_POLICY.md documenta, e com razão, que `Transaction.accountId` tem
+// `ON DELETE CASCADE` — um DELETE físico sem esta verificação apagaria em
+// cascata, sem aviso, todo o histórico de transações da conta. Por isso
+// "apagar" aqui só é mesmo um DELETE quando a conta está genuinamente vazia
+// (nunca usada): sem nenhuma Transaction (origem OU destino), Meta ligada,
+// Recorrência (origem OU destino) ou Detalhe de Investimento. Com qualquer
+// uma destas, rejeita com AccountNotEmptyError em vez de deixar o Postgres
+// falhar com um erro de FK cru (ou, pior, deixar `InvestmentDetail.accountId
+// ON DELETE CASCADE` apagar um histórico de avaliações em silêncio) — o
+// caminho para uma conta com histórico continua a ser arquivar
+// (setAccountArchived), nunca isto.
+export async function deleteAccount(userId: string, accountId: string): Promise<boolean> {
+  const account = await getAccountById(userId, accountId);
+  if (!account) return false;
+
+  const { rows } = await getPool().query(
+    `SELECT
+       EXISTS(SELECT 1 FROM "Transaction" WHERE "accountId" = $1 OR "destinationAccountId" = $1) AS "hasTransactions",
+       EXISTS(SELECT 1 FROM "Goal" WHERE "linkedAccountId" = $1) AS "hasGoals",
+       EXISTS(SELECT 1 FROM "RecurringTransaction" WHERE "accountId" = $1 OR "destinationAccountId" = $1) AS "hasRecurring",
+       EXISTS(SELECT 1 FROM "InvestmentDetail" WHERE "accountId" = $1) AS "hasInvestmentDetail"`,
+    [accountId],
+  );
+  const usage = rows[0] as { hasTransactions: boolean; hasGoals: boolean; hasRecurring: boolean; hasInvestmentDetail: boolean };
+  if (usage.hasTransactions || usage.hasGoals || usage.hasRecurring || usage.hasInvestmentDetail) {
+    throw new AccountNotEmptyError("Esta conta já tem histórico (transações, metas, recorrências ou investimento) — arquiva-a em vez de apagar.");
+  }
+
+  const result = await getPool().query(`DELETE FROM "Account" WHERE "userId" = $1 AND id = $2`, [userId, accountId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
 interface AccountRow {
   id: string;
   userId: string;
