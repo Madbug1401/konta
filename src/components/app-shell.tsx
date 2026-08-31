@@ -80,25 +80,32 @@ export function AppShell({ children, userEmail }: { children: ReactNode; userEma
 
         <main className="flex-1 px-4 pb-24 pt-4 sm:px-6 sm:pb-6 md:pb-6">{children}</main>
 
-        <nav className="fixed inset-x-0 bottom-0 z-10 flex items-center justify-around border-t border-border bg-surface py-2 md:hidden">
-          {/* [Fase 4 — Recorrências] Antes eram slice(0,2)/slice(2,4) — só 4
-              dos 5 itens cabiam, "Metas" já ficava de fora em mobile mesmo
-              antes desta funcionalidade existir. Com slice(0,3)/slice(3,6),
-              os 6 itens (incluindo Recorrências, novo) ficam todos
-              alcançáveis, sem inventar nenhum menu "mais" novo. */}
-          {NAV_ITEMS.slice(0, 3).map((item) => (
-            <MobileNavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
-          ))}
+        <nav className="fixed inset-x-0 bottom-0 z-10 flex items-center border-t border-border bg-surface py-2 md:hidden">
+          {/* [Correção — feedback do utilizador em uso real no telemóvel]
+              Antes eram slice(0,3)/slice(3,6) sem scroll — cabiam à justa em
+              ecrãs largos, mas espremiam-se demasiado em ecrãs mais
+              estreitos. Cada metade agora é uma faixa com scroll horizontal
+              próprio (min-w-0 é o que permite a um filho flex encolher
+              abaixo do tamanho do seu conteúdo — sem isto o overflow nunca
+              chegava a acontecer); o botão "+" fica fixo e sempre visível no
+              centro, nunca dentro da área de scroll. */}
+          <div className="flex min-w-0 flex-1 items-center justify-around gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {NAV_ITEMS.slice(0, 3).map((item) => (
+              <MobileNavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
+            ))}
+          </div>
           <Link
             href="/transactions/new"
             aria-label="Adicionar transação"
-            className="flex h-14 w-14 -translate-y-3 items-center justify-center rounded-full bg-success text-white shadow-lg"
+            className="flex h-14 w-14 shrink-0 -translate-y-3 items-center justify-center rounded-full bg-success text-white shadow-lg"
           >
             <Plus className="h-6 w-6" />
           </Link>
-          {NAV_ITEMS.slice(3, 6).map((item) => (
-            <MobileNavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
-          ))}
+          <div className="flex min-w-0 flex-1 items-center justify-around gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {NAV_ITEMS.slice(3, 6).map((item) => (
+              <MobileNavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
+            ))}
+          </div>
         </nav>
       </div>
     </div>
@@ -193,7 +200,7 @@ function MobileNavLink({
     <Link
       href={href}
       className={cn(
-        "flex min-w-16 flex-col items-center gap-1 rounded-lg py-1 text-[11px] font-medium text-muted-foreground",
+        "flex min-w-16 shrink-0 flex-col items-center gap-1 rounded-lg py-1 text-[11px] font-medium text-muted-foreground",
         active && "text-primary",
       )}
     >
