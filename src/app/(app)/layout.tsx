@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { isAdminEmail } from "@/lib/auth/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { materializeDueOccurrences } from "@/lib/db/recurring-transactions";
 import { findUserById } from "@/lib/db/users";
@@ -23,5 +24,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await findUserById(session.userId);
   await materializeDueOccurrences(session.userId, getTodayInTimezone(user?.timezone ?? "Atlantic/Cape_Verde"));
 
-  return <AppShell userEmail={session.email}>{children}</AppShell>;
+  return (
+    <AppShell userEmail={session.email} isAdmin={isAdminEmail(session.email)}>
+      {children}
+    </AppShell>
+  );
 }

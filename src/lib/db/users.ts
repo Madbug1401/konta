@@ -42,6 +42,15 @@ export async function findUserById(id: string): Promise<UserRow | null> {
   return rows[0] ?? null;
 }
 
+// [Sugestão do utilizador — painel de estatísticas do dono do projeto]
+// Chamado a partir das rotas de login E de registo (registar já inicia
+// sessão de imediato) — nunca a partir de nenhum outro sítio, para
+// "último login" continuar a significar exatamente isso, não "última vez
+// que qualquer rota tocou nesta linha".
+export async function touchLastLogin(userId: string): Promise<void> {
+  await getPool().query(`UPDATE "User" SET "lastLoginAt" = now() WHERE id = $1`, [userId]);
+}
+
 export async function createUser(input: {
   email: string;
   passwordHash: string;

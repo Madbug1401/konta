@@ -105,6 +105,12 @@ model User {
   defaultCurrency String @default("CVE")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  // [Sugestão do utilizador — painel de estatísticas do dono do projeto]
+  // Nulo para quem nunca fez login desde que este campo passou a existir
+  // (inclui todos os utilizadores criados antes desta migração). Atualizado
+  // em cada login E registo bem-sucedido (touchLastLogin, src/lib/db/users.ts)
+  // — nunca lido como "conta nunca usada" só porque este valor é nulo.
+  lastLoginAt   DateTime?
 
   accounts             Account[]
   categories           Category[]

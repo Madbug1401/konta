@@ -860,3 +860,62 @@ automático se não existe"). `backup-neon.sh` produz o `.dump`; cabe a quem
 gere o Konta correr isto periodicamente e guardar o ficheiro fora do Git,
 num local seguro do seu computador. Isto é uma limitação aceite e
 documentada, não escondida.
+
+## Painel "Estatísticas" e último login: admin por variável de ambiente, não por campo no schema (31/08/2026)
+
+**Pedido do utilizador**: "como posso observar os meus utilizadores agora,
+ver quantos users eu tenho e entre outros?" — depois de ver as três
+opções (consola do Neon sozinha, página dentro do Konta, ou página +
+registo de último login), escolheu a última: página **e** data do último
+login.
+
+**Quem vê `/admin` (Estatísticas)**: `ADMIN_EMAILS`, uma variável de
+ambiente com uma lista de emails separados por vírgula
+(`src/lib/auth/admin.ts`, `isAdminEmail`) — não um campo `role`/`isAdmin`
+no schema. Duas razões: (1) há um único dono do projeto hoje, não um
+sistema de permissões a construir; uma coluna nova, uma migração, e UI
+para a atribuir seriam trabalho a mais para o problema real; (2)
+**fail-closed por omissão** — sem `ADMIN_EMAILS` definida em produção,
+`isAdminEmail` devolve sempre `false` para toda a gente, incluindo o
+próprio dono, em vez de um valor por omissão "toda a gente é admin" ou
+"o primeiro utilizador criado é admin" (qualquer um dos dois seria uma
+falha de segurança silenciosa se a variável for esquecida). A página em
+si (`src/app/(app)/admin/page.tsx`) devolve `notFound()` (404) para quem
+não está na lista, nunca uma mensagem "não autorizado" — um 404 genérico
+não confirma sequer que a página existe a quem esteja a adivinhar URLs.
+
+**O que a página mostra**: só contagens e datas (`src/lib/db/admin.ts`) —
+total de utilizadores/contas/transações/dívidas/metas, e por utilizador:
+email, nome, data de registo, data do último login, número de contas e de
+transações. **Nunca** o conteúdo de nenhuma transação, conta ou valor
+financeiro de ninguém — mesmo princípio de privacidade já aplicado na
+secção "Segurança e privacidade" da página `/help`. Este é o único
+ficheiro da app que consulta a tabela `User` inteira sem filtrar por
+`userId` — de propósito, e só chamado depois de `isAdminEmail` confirmar
+na própria rota/página.
+
+**`lastLoginAt`**: novo campo opcional (`DateTime?`) em `User`
+(`prisma/manual-sql/0003_add_last_login.sql` — primeira migração desde as
+duas iniciais, estabelece a convenção `000N_descrição.sql` daqui em
+diante). Nulo por omissão, incluindo para todas as contas já existentes
+antes desta migração — não há forma honesta de reconstruir esse histórico
+retroativamente, por isso fica nulo até ao próximo login real, nunca
+preenchido com um valor inventado. Atualizado (`touchLastLogin`,
+`src/lib/db/users.ts`) em cada login **e** registo bem-sucedido (registar
+já inicia sessão de imediato, conta como o primeiro "login"). Em ambos os
+casos a atualização nunca bloqueia a autenticação: `touchLastLogin(...)
+.catch(() => undefined)` — se isto falhar por algum motivo, a pessoa
+continua a entrar normalmente, porque "último login" é informação de
+conveniência para o dono da app, não uma condição de autenticação.
+
+**Navegação**: entrada "Estatísticas" em `src/components/app-shell.tsx`
+(sidebar desktop + ícone no cabeçalho mobile), condicional a `isAdmin`,
+fora de `NAV_ITEMS` pela mesma razão que "Ajuda" já estava — nunca
+ocuparia lugar na barra inferior em mobile para o resto dos utilizadores.
+
+**Operacional, antes de ir para produção**: `0003_add_last_login.sql`
+tem de ser aplicado manualmente à base de dados Neon de produção (ver
+`docs/operations/RENDER-NEON.md`), e `ADMIN_EMAILS` tem de ser definida
+no painel do Render com o email de login do dono — sem os dois, a
+próxima versão publicada falha silenciosamente para este utilizador
+(página sempre 404) até isso ser feito.

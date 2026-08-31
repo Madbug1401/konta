@@ -33,7 +33,7 @@ docs/operations/            guias passo a passo de deploy (Oracle, Render+Neon)
 2. `npm install`
 3. Aplica o schema à base de dados:
    - **Ambiente normal (a tua máquina, CI):** `npx prisma generate && npx prisma migrate dev --name init`, depois adapta `src/lib/db/*.ts` para usar o Prisma Client (ver nota abaixo).
-   - **Se quiseres reproduzir exatamente como este projeto foi validado:** aplica manualmente `psql -f prisma/manual-sql/0001_init.sql` e `psql -f prisma/manual-sql/0002_seed_categories.sql` à tua base de dados — a app já está preparada para correr assim.
+   - **Se quiseres reproduzir exatamente como este projeto foi validado:** aplica manualmente, por ordem, `psql -f prisma/manual-sql/0001_init.sql`, `psql -f prisma/manual-sql/0002_seed_categories.sql` e `psql -f prisma/manual-sql/0003_add_last_login.sql` à tua base de dados — a app já está preparada para correr assim.
 4. `npm run dev` e abre `http://localhost:3000`.
 
 Guia completo e já validado do zero no Windows: `WINDOWS_SETUP.md`.

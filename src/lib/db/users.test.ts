@@ -55,3 +55,18 @@ describe("bug corrigido na auditoria Go-to-Beta: Test@Example.com e test@example
     expect(found?.email).toBe("test@example.com");
   });
 });
+
+describe("touchLastLogin", () => {
+  afterEach(() => {
+    queryMock.mockReset();
+  });
+
+  it("atualiza lastLoginAt para agora, filtrando pelo id do utilizador", async () => {
+    queryMock.mockResolvedValue({ rows: [] });
+    const { touchLastLogin } = await import("./users");
+
+    await touchLastLogin("u1");
+
+    expect(queryMock).toHaveBeenCalledWith(expect.stringContaining('SET "lastLoginAt" = now()'), ["u1"]);
+  });
+});

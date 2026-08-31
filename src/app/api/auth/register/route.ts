@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createUser, findUserByEmail } from "@/lib/db/users";
+import { createUser, findUserByEmail, touchLastLogin } from "@/lib/db/users";
 import { hashPassword } from "@/lib/auth/password";
 import { signSessionToken, SESSION_COOKIE_NAME, SESSION_TTL_SECONDS } from "@/lib/auth/jwt";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -48,6 +48,11 @@ export const POST = withErrorHandling("api.auth.register.post", async (request: 
 
   const passwordHash = await hashPassword(password);
   const user = await createUser({ email, passwordHash, name });
+
+  // [Sugestão do utilizador — painel de estatísticas do dono do projeto]
+  // Registar já inicia sessão de imediato (ver cookie abaixo) — por isso
+  // conta como o primeiro "login" da pessoa.
+  await touchLastLogin(user.id).catch(() => undefined);
 
   const token = await signSessionToken({ userId: user.id, email: user.email });
   const response = NextResponse.json({ id: user.id, email: user.email, name: user.name });

@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, List, Wallet, Landmark, Target, Repeat, Plus, LogOut, HelpCircle } from "lucide-react";
+import { LayoutDashboard, List, Wallet, Landmark, Target, Repeat, Plus, LogOut, HelpCircle, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -26,7 +26,15 @@ const NAV_ITEMS = [
 // em mobile (secção 14 do briefing). Não existem duas implementações de
 // navegação a divergir: é a mesma NAV_ITEMS renderizada de duas formas via
 // CSS responsivo (hidden/flex por breakpoint).
-export function AppShell({ children, userEmail }: { children: ReactNode; userEmail: string }) {
+export function AppShell({
+  children,
+  userEmail,
+  isAdmin = false,
+}: {
+  children: ReactNode;
+  userEmail: string;
+  isAdmin?: boolean;
+}) {
   const pathname = usePathname();
 
   return (
@@ -53,8 +61,16 @@ export function AppShell({ children, userEmail }: { children: ReactNode; userEma
             slice(3,6), já bem ajustada aos 6 itens existentes); um 7º item
             ali obrigaria a redesenhar essa barra. Em mobile, o mesmo link
             aparece no cabeçalho (ver abaixo). */}
-        <div className="mt-2">
+        <div className="mt-2 flex flex-col gap-1">
           <NavLink href="/help" label="Ajuda" icon={HelpCircle} active={pathname.startsWith("/help")} />
+          {/* [Sugestão do utilizador — "como posso observar os meus
+              utilizadores"] Mesma razão do "Ajuda" para ficar fora de
+              NAV_ITEMS: só visível para o dono do projeto (ver
+              src/lib/auth/admin.ts), nunca ocuparia lugar na barra inferior
+              em mobile para o resto dos utilizadores. */}
+          {isAdmin && (
+            <NavLink href="/admin" label="Estatísticas" icon={BarChart3} active={pathname.startsWith("/admin")} />
+          )}
         </div>
         <div className="mt-4 flex items-center justify-between gap-2 px-2">
           <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
@@ -73,6 +89,15 @@ export function AppShell({ children, userEmail }: { children: ReactNode; userEma
             >
               <HelpCircle className="h-4 w-4" />
             </Link>
+            {isAdmin && (
+              <Link
+                href="/admin"
+                aria-label="Estatísticas"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+              >
+                <BarChart3 className="h-4 w-4" />
+              </Link>
+            )}
             <ThemeToggle />
             <LogoutButton iconOnly />
           </div>
