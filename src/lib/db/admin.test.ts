@@ -13,13 +13,13 @@ describe("getPlatformTotals", () => {
 
   it("converte todas as contagens (devolvidas como string pelo pg) para number", async () => {
     queryMock.mockResolvedValue({
-      rows: [{ users: "3", accounts: "7", transactions: "120", debts: "1", goals: "2" }],
+      rows: [{ users: "3", accounts: "7", transactions: "120", debts: "1", goals: "2", feedback: "4" }],
     });
     const { getPlatformTotals } = await import("./admin");
 
     const totals = await getPlatformTotals();
 
-    expect(totals).toEqual({ users: 3, accounts: 7, transactions: 120, debts: 1, goals: 2 });
+    expect(totals).toEqual({ users: 3, accounts: 7, transactions: 120, debts: 1, goals: 2, feedback: 4 });
   });
 });
 

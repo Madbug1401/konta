@@ -14,6 +14,7 @@ export interface PlatformTotals {
   transactions: number;
   debts: number;
   goals: number;
+  feedback: number;
 }
 
 export async function getPlatformTotals(): Promise<PlatformTotals> {
@@ -23,7 +24,8 @@ export async function getPlatformTotals(): Promise<PlatformTotals> {
       (SELECT COUNT(*) FROM "Account") AS accounts,
       (SELECT COUNT(*) FROM "Transaction") AS transactions,
       (SELECT COUNT(*) FROM "Debt") AS debts,
-      (SELECT COUNT(*) FROM "Goal") AS goals
+      (SELECT COUNT(*) FROM "Goal") AS goals,
+      (SELECT COUNT(*) FROM "Feedback") AS feedback
   `);
   const row = rows[0] as Record<string, string>;
   return {
@@ -32,6 +34,7 @@ export async function getPlatformTotals(): Promise<PlatformTotals> {
     transactions: Number(row.transactions),
     debts: Number(row.debts),
     goals: Number(row.goals),
+    feedback: Number(row.feedback),
   };
 }
 

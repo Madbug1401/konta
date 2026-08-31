@@ -118,6 +118,7 @@ model User {
   recurringTransactions RecurringTransaction[]
   debts                Debt[]
   goals                Goal[]
+  feedback             Feedback[]
 }
 
 // ----------------------------------------------------------------------------
@@ -401,4 +402,30 @@ model InvestmentValuation {
   createdAt          DateTime         @default(now())
 
   @@index([investmentDetailId, date])
+}
+
+// ----------------------------------------------------------------------------
+// FEEDBACK
+// ----------------------------------------------------------------------------
+
+// [Sugestão do utilizador — "quero um campo para me dar feedback direto no
+// aplicativo"] Mensagem livre, sempre ligada ao utilizador autenticado que a
+// escreveu — nunca anónima, para o dono do projeto ver exatamente quem disse
+// o quê em /admin (ver src/lib/db/admin.ts para o mesmo princípio de
+// privacidade: só o dono vê isto, nunca outro utilizador). Sem "assunto" ou
+// categoria estruturada de propósito: para o volume esperado numa Beta
+// pequena, uma lista simples ordenada por data já chega — categorizar por
+// tipo fica para se um dia isso for mesmo preciso. Sem edição/eliminação
+// pelo próprio autor nesta v1, mesma filosofia de nunca alterar um registo
+// passado já usada em InvestmentValuation: é um relato pontual, não um
+// documento a manter.
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
 }

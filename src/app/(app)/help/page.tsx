@@ -9,10 +9,12 @@ import {
   Target,
   Repeat,
   TrendingUp,
+  MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
+import { FeedbackForm } from "@/components/feedback-form";
 
 // [Sugestão do utilizador — antes de abrir a app aos primeiros utilizadores
 // da Beta] Página de referência estática, sem nenhuma consulta à base de
@@ -33,6 +35,7 @@ const QUICK_LINKS = [
   { href: "#investimentos", label: "Investimentos" },
   { href: "#seguranca", label: "Segurança e privacidade" },
   { href: "#faq", label: "Perguntas frequentes" },
+  { href: "#feedback", label: "Feedback" },
 ];
 
 export default function HelpPage() {
@@ -87,8 +90,11 @@ export default function HelpPage() {
             </Principle>
           </ul>
           <p className="text-xs">
-            Estás a usar uma versão Beta inicial — se encontrares algo estranho ou tiveres uma sugestão, fala com
-            quem te convidou para este Beta.
+            Estás a usar uma versão Beta inicial — se encontrares algo estranho ou tiveres uma sugestão,{" "}
+            <a href="#feedback" className="font-medium text-primary hover:underline">
+              manda feedback diretamente aqui
+            </a>
+            .
           </p>
         </div>
       </Card>
@@ -208,6 +214,15 @@ export default function HelpPage() {
             Sim, no ícone junto ao logótipo “Konta” na barra lateral (ou no cabeçalho, em telemóvel).
           </Faq>
         </div>
+      </Card>
+
+      <Card id="feedback" className="scroll-mt-4">
+        <SectionTitle icon={MessageSquare}>Feedback</SectionTitle>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Encontraste um problema, tens uma sugestão ou uma ideia de melhoria? Escreve aqui — a tua mensagem chega
+          diretamente a quem gere o Konta, com o teu email e a data associados.
+        </p>
+        <FeedbackForm />
       </Card>
     </div>
   );

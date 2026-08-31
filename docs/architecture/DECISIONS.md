@@ -919,3 +919,51 @@ tem de ser aplicado manualmente à base de dados Neon de produção (ver
 no painel do Render com o email de login do dono — sem os dois, a
 próxima versão publicada falha silenciosamente para este utilizador
 (página sempre 404) até isso ser feito.
+
+## Feedback direto na app: nova tabela ligada ao utilizador, sem edição/eliminação (31/08/2026)
+
+**Pedido do utilizador**: um campo na página `/help` para enviar sugestões,
+problemas e melhorias diretamente, visível depois na página Estatísticas
+(`/admin`), organizado por quem escreveu e por data.
+
+**Modelo de dados**: nova tabela `Feedback` (`prisma/schema.prisma`,
+`prisma/manual-sql/0004_add_feedback.sql`) — `id`, `userId` (obrigatório,
+`ON DELETE CASCADE`), `message`, `createdAt`. Sempre ligada ao utilizador
+autenticado da sessão, nunca a um id vindo do corpo do pedido (mesma regra
+de todas as outras rotas de escrita — ver `src/app/api/feedback/route.ts`)
+— não há feedback anónimo, precisamente para o dono conseguir responder ou
+dar seguimento sabendo de quem é.
+
+**Sem "assunto" ou categoria estruturada**: para o volume esperado numa
+Beta pequena, uma lista simples ordenada por data (mais recente primeiro)
+já é suficiente para o dono acompanhar. Categorizar por tipo (bug vs.
+sugestão vs. elogio) fica documentado aqui como possível fast-follow, não
+implementado agora — evita construir uma taxonomia sem ainda saber que
+tipos de mensagem realmente vão chegar.
+
+**Sem edição nem eliminação pelo próprio autor nesta v1**: mesma filosofia
+já aplicada a `InvestmentValuation` — é um relato pontual, não um
+documento a manter; o dono do projeto também não tem, propositadamente,
+nenhuma forma de apagar uma mensagem a partir da UI (só accessível
+diretamente na base de dados, se algum dia for mesmo necessário por razões
+de moderação ou de RGPD/privacidade).
+
+**Limite de fair-use**: `POST /api/feedback` usa o mesmo mecanismo de
+`src/lib/rate-limit.ts` já usado em login/registo, mas com a chave por
+`userId` (não por IP, já que aqui o pedido está sempre autenticado) —
+5 mensagens por hora, um valor generoso pensado só para travar um script,
+nunca uma pessoa real a mandar duas ou três mensagens seguidas.
+
+**Onde aparece**: um formulário simples (`src/components/feedback-form.tsx`,
+textarea + botão) numa nova secção da página `/help`; a página
+`/admin` mostra uma nova estatística de contagem e, por baixo da tabela de
+utilizadores, a lista completa de mensagens com autor (nome + email) e
+data/hora — mesmo princípio de privacidade de `src/lib/db/admin.ts`: só o
+dono do projeto vê isto.
+
+**Operacional, antes de ir para produção**: `0004_add_feedback.sql` tem de
+ser aplicado manualmente à base de dados Neon de produção (ver
+`docs/operations/RENDER-NEON.md`) antes do próximo `git push` — sem isto,
+qualquer tentativa de enviar feedback em produção falha (tabela
+inexistente), embora isso não afete login, registo, nem nenhuma outra
+funcionalidade já existente.

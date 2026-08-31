@@ -38,6 +38,7 @@ ou via WSL):
 psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0001_init.sql
 psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0002_seed_categories.sql
 psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0003_add_last_login.sql
+psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0004_add_feedback.sql
 ```
 
 Alternativa: dá-me a connection string temporariamente (por um canal
@@ -50,19 +51,20 @@ psql "$DATABASE_URL" -c '\dt'
 
 que as tabelas (`User`, `Account`, `Transaction`, `Category`, etc.) existem.
 
-**Base de dados já em produção, com `0001`/`0002` já aplicados**: cada
-ficheiro novo em `prisma/manual-sql/` (nome `000N_descrição.sql`, ordem
-crescente) é uma migração a mais, nunca uma substituição das anteriores —
-corre só o(s) ficheiro(s) que ainda não aplicaste, pela mesma ordem. Por
-exemplo, `0003_add_last_login.sql` (adiciona `lastLoginAt` a `User`, para o
-painel de Estatísticas) só precisa de ser corrido uma vez, isoladamente:
+**Base de dados já em produção, com migrações anteriores já aplicadas**:
+cada ficheiro novo em `prisma/manual-sql/` (nome `000N_descrição.sql`,
+ordem crescente) é uma migração a mais, nunca uma substituição das
+anteriores — corre só o(s) ficheiro(s) que ainda não aplicaste, pela mesma
+ordem. Por exemplo, se já tens `0001`–`0003` aplicados e só falta a mais
+recente (`0004_add_feedback.sql`, cria a tabela `Feedback` para o botão de
+feedback em `/help`), corre só essa, isoladamente:
 
 ```powershell
-psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0003_add_last_login.sql
+psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0004_add_feedback.sql
 ```
 
-Faz sempre um backup antes (secção 5) — pequeno neste caso (`ADD COLUMN`
-nulo, sem reescrever nenhuma linha existente), mas é a rotina a manter
+Faz sempre um backup antes (secção 5) — pequeno neste caso (`CREATE TABLE`
+nova, sem tocar em nenhuma tabela existente), mas é a rotina a manter
 sempre que houver uma migração nova.
 
 ## 3. Criar o Web Service (Render)

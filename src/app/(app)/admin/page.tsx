@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { isAdminEmail } from "@/lib/auth/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { getPlatformTotals, listUsersWithActivity } from "@/lib/db/admin";
+import { listFeedback } from "@/lib/db/feedback";
 import { Card } from "@/components/ui/card";
 
 // [Sugestão do utilizador — "como posso observar os meus utilizadores"]
@@ -13,7 +14,7 @@ export default async function AdminPage() {
   const session = await getSessionUser();
   if (!session || !isAdminEmail(session.email)) notFound();
 
-  const [totals, users] = await Promise.all([getPlatformTotals(), listUsersWithActivity()]);
+  const [totals, users, feedback] = await Promise.all([getPlatformTotals(), listUsersWithActivity(), listFeedback()]);
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
@@ -22,12 +23,13 @@ export default async function AdminPage() {
         <p className="text-sm text-muted-foreground">Visão geral do Konta — visível só para ti.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Utilizadores" value={totals.users} />
         <Stat label="Contas" value={totals.accounts} />
         <Stat label="Transações" value={totals.transactions} />
         <Stat label="Dívidas" value={totals.debts} />
         <Stat label="Metas" value={totals.goals} />
+        <Stat label="Feedback" value={totals.feedback} />
       </div>
 
       <Card>
@@ -63,6 +65,27 @@ export default async function AdminPage() {
           </div>
         )}
       </Card>
+
+      <Card>
+        <h2 className="mb-3 text-base font-semibold text-foreground">Feedback dos utilizadores</h2>
+        {feedback.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Ainda não há nenhuma mensagem de feedback.</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {feedback.map((item) => (
+              <div key={item.id} className="rounded-lg border border-border p-3">
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
+                  <span className="text-sm font-medium text-foreground">
+                    {item.userName ? `${item.userName} · ${item.userEmail}` : item.userEmail}
+                  </span>
+                  <span className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(item.createdAt)}</span>
+                </div>
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">{item.message}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
@@ -78,4 +101,14 @@ function Stat({ label, value }: { label: string; value: number }) {
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("pt-CV", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("pt-CV", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
