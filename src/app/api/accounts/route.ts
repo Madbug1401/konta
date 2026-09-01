@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ACCOUNT_COLOR_IDS } from "@/lib/account-colors";
+import { CURRENCY_CODES } from "@/lib/currencies";
 import { getSessionUser } from "@/lib/auth/session";
 import { createAccount, listAccounts } from "@/lib/db/accounts";
 import { listAllTransactionsForBalances } from "@/lib/db/transactions";
@@ -44,7 +45,11 @@ export const GET = withErrorHandling("api.accounts.get", async () => {
 const CreateAccountSchema = z.object({
   name: z.string().trim().min(1).max(120),
   type: z.enum(["WALLET", "BANK", "SAVINGS", "CREDIT_CARD", "INVESTMENT", "EMERGENCY_FUND", "OTHER"]),
-  currency: z.string().length(3).optional(),
+  // [Sugestão do utilizador — pedido de amigos fora de Cabo Verde] Só um
+  // código da lista curada (ver src/lib/currencies.ts) — nunca um código
+  // ISO 4217 livre vindo do cliente, mesmo princípio já aplicado à cor da
+  // conta acima.
+  currency: z.enum(CURRENCY_CODES).optional(),
   // Mesma correção de src/app/api/transactions/route.ts (limite técnico de
   // precisão, não uma regra de negócio) — negativo continua permitido de
   // propósito (ex: saldo inicial de um cartão de crédito).

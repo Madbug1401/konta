@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/toast-provider";
 import { ACCOUNT_COLORS, type AccountColorId } from "@/lib/account-colors";
+import { CURRENCIES, type CurrencyCode } from "@/lib/currencies";
 import type { AccountType } from "@/lib/financial-engine";
 
 const TYPE_OPTIONS: { value: AccountType; label: string }[] = [
@@ -23,6 +24,13 @@ export function AccountForm() {
   const toast = useToast();
   const [name, setName] = useState("");
   const [type, setType] = useState<AccountType>("BANK");
+  // [Sugestão do utilizador — pedido de amigos fora de Cabo Verde] Antes
+  // desta funcionalidade, este formulário nunca enviava "currency" nenhum —
+  // toda a conta nova ficava CVE por omissão no servidor, mesmo o schema já
+  // suportando qualquer moeda por conta. CVE continua a omissão aqui (a
+  // maioria dos utilizadores está em Cabo Verde), mas agora é uma escolha
+  // visível, não a única opção possível.
+  const [currency, setCurrency] = useState<CurrencyCode>("CVE");
   const [initialBalance, setInitialBalance] = useState("0");
   // [Correção — cor da conta] Começa já com a primeira cor da paleta
   // selecionada (em vez de "sem cor") — o pedido era tornar a app mais
@@ -40,7 +48,7 @@ export function AccountForm() {
       const res = await fetch("/api/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, type, initialBalanceMinor: Number(initialBalance) || 0, color }),
+        body: JSON.stringify({ name, type, currency, initialBalanceMinor: Number(initialBalance) || 0, color }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -49,6 +57,7 @@ export function AccountForm() {
       }
       toast.success("Conta criada.");
       setName("");
+      setCurrency("CVE");
       setInitialBalance("0");
       setColor(ACCOUNT_COLORS[0].id);
       setOpen(false);
@@ -92,7 +101,21 @@ export function AccountForm() {
         </select>
       </label>
       <label className="text-xs font-medium text-muted-foreground">
-        Saldo inicial (CVE)
+        Moeda
+        <select
+          className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
+        >
+          {CURRENCIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="text-xs font-medium text-muted-foreground">
+        Saldo inicial ({currency})
         <Input
           type="number"
           placeholder="0"

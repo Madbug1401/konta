@@ -68,14 +68,24 @@ export function getAccountBalance(
   return balance;
 }
 
-/** Saldo disponível = soma de todas as contas "líquidas" (exclui investimento e dívida de cartão, que têm semântica própria). */
+/** Saldo disponível = soma de todas as contas "líquidas" (exclui investimento e dívida de cartão, que têm semântica própria).
+ *
+ * [Sugestão do utilizador — pedido de amigos fora de Cabo Verde] `currency`
+ * é opcional e, quando passado, restringe a soma às contas dessa moeda —
+ * nunca se soma CVE com EUR como se fosse o mesmo número (o motor não faz
+ * conversão cambial em lado nenhum). Quem só tem contas numa moeda não
+ * precisa de passar nada e o comportamento é exatamente o de antes desta
+ * funcionalidade existir. A página que chama isto (Dashboard) é responsável
+ * por descobrir as moedas em uso e chamar esta função uma vez por moeda.
+ */
 export function getNetWorth(
   accounts: AccountRecord[],
   transactions: TransactionRecord[],
   asOfDate?: string,
+  currency?: string,
 ): MinorAmount {
   const balances = accounts
-    .filter((a) => !a.isArchived)
+    .filter((a) => !a.isArchived && (currency === undefined || a.currency === currency))
     .map((a) => getAccountBalance(a, transactions, asOfDate));
   return sum(balances);
 }
@@ -84,9 +94,13 @@ export function getAvailableBalance(
   accounts: AccountRecord[],
   transactions: TransactionRecord[],
   asOfDate?: string,
+  currency?: string,
 ): MinorAmount {
   const spendable = accounts.filter(
-    (a) => !a.isArchived && (a.type === "WALLET" || a.type === "BANK"),
+    (a) =>
+      !a.isArchived &&
+      (a.type === "WALLET" || a.type === "BANK") &&
+      (currency === undefined || a.currency === currency),
   );
   return sum(spendable.map((a) => getAccountBalance(a, transactions, asOfDate)));
 }

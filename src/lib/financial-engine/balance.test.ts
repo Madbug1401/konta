@@ -125,3 +125,40 @@ describe("getNetWorth / getAvailableBalance", () => {
     expect(getAvailableBalance([bank, savings], txs)).toBe(7_000n);
   });
 });
+
+describe("getNetWorth / getAvailableBalance: filtro por moeda", () => {
+  // [Sugestão do utilizador — pedido de amigos fora de Cabo Verde] Reproduz
+  // exatamente o caso que motivou o parâmetro `currency`: uma conta em CVE e
+  // outra em EUR. Sem filtro, somar as duas produziria um número sem
+  // significado (escudos + euros); com o filtro, cada moeda fica isolada.
+  const eurBank: AccountRecord = {
+    id: "acc_eur",
+    userId: "u1",
+    name: "Revolut",
+    type: "BANK",
+    currency: "EUR",
+    initialBalanceMinor: 50_000n,
+    isArchived: false,
+    color: null,
+  };
+
+  it("sem `currency`, continua a somar todas as contas (comportamento anterior preservado)", () => {
+    expect(getNetWorth([bank, eurBank], [])).toBe(60_000n); // 10000 CVE + 50000 EUR, sem significado, mas é o valor antigo
+    expect(getAvailableBalance([bank, eurBank], [])).toBe(60_000n);
+  });
+
+  it("com `currency`, isola cada moeda — nunca soma CVE com EUR", () => {
+    expect(getNetWorth([bank, eurBank], [], undefined, "CVE")).toBe(10_000n);
+    expect(getNetWorth([bank, eurBank], [], undefined, "EUR")).toBe(50_000n);
+    expect(getAvailableBalance([bank, eurBank], [], undefined, "CVE")).toBe(10_000n);
+    expect(getAvailableBalance([bank, eurBank], [], undefined, "EUR")).toBe(50_000n);
+  });
+
+  it("transações só afetam o total da moeda da própria conta", () => {
+    const eurIncome = income("t1", "acc_eur", 20_000n, "2026-01-01");
+    const cveIncome = income("t2", "acc_bank", 1_000n, "2026-01-01");
+    const txs = [eurIncome, cveIncome];
+    expect(getNetWorth([bank, eurBank], txs, undefined, "EUR")).toBe(70_000n); // 50000 + 20000
+    expect(getNetWorth([bank, eurBank], txs, undefined, "CVE")).toBe(11_000n); // 10000 + 1000
+  });
+});

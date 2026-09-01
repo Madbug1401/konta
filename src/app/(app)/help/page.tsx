@@ -207,8 +207,10 @@ export default function HelpPage() {
             atraso.
           </Faq>
           <Faq question="Que moedas o Konta suporta?">
-            Qualquer uma — cada conta tem a sua própria moeda, independente das outras. Não há conversão cambial
-            automática entre contas de moedas diferentes.
+            Ao criar uma conta, escolhes a moeda numa lista (Escudo cabo-verdiano, Euro, Dólar americano, Libra
+            esterlina, Real brasileiro) — cada conta fica com a sua própria moeda, independente das outras. Não há
+            conversão cambial automática entre contas de moedas diferentes: se tiveres contas em mais do que uma
+            moeda, o Dashboard mostra um bloco de totais separado para cada moeda, nunca uma soma a misturá-las.
           </Faq>
           <Faq question="Posso mudar entre tema claro e escuro?">
             Sim, no ícone junto ao logótipo “Konta” na barra lateral (ou no cabeçalho, em telemóvel).

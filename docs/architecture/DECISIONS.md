@@ -967,3 +967,69 @@ ser aplicado manualmente à base de dados Neon de produção (ver
 qualquer tentativa de enviar feedback em produção falha (tabela
 inexistente), embora isso não afete login, registo, nem nenhuma outra
 funcionalidade já existente.
+
+## Escolher moeda ao criar conta + Dashboard agrupado por moeda, nunca convertido (01/09/2026)
+
+**Pedido do utilizador**: feedback de amigos fora de Cabo Verde — perguntaram
+se era possível usar outra moeda além do Escudo.
+
+**O modelo de dados já suportava isto**: `Account.currency` e
+`Transaction.currency` (esta última herdada da conta de origem na
+criação — ver `src/app/api/transactions/route.ts`) existem desde a
+primeira migração. O que faltava era só a UI nunca oferecer escolha
+nenhuma — o formulário de criar conta enviava sempre `currency`
+implícito, e o servidor assumia `CVE` por omissão.
+
+**Lista curada, não texto livre**: em vez de um campo ISO 4217 livre
+(fácil de escrever mal — "EU" em vez de "EUR"), `src/lib/currencies.ts`
+define uma paleta fixa (CVE, EUR, USD, GBP, BRL — os destinos mais comuns
+da diáspora cabo-verdiana), mesmo padrão já usado para a cor da conta em
+`src/lib/account-colors.ts`. Tanto `account-form.tsx` como o zod schema de
+`POST /api/accounts` leem da mesma lista (`CURRENCIES`/`CURRENCY_CODES`),
+nunca duas listas a poderem divergir. Decisão confirmada com o utilizador
+via pergunta direta: lista curada, não texto livre.
+
+**O bug que isto obrigou a corrigir primeiro**: as funções de agregação do
+Dashboard (`getNetWorth`, `getAvailableBalance`, `getIncomeTotal`,
+`getExpenseTotal`, `getCashflow`, `getSavingsRate`, `getCategoryBreakdown`
+em `src/lib/financial-engine`) somavam sempre TODAS as contas/transações,
+qualquer que fosse a moeda — inofensivo enquanto só existia CVE, mas
+produziria um número sem significado (escudos + euros somados como se
+fossem a mesma unidade) assim que alguém tivesse contas em duas moedas.
+Como o motor não faz — e nunca fez, por decisão consciente (ver FAQ em
+`/help`) — conversão cambial, a única opção correta era nunca somar entre
+moedas. Confirmado com o utilizador via pergunta direta: agrupar por
+moeda, sem converter.
+
+**Implementação**: cada uma das sete funções acima ganhou um parâmetro
+`currency?: string` opcional no fim da assinatura — quando omitido,
+preserva exatamente o comportamento anterior (soma tudo), o que manteve
+toda a suite de testes existente a passar sem alterações. `grep` confirmou
+que o único consumidor em produção destas funções é
+`src/app/(app)/dashboard/page.tsx` (mais o próprio ficheiro de testes), o
+que tornou esta mudança de baixo risco. O Dashboard passou a descobrir as
+moedas em uso pelas contas não arquivadas (`currenciesInUse`) e a chamar
+cada função uma vez por moeda, através de um novo componente
+`CurrencySummary` — quando só há uma moeda (o caso de praticamente todos os
+utilizadores hoje), `showHeading` fica `false` e o ecrã continua pixel a
+pixel igual ao que já era; só a partir de duas moedas em uso é que cada
+bloco ganha um pequeno cabeçalho ("Em EUR", "Em CVE") a identificar de que
+moeda se trata.
+
+**Não editável depois de criada**: a moeda da conta não entra nos campos
+editáveis de `updateAccount` (decisão já tomada antes desta funcionalidade
+existir, mantida sem alterações) — mudar a moeda de uma conta com
+transações já registadas nessa moeda misturaria unidades em silêncio.
+
+**Testes novos**: `balance.test.ts` ganhou um novo `describe` com uma
+conta CVE e outra EUR, cobrindo o comportamento sem `currency` (soma tudo,
+igual a antes) e com `currency` (isola cada moeda); novo ficheiro
+`cashflow.test.ts` (não existia nenhum antes) cobre o mesmo para
+`getIncomeTotal`/`getExpenseTotal`/`getCashflow`/`getSavingsRate`/
+`getCategoryBreakdown`.
+
+**Sem alteração de schema, sem migração nova**: `Account.currency` e
+`Transaction.currency` já existiam em produção desde `0001_init.sql` — ao
+contrário das duas funcionalidades anteriores (estatísticas de admin,
+feedback), esta não precisa de nenhum passo manual na base de dados Neon
+nem de nenhuma variável de ambiente nova no Render antes de publicar.
