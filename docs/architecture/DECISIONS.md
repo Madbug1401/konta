@@ -1033,3 +1033,70 @@ igual a antes) e com `currency` (isola cada moeda); novo ficheiro
 contrário das duas funcionalidades anteriores (estatísticas de admin,
 feedback), esta não precisa de nenhum passo manual na base de dados Neon
 nem de nenhuma variável de ambiente nova no Render antes de publicar.
+
+## Correção: página deixava de caber no ecrã em iPhone/Android — "preciso de fazer zoom out" (04/09/2026)
+
+**Pedido do utilizador**: feedback de utilizadores da Beta em iPhone — o
+site não estava 100% responsivo, era preciso afastar o zoom manualmente
+para ver tudo. O próprio utilizador notou que o Dashboard vazio estava bem
+responsivo, mas isso deixou de acontecer depois de adicionar transações.
+
+**Causa raiz — não era um problema do Safari**: reproduzido com sucesso
+tanto com user-agent do Safari/iOS como do Chrome/Android (browser
+automation, viewports 375-390px), por isso descartado como bug específico
+de um motor — é puro CSS flexbox. A tabela de Transações
+(`src/app/(app)/transactions/page.tsx`) tem `min-w-[600px]` dentro de um
+`overflow-x-auto`, precisamente para poder ter scroll horizontal próprio
+em ecrãs estreitos — o mesmo padrão já usado (e comentado) na barra de
+navegação inferior do `AppShell`. Mas faltava uma peça: o `<div
+className="flex min-h-screen flex-1 flex-col">` em
+`src/components/app-shell.tsx`, que envolve o conteúdo principal, é filho
+de uma flexbox em linha (`flex min-h-screen`, ao lado da sidebar) e por
+omissão os filhos flex têm `min-width: auto` — ou seja, o browser recusa-se
+a encolhê-lo abaixo da largura mínima do seu conteúdo. Com uma tabela de
+600px lá dentro, esse filho (e por arrasto a página inteira) crescia para
+600px+ em vez de a tabela ficar só com scroll horizontal próprio, que é o
+que `overflow-x-auto` devia estar a fazer. Isto só ficava visível depois
+de existirem transações (a tabela só aparece com dados — daí o Dashboard
+vazio parecer bem responsivo e a página de Transações não).
+
+**Correção** (aplicada uma só vez, na estrutura partilhada por toda a app,
+não tabela a tabela): `min-w-0` acrescentado a esse único `<div>` em
+`app-shell.tsx` — o mesmo truque que a barra de navegação inferior já usava
+internamente, só que em falta um nível acima. Verificado com uma reprodução
+isolada (HTML mínimo com o mesmo padrão flex, fora da app) que
+`document.documentElement.scrollWidth` passa de 699px para exatamente
+390px (a largura do ecrã) só com esta mudança — e confirmado que a mesma
+tabela de 600px, e a tabela equivalente em `/admin`
+(`min-w-[560px]`), ficam ambas corretamente resolvidas por esta única
+correção partilhada, sem precisar de tocar em cada tabela.
+
+**Duas correções extra, especificamente por causa do pedido de verificar
+compatibilidade com Safari/iPhone**, encontradas ao rever a app com esse
+foco (não reportadas diretamente pelos utilizadores, mas com o mesmo
+sintoma final de "a app não se comporta bem no telemóvel"):
+
+1. *Zoom automático ao tocar num campo*: o Safari do iOS (e alguns Android
+   mais antigos) aumenta o zoom da página sozinho sempre que a pessoa toca
+   num campo de formulário com `font-size` abaixo de 16px — e a app usa
+   `text-sm` (14px) em quase todos os inputs/selects
+   (`src/components/ui/input.tsx` e vários `<select>` inline). Corrigido
+   globalmente em `globals.css`, com uma media query até 640px (só onde
+   isto acontece a sério, em telemóvel — o tamanho de letra em ecrã largo
+   fica inalterado).
+2. *Barra de navegação inferior sobreposta pelo indicador de "home"*: em
+   iPhones sem botão físico (todos os atuais), o Safari reserva uma faixa
+   para o gesto de "home" — uma barra fixa (`fixed bottom-0`) sem margem
+   para essa área fica demasiado colada a ela. Corrigido com
+   `env(safe-area-inset-bottom)` na barra e no espaço reservado para ela em
+   `<main>`; isto só produz um valor diferente de zero com
+   `viewportFit: "cover"` no `viewport` da app — que não existia (o
+   Next.js só injetava o valor por omissão, sem este campo), por isso
+   passou a ser definido explicitamente em `src/app/layout.tsx`.
+
+**Verificação**: `tsc`, `eslint` e a suite de testes (93 testes) sem
+alterações — este é um bug de CSS/layout, não de lógica; a verificação
+principal foi a reprodução isolada acima, mais confirmação de que as três
+classes/regras (`min-w-0`, a media query dos 16px, e
+`safe-area-inset-bottom`) aparecem de facto no CSS compilado
+(`.next/static/chunks/*.css`) depois do `next build`.

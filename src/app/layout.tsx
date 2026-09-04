@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ToastProvider } from "@/components/toast-provider";
 
@@ -17,6 +17,21 @@ const FONT_STACK =
 export const metadata: Metadata = {
   title: "Konta — Gestor Financeiro Pessoal",
   description: "Regista, entende, prevê e orienta o teu dinheiro.",
+};
+
+// [Correção — feedback beta, ecrã "precisa de zoom out" no iPhone] O
+// Next.js já injeta `width=device-width, initial-scale=1` por omissão
+// mesmo sem este export (confirmado a olhar o HTML gerado) — isso não era
+// a causa do bug reportado (essa é a falta de `min-w-0` em
+// src/components/app-shell.tsx). Este export explícito só acrescenta
+// `viewportFit: "cover"`, necessário para os valores de
+// `env(safe-area-inset-*)` usados na barra de navegação inferior
+// (app-shell.tsx) deixarem de ser sempre 0 e passarem a refletir a área do
+// indicador de "home" dos iPhones mais recentes.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

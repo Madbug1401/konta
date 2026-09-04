@@ -98,3 +98,20 @@ select,
 textarea {
   min-height: 2.75rem;
 }
+
+/* [Correção — feedback beta, ecrã "precisa de zoom out" no iPhone] O Safari
+ * do iOS (e alguns Android mais antigos) aumenta o zoom da página sozinho
+ * sempre que a pessoa toca num campo com font-size < 16px — a app usa
+ * `text-sm` (14px) em quase todos os inputs/selects, por isso qualquer
+ * toque num campo dava um "salto" de zoom que a pessoa depois tinha de
+ * desfazer manualmente, mesmo fora desse campo. Corrige-se só até ao
+ * breakpoint `sm` do Tailwind (640px — onde este comportamento acontece a
+ * sério, em ecrãs de telemóvel), para não mudar o tamanho de letra
+ * intencional dos formulários em ecrã largo. */
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

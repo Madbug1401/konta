@@ -78,7 +78,21 @@ export function AppShell({
         </div>
       </aside>
 
-      <div className="flex min-h-screen flex-1 flex-col">
+      {/* [Correção — feedback beta, ecrã "precisa de zoom out" no iPhone e
+          Android] `min-w-0` é o mesmo truque já usado abaixo na barra de
+          navegação (ver comentário na `<nav>`), só que em falta aqui, um
+          nível acima: sem isto, uma tabela larga em qualquer página (ex: a
+          de Transações, com `min-w-[600px]`) tem `min-width: auto` por
+          omissão como filho flex — o browser recusa-se a encolhê-la abaixo
+          do conteúdo, e como este é o único filho principal da linha flex
+          `flex min-h-screen` acima, a página INTEIRA cresce para caber a
+          tabela, em vez de só a tabela ganhar scroll horizontal próprio
+          (que já tinha `overflow-x-auto`, mas nunca chegava a entrar em
+          ação). Confirmado em Chrome com user-agent Android e no motor
+          WebKit — não é um bug específico do Safari, por isso corrige-se
+          aqui, na estrutura partilhada por toda a app, não tabela a
+          tabela. */}
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 md:hidden">
           <span className="text-lg font-bold text-primary">Konta</span>
           <div className="flex items-center gap-1">
@@ -103,9 +117,16 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex-1 px-4 pb-24 pt-4 sm:px-6 sm:pb-6 md:pb-6">{children}</main>
+        {/* [Correção — feedback beta, compatibilidade Safari/iPhone] O
+            padding inferior reserva espaço para a barra de navegação fixa
+            (abaixo) — em iPhones com indicador de "home" (todos os atuais),
+            essa barra agora também cresce com `env(safe-area-inset-bottom)`
+            (ver viewport `viewportFit: "cover"` em layout.tsx), por isso o
+            espaço reservado aqui tem de crescer com ela — senão a última
+            transação/botão de cada página ficava tapado pela barra. */}
+        <main className="flex-1 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 sm:px-6 sm:pb-6 md:pb-6">{children}</main>
 
-        <nav className="fixed inset-x-0 bottom-0 z-10 flex items-center border-t border-border bg-surface py-2 md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-10 flex items-center border-t border-border bg-surface pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:hidden">
           {/* [Correção — feedback do utilizador em uso real no telemóvel]
               Antes eram slice(0,3)/slice(3,6) sem scroll — cabiam à justa em
               ecrãs largos, mas espremiam-se demasiado em ecrãs mais
