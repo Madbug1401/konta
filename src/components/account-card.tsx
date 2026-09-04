@@ -43,6 +43,14 @@ export interface AccountCardProps {
   // Só a página Contas passa isto como `true` — "Apagar" nunca aparece no
   // Dashboard. Omitido equivale a `false`.
   showDeleteButton?: boolean;
+  // [Correção — pedido explícito do utilizador] O lápis "Editar conta" só
+  // deve aparecer na página Contas (onde a conta é mesmo gerida) — no
+  // Resumo o cartão é só um atalho visual e o lápis ali confundia com
+  // "editar o saldo". Omitido equivale a `true` (mesma convenção de
+  // showArchiveButton acima), para não esconder o botão em nenhum sítio
+  // que já usa este cartão sem passar esta prop; só o Resumo passa
+  // `showEditButton={false}` explicitamente.
+  showEditButton?: boolean;
 }
 
 export function AccountCard({
@@ -55,6 +63,7 @@ export function AccountCard({
   isArchived = false,
   showArchiveButton = true,
   showDeleteButton = false,
+  showEditButton = true,
 }: AccountCardProps) {
   const Icon = ICONS[type];
   const hex = getAccountColorHex(color);
@@ -77,13 +86,15 @@ export function AccountCard({
           </span>
           <span className="text-sm font-medium">{name}</span>
         </div>
-        <Link
-          href={`/accounts/${id}/edit`}
-          aria-label="Editar conta"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
-        >
-          <Pencil className="h-4 w-4" aria-hidden="true" />
-        </Link>
+        {showEditButton && (
+          <Link
+            href={`/accounts/${id}/edit`}
+            aria-label="Editar conta"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+          >
+            <Pencil className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        )}
       </div>
       <MoneyDisplay amountMinor={balanceMinor} currency={currency} size="lg" />
       <div className="flex items-center justify-between gap-2">

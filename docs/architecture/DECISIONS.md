@@ -1100,3 +1100,25 @@ principal foi a reprodução isolada acima, mais confirmação de que as três
 classes/regras (`min-w-0`, a media query dos 16px, e
 `safe-area-inset-bottom`) aparecem de facto no CSS compilado
 (`.next/static/chunks/*.css`) depois do `next build`.
+
+## Botão "Editar conta" escondido no Resumo (só visível em Contas)
+
+**Pedido do utilizador**: no cartão de conta (`account-card.tsx`) do
+Resumo (`/dashboard`), o lápis "Editar conta" foi removido — a intenção do
+utilizador é que essa ação só exista na página Contas (`/accounts`), onde
+a conta é mesmo gerida; no Resumo o cartão é só um atalho visual de saldo,
+e o lápis ali estava a confundir-se com "editar o saldo em si".
+
+**Correção**: nova prop `showEditButton?: boolean` em `AccountCardProps`
+(`src/components/account-card.tsx`), a envolver o `<Link
+href={`/accounts/${id}/edit`}>` já existente. Segue exatamente a mesma
+convenção já usada por `showArchiveButton`/`showDeleteButton` nesse mesmo
+componente: omitida equivale a `true` (visível), para não esconder o botão
+em nenhum sítio que já usa este cartão sem passar esta prop
+explicitamente — só a chamada em `src/app/(app)/dashboard/page.tsx` passa
+`showEditButton={false}`. A página Contas (`src/app/(app)/accounts/page.tsx`)
+não precisou de nenhuma alteração — já não passava esta prop, por isso
+continua a mostrar o botão (omitido = `true`).
+
+**Verificação**: `tsc`, `eslint`, suite de testes (93 testes) e `next
+build` sem alterações — mudança de UI pura, sem lógica nova.

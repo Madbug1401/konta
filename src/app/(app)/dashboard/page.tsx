@@ -145,6 +145,7 @@ export default async function DashboardPage() {
                 currency={account.currency}
                 color={account.color}
                 showArchiveButton={false}
+                showEditButton={false}
               />
             ))}
           </div>
