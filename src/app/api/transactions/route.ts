@@ -50,7 +50,13 @@ export const GET = withErrorHandling("api.transactions.get", async (request: Req
 // [Regra 6/7 do briefing] Uma transferência nunca é tratada como despesa — é
 // validada e persistida com type=TRANSFER e destinationAccountId, nunca como
 // EXPENSE com um campo extra "para onde foi".
-const CreateTransactionSchema = z
+// [Milestone 3 — Tool Registry] Exportado para a tool `create_transaction`
+// (src/lib/ai/tools/tools/create-transaction.ts) reutilizar literalmente
+// este schema, em vez de redefinir as mesmas regras (incluindo os .refine()
+// abaixo) uma segunda vez — ver docs/konta-ai-design.html, secção E
+// ("paramsSchema: o mesmo Zod que já existe"). Nenhuma regra de validação
+// mudou; só deixou de ser privado a este ficheiro.
+export const CreateTransactionSchema = z
   .object({
     type: z.enum(["INCOME", "EXPENSE", "TRANSFER"]),
     accountId: z.string().min(1),

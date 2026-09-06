@@ -19,7 +19,11 @@ export const GET = withErrorHandling(
   },
 );
 
-const UpdateTransactionSchema = z.object({
+// [Milestone 3 — Tool Registry] Exportado para a tool `update_transaction`
+// (src/lib/ai/tools/tools/update-transaction.ts) reutilizar literalmente
+// este schema — mesma razão do CreateTransactionSchema em
+// src/app/api/transactions/route.ts. Nenhuma regra de validação mudou.
+export const UpdateTransactionSchema = z.object({
   // Mesma correção de src/app/api/transactions/route.ts — ver comentário lá.
   amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
   categoryId: z.string().min(1).optional(),
