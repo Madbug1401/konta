@@ -1,11 +1,11 @@
-# Konta — Estado atual do projeto (25/08/2026)
+# Konta — Estado atual do projeto (atualizado 06/09/2026)
 
 Este documento é um retrato honesto do que existe hoje no repositório, com
-referências a ficheiros reais — não uma descrição de intenções. A app está
-a correr localmente no teu PC (`http://localhost:3000`), com base de dados
-Postgres real (Docker), 21 testes automáticos a passar, e já foi usada por
-ti para criar contas e transações a sério — incluindo um bug que encontraste
-em uso real e que já foi corrigido (ver secção 6).
+referências a ficheiros reais — não uma descrição de intenções. Escrito
+originalmente em 25/08/2026; as secções 5, 7 e 10 foram atualizadas em
+06/09/2026 para refletir trabalho feito desde então (Dívidas, Metas,
+arquivamento/remoção de conta, painel de Estatísticas, feedback in-app,
+agrupamento por moeda no Dashboard) — ver `git log` para o histórico exato.
 
 ## 1. O que é o Konta hoje
 
@@ -82,18 +82,32 @@ poder ser reutilizado por Web, futuro Mobile, relatórios e (mais tarde) IA.
 
 - `/login`, `/register`
 - `/dashboard` — saldo disponível, património, receitas/despesas do mês,
-  fluxo de caixa, cartões de conta, últimas transações
-- `/accounts` — lista de contas com saldo calculado + criação de conta
+  fluxo de caixa, cartões de conta, últimas transações, agrupado por moeda
+- `/accounts` — lista de contas com saldo calculado, criação (com escolha de
+  moeda), edição, arquivamento e remoção (só quando a conta nunca foi usada
+  — ver `docs/architecture/DELETE_POLICY.md`); detalhe de investimento e
+  histórico de avaliações para contas do tipo INVESTMENT
 - `/transactions` — histórico completo com pesquisa, filtros (conta,
   categoria, tipo, período), edição e remoção
 - `/transactions/new`, `/transactions/[id]/edit`
+- `/debts` — criação de dívida com plano de parcelas, pagamento de parcela,
+  marcação de incumprimento
+- `/goals` — criação de meta (ligada opcionalmente a uma conta dedicada),
+  edição, progresso e projeção de data de conclusão
+- `/recurring` — séries recorrentes (criação, edição)
+- `/admin` — estatísticas da plataforma, só visível para emails em
+  `ADMIN_EMAILS`
+- Feedback in-app (formulário ligado a `POST /api/feedback`, visível para o
+  dono em `/admin`)
 
-**Deliberadamente por construir** (schema e Financial Engine já prontos,
-interface não — ver `src/app/(app)/debts/page.tsx` e `.../goals/page.tsx`,
-que mostram um "Em construção" explícito em vez de fingir dados):
+**Ainda por construir** — nenhuma UI dedicada, mesmo com dados/motor prontos
+onde aplicável:
 
-- `/debts`
-- `/goals`
+- Materialização automática de `RecurringTransaction` em `Transaction` real
+  (o cálculo de próxima ocorrência já existe em `financial-engine/recurring.ts`,
+  falta o job/rota que a executa)
+- Onboarding e qualquer camada de IA (ver `docs/konta-ai-design.html` —
+  especificação fechada, nenhum código escrito ainda)
 
 ## 6. Bugs — os 5 da auditoria original + 1 encontrado em uso real
 
@@ -118,15 +132,22 @@ Teste de regressão novo em `balance.test.ts`. Este é exatamente o tipo de
 problema que só aparece com uso real — a suite de testes cresceu de 20 para
 21 por causa dele.
 
-## 7. Testes — 21/21 a passar
+## 7. Testes
 
 ```
 npm test
 ```
 
-`money.test.ts` (7), `balance.test.ts` (7), `audit-regressions.test.ts` (7).
-Corridos e confirmados na tua própria máquina, não só no ambiente de
-desenvolvimento.
+A suite (Vitest) cresceu desde a versão original deste documento — cobre
+hoje, além do Financial Engine (`money`, `balance`, `cashflow`,
+`audit-regressions`), também `accounts`, `debts`, `goals`,
+`recurring-transactions`, `users`, `admin`, `feedback`, `client` (tratamento
+de erro da pool do Postgres), `pagination`, `rate-limit`, `api-error`, e
+rotas de API (`transactions`, `transactions/[id]`, `health`) — 19 ficheiros
+`*.test.ts` no total. O número exato de testes/estado "a passar" não é
+reafirmado aqui sem correr a suite de facto (última confirmação real ficou
+registada em `docs/architecture/DECISIONS.md`, por data) — corre `npm test`
+para o número atual em vez de confiar num valor escrito neste documento.
 
 ## 8. Onde a arquitetura ainda não é a "final"
 
@@ -136,28 +157,31 @@ desenvolvimento.
   `src/lib/db/*.ts`, com assinaturas idênticas às que o Prisma Client teria.
   Na tua máquina isto pode não ser necessário — `npx prisma generate && npx
   prisma db push` deve funcionar sem bloqueios (ver `WINDOWS_SETUP.md`).
-- **Sem camada db/API para Debts, Goals, Recurring, Investments** — só a
-  lógica de cálculo (Financial Engine) existe; falta persistência e rotas.
 - **Sem materialização automática de transações recorrentes** — a função que
   calcula "quando é a próxima ocorrência" existe (`recurring.ts`), mas nada
   a transforma ainda numa `Transaction` real na base de dados.
 - **Migração do protótipo** — só o mapeamento/desenho existe
   (`docs/architecture/MIGRATION.md`); o script executável de migração dos
   dados de `localStorage` ainda não foi escrito.
-- **IA (Konta AI)** — deliberadamente fora de âmbito nesta fase, mas o
-  desenho já isola o Financial Engine em funções puras reutilizáveis por um
-  futuro agente controlado.
+- **IA (Konta AI)** — deliberadamente fora de âmbito nesta fase. A
+  especificação de produto e arquitetura já está fechada em
+  `docs/konta-ai-design.html` (AI Gateway, Context Builder, Tool Registry,
+  Permission Layer, tools de V1) — nenhuma linha de código de IA foi escrita
+  ainda; o Financial Engine já está isolado em funções puras reutilizáveis
+  por essa futura camada.
 
 ## 9. Como correr
 
 Ver `WINDOWS_SETUP.md` na raiz do projeto — já confirmado a funcionar do
-zero na tua máquina: Docker Desktop para o Postgres, `npm install`, duas
-migrações SQL, `npm test`, `npm run dev`.
+zero na tua máquina: Docker Desktop para o Postgres, `npm install`, as
+migrações SQL em `prisma/manual-sql/` (por ordem numérica), `npm test`,
+`npm run dev`.
 
 ## 10. Próximo passo recomendado
 
-Interface de **Dívidas** e **Metas** — é o trabalho que falta para as duas
-páginas deixarem de dizer "Em construção", e o schema/Financial Engine já
-estão prontos para isso. Alternativa: escrever o script de migração real do
-`localStorage` do protótipo, se preferires garantir primeiro que nenhum
+Dívidas e Metas já têm interface — deixou de ser o próximo passo. Duas
+frentes ficam em aberto, sem uma depender da outra: (1) Konta AI Milestone 1
+(AI Gateway sem tools, ver `docs/konta-ai-design.html` e o audit técnico
+correspondente), e (2) o script de migração real do `localStorage` do
+protótipo, se preferires garantir primeiro que nenhum
 dado antigo se perde.

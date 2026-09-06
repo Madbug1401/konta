@@ -94,14 +94,15 @@ HTTPS: `docs/architecture/DEPLOYMENT.md`. Política de backups:
 
 ## Estado deste milestone
 
-Implementado: autenticação (registo/login/logout, isolamento
-multi-utilizador), contas com saldo calculado, transações (criar, listar com
-filtros e pesquisa, editar, remover), categorias, dashboard com indicadores
-reais, tema claro/escuro, navegação responsiva (sidebar desktop / barra
-inferior mobile).
+Ver `docs/STATUS.md` para o retrato atualizado e detalhado do que existe.
+Resumo: autenticação, contas (com arquivamento e remoção condicional),
+transações, categorias, dívidas, metas, transações recorrentes, dashboard,
+painel de estatísticas (admin) e feedback in-app estão implementados e têm
+interface própria.
 
 Ainda não implementado (por desenho, não por esquecimento — ver
 `docs/architecture/OVERVIEW.md`, "O que fica para o próximo milestone"):
-interface de Dívidas e Metas, geração automática de transações recorrentes,
-script de migração do protótipo pronto a correr, adoção final do Prisma
-Client.
+geração automática de transações recorrentes, script de migração do
+protótipo pronto a correr, adoção final do Prisma Client, e qualquer camada
+de Konta AI (especificação fechada em `docs/konta-ai-design.html`, nenhum
+código escrito ainda).

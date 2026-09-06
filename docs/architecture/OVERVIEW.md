@@ -49,9 +49,24 @@ só o segundo ponto de entrada.
 | `/api/auth/logout` | POST | sessão | Invalida o cookie |
 | `/api/auth/me` | GET | sessão | Dados do utilizador autenticado |
 | `/api/accounts` | GET, POST | sessão | Lista contas (com saldo calculado) / cria conta |
+| `/api/accounts/:id` | GET, PATCH, DELETE | sessão | Detalhe, edição; remoção só se a conta nunca foi usada (ver `DELETE_POLICY.md`) |
+| `/api/accounts/:id/archive` | POST | sessão | Arquiva/desarquiva a conta (soft-delete) |
+| `/api/accounts/:id/investment-detail` | GET, POST, PATCH | sessão | Detalhe de investimento associado à conta |
+| `/api/accounts/:id/valuations` | GET, POST | sessão | Histórico de avaliações do investimento |
 | `/api/transactions` | GET, POST | sessão | Lista (com filtros) / cria transação |
 | `/api/transactions/:id` | GET, PATCH, DELETE | sessão | Detalhe, edição, remoção — sempre com verificação de posse |
 | `/api/categories` | GET, POST | sessão | Categorias de sistema + do utilizador |
+| `/api/debts` | GET, POST | sessão | Lista dívidas (com parcelas) / cria dívida com plano de parcelas |
+| `/api/debts/:debtId` | GET, PATCH | sessão | Detalhe, edição |
+| `/api/debts/:debtId/default` | POST | sessão | Marca a dívida como incumprida |
+| `/api/debts/:debtId/installments/:installmentId/pay` | POST | sessão | Regista o pagamento de uma parcela |
+| `/api/goals` | GET, POST | sessão | Lista metas / cria meta |
+| `/api/goals/:id` | GET, PATCH | sessão | Detalhe, edição |
+| `/api/goals/:id/status` | POST | sessão | Atualiza o estado da meta (ativa/alcançada/abandonada) |
+| `/api/recurring-transactions` | GET, POST | sessão | Lista séries recorrentes / cria série |
+| `/api/recurring-transactions/:id` | GET, PATCH | sessão | Detalhe, edição |
+| `/api/feedback` | POST | sessão | Envia feedback do utilizador autenticado |
+| `/api/health` | GET | — | Healthcheck de infraestrutura (processo + ligação à base de dados) |
 
 Autenticação: cookie `konta_session` (httpOnly) para a Web, ou
 `Authorization: Bearer <token>` para clientes não-browser (mobile) — ver
@@ -97,8 +112,6 @@ num contentor para nunca partir o layout em ecrãs estreitos.
 
 ## O que fica para o próximo milestone
 
-- Interface de Dívidas e Metas (o modelo de dados e o Financial Engine já
-  suportam ambos — só falta a UI, ver `debts/page.tsx` e `goals/page.tsx`).
 - Geração automática de ocorrências de `RecurringTransaction` (o cálculo de
   `computeNextRunDate`/`advanceSeries` já existe; falta o job/rota que os
   materializa em `Transaction`).

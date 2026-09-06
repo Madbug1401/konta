@@ -1,0 +1,961 @@
+<title>Konta AI</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    /* Konta é dark-first por decisão de produto (ver DECISÃO 14 do próprio
+       schema) — este documento herda os mesmos tokens de src/app/globals.css,
+       em vez de inventar uma identidade nova só para um documento sobre o
+       próprio Konta. */
+    --bg:#12141c;
+    --surface:#1b1e2b;
+    --surface-2:#232738;
+    --border:#2c3348;
+    --fg:#e8ecef;
+    --muted:#9aa3b8;
+    --accent:#ffd247;
+    --accent-ink:#171717;
+    --success:#1ea97c;
+    --danger:#e44a4a;
+    --warning:#ff8c00;
+    --info:#09a6c4;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.5);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f5f6fa; --surface:#ffffff; --surface-2:#eef0f6; --border:#dfe3ec;
+      --fg:#171a24; --muted:#5b6478; --accent:#b8860b; --accent-ink:#ffffff;
+      --shadow: 0 1px 2px rgba(20,20,40,.06), 0 8px 24px -14px rgba(20,20,40,.18);
+      color-scheme: light;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f5f6fa; --surface:#ffffff; --surface-2:#eef0f6; --border:#dfe3ec;
+    --fg:#171a24; --muted:#5b6478; --accent:#b8860b; --accent-ink:#ffffff;
+    --shadow: 0 1px 2px rgba(20,20,40,.06), 0 8px 24px -14px rgba(20,20,40,.18);
+    color-scheme: light;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height:1.6; font-size:16px;
+  }
+  h1,h2,h3{ font-family:'Archivo', 'Arial Black', sans-serif; text-wrap:balance; line-height:1.15; margin:0; }
+  code, .mono, th, td, .num{ font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .num{ font-variant-numeric: tabular-nums; }
+  a{ color:inherit; }
+  p{ margin:0 0 1em; }
+  p:last-child{ margin-bottom:0; }
+
+  .shell{ display:flex; max-width:1200px; margin:0 auto; align-items:flex-start; }
+  nav.toc{
+    position:sticky; top:0; height:100vh; width:222px; flex-shrink:0;
+    padding:26px 14px 26px 26px; overflow-y:auto; display:flex; flex-direction:column; gap:1px;
+  }
+  nav.toc .brand{
+    font-family:'Archivo', sans-serif; font-weight:900; font-size:1.02rem;
+    margin-bottom:14px; display:flex; align-items:baseline; gap:.4em;
+  }
+  nav.toc .brand span{ color:var(--accent); }
+  nav.toc a{
+    text-decoration:none; color:var(--muted); font-size:.78rem;
+    padding:5px 9px; border-radius:7px; display:flex; gap:.5em; align-items:baseline;
+  }
+  nav.toc a b{ font-family:'IBM Plex Mono', monospace; font-weight:600; color:var(--muted); font-size:.68rem; width:1.1em; flex-shrink:0; }
+  nav.toc a:hover{ background:var(--surface-2); color:var(--fg); }
+  nav.toc a.active{ background:var(--surface-2); color:var(--fg); }
+  nav.toc a.active b{ color:var(--accent); }
+  nav.toc .divider{ height:1px; background:var(--border); margin:10px 4px; }
+
+  main{ flex:1; min-width:0; padding:26px 40px 90px; }
+  .measure{ max-width:66ch; }
+  .toc-mobile{ display:none; }
+
+  header.hero{ padding:16px 0 30px; border-bottom:1px solid var(--border); margin-bottom:34px; }
+  header.hero .eyebrow{
+    font-family:'IBM Plex Mono', monospace; font-size:.7rem; letter-spacing:.13em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+  header.hero .eyebrow .v{ color:var(--accent); border:1px solid var(--border); border-radius:5px; padding:1px 7px; }
+  header.hero h1{ font-size:clamp(2rem, 4.2vw, 2.9rem); font-weight:900; margin-bottom:14px; }
+  header.hero h1 em{ font-style:normal; color:var(--accent); }
+  header.hero .lede{ font-size:1.03rem; color:var(--muted); max-width:60ch; }
+
+  .northstar{
+    margin-top:24px; background:var(--surface); border:1px solid var(--border); border-left:4px solid var(--accent);
+    border-radius:12px; padding:20px 24px; box-shadow:var(--shadow);
+  }
+  .northstar .label{ font-family:'IBM Plex Mono', monospace; font-size:.7rem; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+  .northstar q{ font-family:'Archivo', sans-serif; font-weight:800; font-size:1.18rem; line-height:1.35; quotes:none; }
+
+  section{ margin:60px 0; scroll-margin-top:22px; }
+  section .kicker{
+    font-family:'IBM Plex Mono', monospace; font-size:.74rem; letter-spacing:.1em; color:var(--accent);
+    margin-bottom:10px; display:flex; align-items:center; gap:.6em;
+  }
+  section .kicker::after{ content:""; height:1px; flex:1; background:var(--border); }
+  section h2{ font-size:1.62rem; margin-bottom:16px; }
+  section h3{ font-size:1.02rem; margin:26px 0 10px; color:var(--fg); }
+  .lead{ color:var(--muted); font-size:1.01rem; margin-bottom:20px; }
+
+  .badge{
+    display:inline-flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:.63rem;
+    letter-spacing:.07em; text-transform:uppercase; padding:3px 9px; border-radius:999px;
+    border:1px solid var(--border); color:var(--muted); vertical-align:middle;
+  }
+  .badge.future{ border:1px dashed var(--warning); color:var(--warning); }
+  .badge.existing{ border:1px solid var(--success); color:var(--success); }
+  h2 .badge, h3 .badge{ margin-left:10px; transform:translateY(-2px); }
+
+  .callout{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin:20px 0; }
+  .callout.warn{ border-left:4px solid var(--warning); }
+  .callout.good{ border-left:4px solid var(--success); }
+  .callout.hot{ border-left:4px solid var(--accent); }
+  .callout .h{ font-weight:700; font-size:.85rem; margin-bottom:6px; display:flex; align-items:center; gap:.5em; }
+  .callout p{ color:var(--fg); }
+
+  .grid{ display:grid; gap:14px; margin:22px 0; }
+  .grid.cols-2{ grid-template-columns:repeat(2,1fr); }
+  .grid.cols-3{ grid-template-columns:repeat(3,1fr); }
+  .grid.cols-4{ grid-template-columns:repeat(4,1fr); }
+  @media (max-width:860px){ .grid.cols-2,.grid.cols-3,.grid.cols-4{ grid-template-columns:1fr; } }
+
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; }
+  .card h4{ font-family:'Archivo', sans-serif; font-weight:800; font-size:.95rem; margin:0 0 8px; }
+  .card p{ color:var(--muted); font-size:.9rem; }
+  .card .mono-tag{ display:inline-block; font-size:.72rem; padding:2px 8px; border-radius:6px; background:var(--surface-2); color:var(--muted); margin-bottom:10px; }
+  .card.dim{ opacity:.9; border-style:dashed; }
+
+  .table-wrap{ overflow-x:auto; margin:20px 0; border:1px solid var(--border); border-radius:12px; }
+  table{ width:100%; border-collapse:collapse; font-size:.85rem; min-width:560px; }
+  thead th{
+    text-align:left; font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:.68rem; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--muted); background:var(--surface-2); padding:10px 14px; border-bottom:1px solid var(--border);
+  }
+  tbody td{ padding:11px 14px; border-bottom:1px solid var(--border); vertical-align:top; color:var(--fg); }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody td.muted{ color:var(--muted); }
+  tr[data-risk="low"] td:first-child{ border-left:3px solid var(--success); }
+  tr[data-risk="medium"] td:first-child{ border-left:3px solid var(--info); }
+  tr[data-risk="high"] td:first-child{ border-left:3px solid var(--warning); }
+  tr[data-risk="critical"] td:first-child{ border-left:3px solid var(--danger); }
+
+  .dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; position:relative; top:-1px; }
+  .dot.low{ background:var(--success); } .dot.medium{ background:var(--info); }
+  .dot.high{ background:var(--warning); } .dot.critical{ background:var(--danger); }
+
+  figure.diagram{ margin:24px 0; }
+  figure.diagram svg{ width:100%; height:auto; display:block; color:var(--fg); }
+  figure.diagram .box rect{ fill:var(--surface); stroke:var(--border); stroke-width:1.5; }
+  figure.diagram .box.accent rect{ stroke:var(--accent); }
+  figure.diagram .box .title{ font-family:'Archivo',sans-serif; font-weight:800; font-size:13px; fill:currentColor; }
+  figure.diagram .box .sub{ font-family:'IBM Plex Sans',sans-serif; font-size:10.5px; fill:var(--muted); }
+  figure.diagram .lbl{ font-family:'IBM Plex Mono',monospace; font-size:10px; fill:var(--muted); }
+  figure.diagram .lbl.hot{ fill:var(--accent); font-weight:600; }
+  figure.diagram line, figure.diagram path.link{ stroke:currentColor; stroke-width:1.4; fill:none; opacity:.75; }
+  figure.diagram path.link.dashed{ stroke-dasharray:3 4; opacity:.55; }
+  figure.diagram .chip rect{ fill:var(--surface-2); stroke:var(--border); }
+  figure.diagram .chip.low rect{ stroke:var(--success); }
+  figure.diagram .chip.medium rect{ stroke:var(--info); }
+  figure.diagram .chip.high rect{ stroke:var(--warning); }
+  figure.diagram .chip.critical rect{ stroke:var(--danger); }
+  figure.diagram .chip .title{ font-size:11px; }
+  figcaption{ font-size:.85rem; color:var(--muted); margin-top:12px; }
+  .legend{ display:flex; flex-wrap:wrap; gap:16px; margin-top:8px; font-size:.78rem; color:var(--muted); }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .legend i{ width:10px; height:10px; border-radius:3px; display:inline-block; }
+
+  .vignette{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 18px 8px; margin:18px 0 28px; }
+  .vignette .vhead{ display:flex; align-items:baseline; gap:.6em; margin-bottom:14px; flex-wrap:wrap; }
+  .vignette .vhead b{ font-family:'Archivo',sans-serif; font-size:.95rem; }
+  .vignette .vhead span{ font-family:'IBM Plex Mono',monospace; font-size:.7rem; color:var(--muted); }
+  .bubble{ max-width:78%; padding:9px 13px; border-radius:12px; font-size:.88rem; margin-bottom:10px; line-height:1.45; }
+  .bubble.user{ margin-left:auto; background:color-mix(in srgb, var(--accent) 18%, var(--surface)); border:1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-bottom-right-radius:3px; }
+  .bubble.ai{ background:var(--surface-2); border:1px solid var(--border); border-bottom-left-radius:3px; }
+  .bubble.confirm{ background:transparent; border:1.5px dashed var(--warning); font-family:'IBM Plex Mono',monospace; font-size:.78rem; color:var(--fg); }
+  .bubble .btnrow{ margin-top:8px; display:flex; gap:8px; }
+  .bubble .btnrow span{ font-family:'IBM Plex Sans',sans-serif; font-size:.78rem; font-weight:600; padding:4px 12px; border-radius:7px; }
+  .bubble .btnrow span.yes{ background:var(--accent); color:var(--accent-ink); }
+  .bubble .btnrow span.no{ border:1px solid var(--border); color:var(--muted); }
+  .note{ color:var(--muted); font-size:.85rem; margin:6px 0 0; }
+
+  .roadmap{ display:flex; gap:14px; overflow-x:auto; padding:4px 4px 14px; margin:22px -4px; }
+  .stage{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; flex:0 0 250px; }
+  .stage.now{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .stage .stagelabel{ font-family:'IBM Plex Mono',monospace; font-size:.68rem; color:var(--accent); letter-spacing:.07em; margin-bottom:6px; }
+  .stage h4{ font-family:'Archivo',sans-serif; font-weight:800; font-size:1.02rem; margin:0 0 10px; }
+  .stage h5{ font-size:.68rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:13px 0 6px; }
+  .stage ul{ margin:0; padding-left:1.1em; font-size:.83rem; }
+  .stage li{ margin-bottom:5px; }
+  .stage li.out{ color:var(--muted); text-decoration:line-through; text-decoration-color:var(--border); }
+
+  .timeline{ margin:20px 0; padding-left:4px; }
+  .titem{ position:relative; padding:0 0 20px 26px; border-left:2px solid var(--border); }
+  .titem:last-child{ border-color:transparent; padding-bottom:0; }
+  .titem::before{ content:""; position:absolute; left:-6px; top:2px; width:10px; height:10px; border-radius:50%; background:var(--surface); border:2px solid var(--accent); }
+  .titem .tlabel{ font-family:'IBM Plex Mono',monospace; font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+  .titem .tbody{ font-size:.9rem; margin-top:2px; }
+  .titem.ai::before{ border-color:var(--info); }
+
+  ol.steps{ margin:16px 0; padding-left:1.3em; }
+  ol.steps li{ margin-bottom:9px; font-size:.92rem; }
+  ol.steps li b{ font-family:'IBM Plex Mono',monospace; font-weight:600; }
+
+  hr.rule{ border:none; border-top:1px solid var(--border); margin:52px 0; }
+  .closing{ background:linear-gradient(160deg, color-mix(in srgb, var(--accent) 10%, var(--surface)), var(--surface)); border:1px solid var(--border); border-radius:16px; padding:32px 32px 30px; }
+  .closing h2{ font-size:1.5rem; margin-bottom:14px; }
+  .closing .principle{ font-family:'Archivo',sans-serif; font-weight:800; font-size:1.3rem; line-height:1.4; margin:6px 0 18px; }
+  .closing .signoff{ margin-top:20px; font-family:'IBM Plex Mono',monospace; font-size:.78rem; color:var(--muted); }
+
+  @media (max-width:900px){
+    nav.toc{ display:none; }
+    .toc-mobile{ display:flex; position:sticky; top:0; z-index:5; background:var(--bg); border-bottom:1px solid var(--border); padding:10px 14px; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .toc-mobile a{ flex-shrink:0; font-family:'IBM Plex Mono',monospace; font-size:.7rem; color:var(--muted); text-decoration:none; border:1px solid var(--border); border-radius:999px; padding:5px 11px; white-space:nowrap; }
+    main{ padding:20px 18px 70px; }
+    header.hero h1{ font-size:1.6rem; }
+  }
+</style>
+
+<div class="toc-mobile" id="tocMobile">
+  <a href="#visao">A · Visão</a><a href="#mobileweb">B · Mobile/Web</a><a href="#personality">C · Personality</a>
+  <a href="#arquitetura">D · Agent</a><a href="#tools">E · Tools</a><a href="#permissoes">F · Permissões</a>
+  <a href="#contexto">G · Contexto</a><a href="#memoria">H · Memory</a><a href="#planner">I · Planner</a>
+  <a href="#custo">J · Custo</a><a href="#experiencia">K · UX</a><a href="#v1">L · V1</a><a href="#roadmap">M · Roadmap</a>
+</div>
+
+<div class="shell">
+  <nav class="toc" id="tocDesktop">
+    <div class="brand">Konta <span>AI</span></div>
+    <a href="#visao"><b>A</b> Visão final</a>
+    <a href="#mobileweb"><b>B</b> Mobile &amp; Web</a>
+    <a href="#personality"><b>C</b> Personality Layer</a>
+    <a href="#arquitetura"><b>D</b> Agent Architecture</a>
+    <a href="#tools"><b>E</b> Tool Architecture</a>
+    <a href="#permissoes"><b>F</b> Permission System</a>
+    <a href="#contexto"><b>G</b> Context &amp; Privacy</a>
+    <a href="#memoria"><b>H</b> Memory Layer</a>
+    <a href="#planner"><b>I</b> AI Planner</a>
+    <a href="#custo"><b>J</b> Cost</a>
+    <a href="#experiencia"><b>K</b> Experiência</a>
+    <a href="#v1"><b>L</b> V1</a>
+    <a href="#roadmap"><b>M</b> Roadmap</a>
+    <div class="divider"></div>
+    <a href="#principio"><b>·</b> O princípio</a>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <div class="eyebrow"><span class="v">v1.0</span> Product + Architecture Specification — documento de referência oficial</div>
+      <h1>De gestor financeiro<br>a <em>assistente financeiro.</em></h1>
+      <p class="lede">O Konta continua a ser a infraestrutura — contas, transações, categorias, dívidas, metas, investimentos, o Financial Engine, as regras, a persistência, a segurança. A IA é uma nova interface para essa infraestrutura, não uma funcionalidade dentro dela.</p>
+
+      <div class="northstar">
+        <div class="label">North Star — o princípio central do produto</div>
+        <q>Como fazemos com que uma pessoa que normalmente não usaria um gestor financeiro consiga controlar a sua vida financeira simplesmente conversando com o Konta?</q>
+      </div>
+    </header>
+
+    <!-- ============================================================ A -->
+    <section id="visao">
+      <div class="kicker">A · Visão final</div>
+      <h2>O problema, e a definição que o resolve</h2>
+      <div class="measure">
+        <p class="lead">Hoje, para o Konta ser útil, o utilizador tem de aprender o Konta primeiro: ir a Contas → Nova Conta, depois Categorias, depois Transações → Nova Transação, configurar rendimentos, criar Dívidas, criar Metas, e só depois interpretar gráficos e perceber a própria situação financeira. Nenhum destes passos está errado — é exatamente assim que qualquer gestor financeiro sério funciona. O problema é que uma pessoa sem o hábito de controlar as próprias finanças desiste antes de chegar ao valor: para ela, "aprender a usar o Konta" já é a barreira.</p>
+
+        <p>A definição que resolve isto tem de ficar inequívoca, porque tudo o resto do documento depende dela:</p>
+      </div>
+
+      <div class="callout hot">
+        <div class="h">Definição oficial</div>
+        <p><strong>Konta não é um gestor financeiro com um chatbot.</strong> Konta é um assistente financeiro pessoal inteligente que utiliza o gestor financeiro como infraestrutura.</p>
+      </div>
+
+      <div class="measure">
+        <p>Na prática: o utilizador deixa de pensar "que ecrã tenho de abrir para fazer isto" e passa a pensar "vou simplesmente dizer ao Konta o que quero". <span class="mono" style="color:var(--muted)">"Gastei 750 CVE no almoço"</span> em vez de Transações → Nova Transação. <span class="mono" style="color:var(--muted)">"Quero comprar um computador de 120.000 até março"</span> em vez de preencher um formulário de Meta sem saber que valor mensal é realista.</p>
+      </div>
+
+      <h3>O que o Konta de hoje continua a possuir <span class="badge existing">Konta hoje</span></h3>
+      <div class="grid cols-3">
+        <div class="card"><h4>Dados e regras</h4><p>Contas, Transações, Categorias, Dívidas, Metas, Investimentos — o schema, a validação e o isolamento por utilizador já existentes.</p></div>
+        <div class="card"><h4>Cálculo</h4><p>O Financial Engine: saldo, cashflow, taxa de poupança, plano de parcelas, progresso de metas, performance de investimento. Puro, testado, sem I/O.</p></div>
+        <div class="card"><h4>Infraestrutura</h4><p>Persistência em Postgres, autenticação por sessão/Bearer, validação Zod, isolamento multi-utilizador, políticas de não-eliminação.</p></div>
+      </div>
+      <p class="measure">A IA não duplica nenhuma destas três colunas — só lhes dá uma porta de entrada nova. Os dois invariantes que atravessam todo este documento:</p>
+
+      <div class="grid cols-2">
+        <div class="card"><h4>1 · A IA nunca é uma segunda fonte de verdade</h4><p>Todo o número que a IA disser vem de uma chamada ao Financial Engine ou à base de dados — nunca de uma soma feita pelo próprio modelo.</p></div>
+        <div class="card"><h4>2 · A interface manual nunca é removida</h4><p>A IA é um caminho adicional para os mesmos dados e ações, não um substituto. Quem nunca escrever uma frase ao Konta continua a ter uma aplicação completa.</p></div>
+      </div>
+    </section>
+
+    <!-- ============================================================ B -->
+    <section id="mobileweb">
+      <div class="kicker">B · Mobile &amp; Web</div>
+      <h2>Uma decisão oficial de produto, não um detalhe de layout</h2>
+      <p class="lead measure">Konta Mobile e Konta Web não são a mesma tela em dois tamanhos — têm papéis diferentes e deliberados. Isto não é responsive design; é uma escolha de produto que molda o que a IA prioriza em cada contexto.</p>
+
+      <div class="grid cols-2">
+        <div class="card">
+          <span class="mono-tag" style="color:var(--warning); border-color:var(--warning)">MOBILE = ACT</span>
+          <h4>Capturar e agir, com o mínimo de navegação</h4>
+          <p>Rapidez, entrada de dados, comandos naturais, perguntas rápidas, ações imediatas, acompanhamento simples. IA-first: eventualmente por voz.</p>
+          <div style="margin-top:12px; display:flex; flex-direction:column; gap:6px;">
+            <span class="bubble user" style="max-width:100%; margin:0;">"Gastei 500 CVE em transporte."</span>
+            <span class="bubble user" style="max-width:100%; margin:0;">"Quanto posso gastar hoje?"</span>
+            <span class="bubble user" style="max-width:100%; margin:0;">"Mostra as minhas dívidas."</span>
+          </div>
+        </div>
+        <div class="card">
+          <span class="mono-tag" style="color:var(--info); border-color:var(--info)">WEB = UNDERSTAND</span>
+          <h4>Analisar, comparar, planear, com espaço para pensar</h4>
+          <p>Dashboards, gráficos, histórico, comparações, relatórios, previsões, simulações, planeamento, análise profunda.</p>
+          <div style="margin-top:12px; display:flex; flex-direction:column; gap:6px;">
+            <span class="bubble user" style="max-width:100%; margin:0;">"Analisa os meus últimos seis meses."</span>
+            <span class="bubble user" style="max-width:100%; margin:0;">"Simula poupar mais 5.000 CVE por mês."</span>
+            <span class="bubble user" style="max-width:100%; margin:0;">"Como posso atingir esta meta mais cedo?"</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout hot">
+        <div class="h">Resumo oficial</div>
+        <p style="font-family:'Archivo',sans-serif; font-weight:800; font-size:1.05rem;">Mobile = Act · Web = Understand · AI = Intelligence</p>
+      </div>
+
+      <h3>Não construímos duas IAs</h3>
+      <p class="measure">Não existe "Mobile AI" + "Web AI" como dois sistemas. Existe <strong>um único Konta AI Agent</strong> — o mesmo Tool Registry, a mesma Permission Layer, o mesmo Context Builder, o mesmo Financial Engine, o mesmo Backend — com duas experiências de apresentação por cima. A diferença está na UX e no contexto de uso, nunca na lógica de negócio: dado que Konta não tem hoje uma app nativa separada (é uma Web app responsiva), isto significa concretamente um único ponto de entrada de chat, cujo tom e densidade de resposta se adaptam ao ecrã e ao momento — nunca dois back-ends, nunca duas verdades.</p>
+    </section>
+
+    <!-- ============================================================ C -->
+    <section id="personality">
+      <div class="kicker">C · Personality Layer</div>
+      <h2>Claude é o motor. Konta AI é o produto.</h2>
+      <div class="measure">
+        <p class="lead">Para o utilizador, não existe "Claude dentro do Konta" — existe <strong>Konta AI</strong>. Claude é o modelo de inteligência que a infraestrutura usa hoje para interpretar linguagem e raciocinar; a identidade, o tom e o comportamento do assistente pertencem ao Konta, e vivem numa camada própria entre a experiência do utilizador e o modelo. Isto não é só uma escolha de marca — é o que torna possível trocar de modelo no futuro sem que a personalidade do produto mude um milímetro.</p>
+      </div>
+
+      <h3>O que a Personality Layer controla</h3>
+      <div class="grid cols-4">
+        <div class="card"><h4>Identidade &amp; tom</h4><p>Como o Konta AI se apresenta e fala — sempre em português, sempre no registo já usado no resto do produto.</p></div>
+        <div class="card"><h4>Nível de detalhe</h4><p>Respostas curtas no Mobile, respostas analíticas na Web — mesma inteligência, densidade diferente.</p></div>
+        <div class="card"><h4>Confirmações &amp; incerteza</h4><p>Como uma proposta de ação é apresentada, e como o assistente admite quando não tem a certeza suficiente para agir sozinho.</p></div>
+        <div class="card"><h4>Limites do que pode afirmar</h4><p>Nunca apresentar uma opinião como facto financeiro, nunca inventar um número fora do que o Financial Engine calculou.</p></div>
+      </div>
+
+      <h3>A pilha conceptual completa</h3>
+      <figure class="diagram">
+        <svg viewBox="0 0 780 730" role="img" aria-label="Pilha de camadas do Konta AI, de cima para baixo: Utilizador, Konta AI Experience, Personality e Interaction Layer, AI Gateway, Context Builder, Claude, Tool e Permission System, Konta Backend, Financial Engine, Base de Dados — mostrando que Claude é uma camada substituível no meio da pilha, não o topo nem a base.">
+          <defs>
+            <marker id="arrowStack" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor" opacity=".7"/>
+            </marker>
+          </defs>
+          <!-- bands: x=90 w=460 h=50, step 66 starting y=26 -->
+          <g font-family="Archivo, sans-serif" font-weight="800" font-size="13">
+            <!-- Utilizador -->
+            <rect x="86" y="26" width="4" height="50" fill="var(--muted)"/>
+            <rect class="bandrect" x="90" y="26" width="460" height="50" rx="9" fill="var(--surface)" stroke="var(--border)"/>
+            <text x="320" y="56" text-anchor="middle" fill="currentColor">Utilizador</text>
+
+            <rect x="86" y="92" width="4" height="50" fill="var(--muted)"/>
+            <rect x="90" y="92" width="460" height="50" rx="9" fill="var(--surface)" stroke="var(--border)"/>
+            <text x="320" y="122" text-anchor="middle" fill="currentColor">Konta AI Experience</text>
+
+            <!-- Personality -->
+            <rect x="86" y="158" width="4" height="50" fill="var(--accent)"/>
+            <rect x="90" y="158" width="460" height="50" rx="9" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="320" y="188" text-anchor="middle" fill="var(--accent)">Personality / Interaction Layer</text>
+
+            <!-- AI machinery zone -->
+            <rect x="86" y="224" width="4" height="50" fill="var(--info)"/>
+            <rect x="90" y="224" width="460" height="50" rx="9" fill="var(--surface)" stroke="var(--border)"/>
+            <text x="320" y="254" text-anchor="middle" fill="currentColor">AI Gateway</text>
+
+            <rect x="86" y="290" width="4" height="50" fill="var(--info)"/>
+            <rect x="90" y="290" width="460" height="50" rx="9" fill="var(--surface)" stroke="var(--border)"/>
+            <text x="320" y="320" text-anchor="middle" fill="currentColor">Context Builder</text>
+
+            <rect x="86" y="356" width="4" height="50" fill="var(--info)"/>
+            <rect x="90" y="356" width="460" height="50" rx="9" fill="var(--surface)" stroke="var(--border)" stroke-dasharray="4 3"/>
+            <text x="320" y="380" text-anchor="middle" fill="currentColor" font-size="13">Claude</text>
+            <text x="320" y="396" text-anchor="middle" fill="var(--muted)" font-family="IBM Plex Sans, sans-serif" font-weight="400" font-size="10">modelo de inteligência — substituível</text>
+
+            <rect x="86" y="422" width="4" height="50" fill="var(--info)"/>
+            <rect x="90" y="422" width="460" height="50" rx="9" fill="var(--surface)" stroke="var(--border)"/>
+            <text x="320" y="452" text-anchor="middle" fill="currentColor">Tool / Permission System</text>
+
+            <!-- Konta core zone -->
+            <rect x="86" y="488" width="4" height="50" fill="var(--success)"/>
+            <rect x="90" y="488" width="460" height="50" rx="9" fill="var(--surface)" stroke="var(--border)"/>
+            <text x="320" y="518" text-anchor="middle" fill="currentColor">Konta Backend</text>
+
+            <rect x="86" y="554" width="4" height="50" fill="var(--success)"/>
+            <rect x="90" y="554" width="460" height="50" rx="9" fill="var(--surface)" stroke="var(--border)"/>
+            <text x="320" y="584" text-anchor="middle" fill="currentColor">Financial Engine</text>
+
+            <rect x="86" y="620" width="4" height="50" fill="var(--success)"/>
+            <rect x="90" y="620" width="460" height="50" rx="9" fill="var(--surface)" stroke="var(--border)"/>
+            <text x="320" y="650" text-anchor="middle" fill="currentColor">Base de Dados</text>
+          </g>
+          <!-- connecting arrows -->
+          <g stroke="currentColor" stroke-width="1.4" opacity=".6">
+            <line x1="320" y1="76" x2="320" y2="90" marker-end="url(#arrowStack)"/>
+            <line x1="320" y1="142" x2="320" y2="156" marker-end="url(#arrowStack)"/>
+            <line x1="320" y1="208" x2="320" y2="222" marker-end="url(#arrowStack)"/>
+            <line x1="320" y1="274" x2="320" y2="288" marker-end="url(#arrowStack)"/>
+            <line x1="320" y1="340" x2="320" y2="354" marker-end="url(#arrowStack)"/>
+            <line x1="320" y1="406" x2="320" y2="420" marker-end="url(#arrowStack)"/>
+            <line x1="320" y1="472" x2="320" y2="486" marker-end="url(#arrowStack)"/>
+            <line x1="320" y1="538" x2="320" y2="552" marker-end="url(#arrowStack)"/>
+            <line x1="320" y1="604" x2="320" y2="618" marker-end="url(#arrowStack)"/>
+          </g>
+        </svg>
+        <figcaption>A faixa tracejada em "Claude" é intencional: é a única camada desenhada para ser substituída sem tocar em nenhuma das outras nove. A secção D detalha o que acontece dentro do bloco "AI Gateway → Base de Dados".</figcaption>
+      </figure>
+      <div class="legend">
+        <span><i style="background:var(--muted)"></i>Experiência (humano + marca)</span>
+        <span><i style="background:var(--accent)"></i>Personalidade (identidade Konta AI)</span>
+        <span><i style="background:var(--info)"></i>Orquestração de IA (inclui Claude, substituível)</span>
+        <span><i style="background:var(--success)"></i>Konta — infraestrutura de confiança</span>
+      </div>
+    </section>
+
+    <!-- ============================================================ D -->
+    <section id="arquitetura">
+      <div class="kicker">D · Agent Architecture</div>
+      <h2>Como um pedido atravessa o bloco "AI Gateway → Base de Dados"</h2>
+      <p class="lead measure">Zoom sobre a metade inferior da pilha da secção C — o que acontece, passo a passo, entre a Personality Layer decidir "isto parece uma escrita financeira" e a resposta final chegar ao utilizador.</p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 780 970" role="img" aria-label="Diagrama do fluxo de um pedido: da mensagem inicial, passando pelo AI Gateway, Context Builder, Claude com tool-use, Permission Layer com três ramos de risco, Tool Executor, Financial Engine e Base de Dados, até à resposta final — com a Conversação e o AI Action Log como armazenamento lateral.">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor" opacity=".75"/>
+            </marker>
+          </defs>
+          <g class="box"><rect x="290" y="14" width="200" height="46" rx="10"/>
+            <text x="390" y="42" text-anchor="middle" class="title">Utilizador</text></g>
+          <path class="link" d="M390,60 V96" marker-end="url(#arrow)"/>
+          <text x="404" y="82" class="lbl">mensagem + ecrã (mobile/web)</text>
+
+          <g class="box accent"><rect x="230" y="100" width="320" height="56" rx="10"/>
+            <text x="390" y="124" text-anchor="middle" class="title">AI Gateway  /api/ai/chat</text>
+            <text x="390" y="142" text-anchor="middle" class="sub">sessão · limite diário · orquestra tudo</text></g>
+
+          <path class="link dashed" d="M230,128 H70" marker-end="url(#arrow)"/>
+          <text x="150" y="122" text-anchor="middle" class="lbl">acima do limite</text>
+          <g class="chip critical"><rect x="10" y="104" width="150" height="42" rx="8"/>
+            <text x="85" y="129" text-anchor="middle" class="title">"limite atingido" →</text></g>
+
+          <path class="link dashed" d="M550,128 H660" marker-end="url(#arrow)"/>
+          <text x="605" y="122" text-anchor="middle" class="lbl">turno atual</text>
+          <g class="chip"><rect x="660" y="104" width="112" height="42" rx="8"/>
+            <text x="716" y="123" text-anchor="middle" class="title" style="font-size:11px">Estado da</text>
+            <text x="716" y="137" text-anchor="middle" class="title" style="font-size:11px">Conversa</text></g>
+
+          <path class="link" d="M390,156 V196" marker-end="url(#arrow)"/>
+          <text x="404" y="182" class="lbl">dentro do limite</text>
+
+          <g class="box"><rect x="230" y="200" width="320" height="56" rx="10"/>
+            <text x="390" y="224" text-anchor="middle" class="title">Context Builder</text>
+            <text x="390" y="242" text-anchor="middle" class="sub">classifica intenção → escolhe contexto mínimo</text></g>
+          <path class="link" d="M390,256 V296" marker-end="url(#arrow)"/>
+          <text x="404" y="282" class="lbl">resumo calculado — nunca a BD toda</text>
+
+          <g class="box"><rect x="230" y="300" width="320" height="56" rx="10"/>
+            <text x="390" y="324" text-anchor="middle" class="title">Claude — tool use</text>
+            <text x="390" y="342" text-anchor="middle" class="sub">prompt + tools do registo (com prompt caching)</text></g>
+          <path class="link" d="M390,356 V396" marker-end="url(#arrow)"/>
+          <text x="404" y="382" class="lbl">tool call proposta</text>
+
+          <g class="box"><rect x="230" y="400" width="320" height="56" rx="10"/>
+            <text x="390" y="424" text-anchor="middle" class="title">Permission / Risk Layer</text>
+            <text x="390" y="442" text-anchor="middle" class="sub">risco = tool + parâmetros + contexto</text></g>
+
+          <path class="link dashed" d="M330,456 Q220,478 130,494" marker-end="url(#arrow)"/>
+          <path class="link hot" d="M390,456 V494" marker-end="url(#arrow)"/>
+          <path class="link dashed" d="M450,456 Q560,478 650,494" marker-end="url(#arrow)"/>
+
+          <g class="chip low"><rect x="35" y="498" width="190" height="42" rx="8"/>
+            <text x="130" y="524" text-anchor="middle" class="title">LOW → auto (futuro)</text></g>
+          <g class="chip high"><rect x="290" y="498" width="200" height="42" rx="8"/>
+            <text x="390" y="524" text-anchor="middle" class="title" style="fill:var(--accent)">MEDIUM/HIGH → confirma</text></g>
+          <g class="chip critical"><rect x="555" y="498" width="190" height="42" rx="8"/>
+            <text x="650" y="524" text-anchor="middle" class="title">CRITICAL → recusado</text></g>
+
+          <path class="link hot" d="M390,540 V566" marker-end="url(#arrow)"/>
+          <text x="404" y="558" class="lbl hot">utilizador confirma</text>
+
+          <g class="box"><rect x="230" y="570" width="320" height="56" rx="10"/>
+            <text x="390" y="594" text-anchor="middle" class="title">Tool Executor</text>
+            <text x="390" y="612" text-anchor="middle" class="sub">chama a mesma função do backend, sem lógica nova</text></g>
+          <path class="link" d="M390,626 V666" marker-end="url(#arrow)"/>
+
+          <path class="link dashed" d="M550,598 H660" marker-end="url(#arrow)"/>
+          <text x="605" y="592" class="lbl">regista tudo</text>
+          <g class="chip"><rect x="660" y="576" width="112" height="42" rx="8"/>
+            <text x="716" y="595" text-anchor="middle" class="title" style="font-size:11px">AI Action</text>
+            <text x="716" y="609" text-anchor="middle" class="title" style="font-size:11px">Log</text></g>
+
+          <g class="box"><rect x="200" y="670" width="380" height="56" rx="10"/>
+            <text x="390" y="694" text-anchor="middle" class="title">Financial Engine + Base de Dados</text>
+            <text x="390" y="712" text-anchor="middle" class="sub">cálculo e persistência — inalterados</text></g>
+          <path class="link" d="M390,726 V766" marker-end="url(#arrow)"/>
+          <text x="404" y="752" class="lbl">resultado real</text>
+
+          <g class="box accent"><rect x="230" y="770" width="320" height="56" rx="10"/>
+            <text x="390" y="794" text-anchor="middle" class="title">Resposta ao utilizador</text>
+            <text x="390" y="812" text-anchor="middle" class="sub">Konta AI explica, com a voz da Personality Layer</text></g>
+
+          <path class="link dashed" d="M390,826 Q390,900 200,900 Q100,900 100,60 Q100,-30 290,37" marker-end="url(#arrow)"/>
+          <text x="215" y="917" class="lbl" text-anchor="middle">o ciclo fecha — próxima mensagem parte daqui</text>
+        </svg>
+        <figcaption>Uma escrita nunca sai do Tool Executor sem passar pela Permission Layer; e a Permission Layer nunca decide sozinha o que é seguro — só lê o nível de risco que o Tool Registry já definiu para aquela chamada.</figcaption>
+      </figure>
+
+      <div class="measure">
+        <h3>Porque estas camadas e não outras</h3>
+        <p><strong>AI Gateway</strong> é o único sítio que fala com a API da Anthropic — o que importa para custo (verifica o limite diário antes de gastar um token) e para segurança (nenhum outro sítio do código constrói um pedido para a Claude API por engano).</p>
+        <p><strong>Tool Registry</strong> é só dados — uma lista de tools com o seu schema Zod, o texto humano que as descreve, e o nível de risco. É o que torna a lista de ferramentas algo que cresce por configuração, não por reescrita.</p>
+        <p><strong>Permission Layer</strong> é separada do Tool Executor de propósito: quando <code>create_transaction</code> passar a poder ser MEDIUM para valores pequenos e categorias habituais, a mudança acontece só aqui.</p>
+        <p><strong>Conversation State</strong> e <strong>AI Action Log</strong> são dois armazenamentos diferentes: o primeiro é descartável (a conversa de agora), o segundo é permanente e é auditoria.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================ E -->
+    <section id="tools">
+      <div class="kicker">E · Tool Architecture</div>
+      <h2>Tool = contrato, nunca lógica de negócio</h2>
+      <p class="lead measure">A regra que evita reconstruir o agente mais tarde: uma tool nunca contém a regra financeira — só a aponta. Cada tool tem quatro partes, e as quatro já têm equivalente direto no código existente.</p>
+
+      <div class="grid cols-2">
+        <div class="card">
+          <span class="mono-tag">paramsSchema</span>
+          <h4>O mesmo Zod que já existe</h4>
+          <p>A tool <code>create_transaction</code> reutiliza literalmente o <code>CreateTransactionSchema</code> já definido em <code>src/app/api/transactions/route.ts</code>. Um pedido inválido é recusado da mesma forma, venha de um formulário ou de uma frase.</p>
+        </div>
+        <div class="card">
+          <span class="mono-tag">execute(userId, params)</span>
+          <h4>A mesma função do backend</h4>
+          <p>Chama diretamente <code>createTransaction()</code> de <code>src/lib/db/transactions.ts</code> — a mesma função que o dashboard e a rota de API já chamam. Uma única implementação de cada regra financeira, três pontos de entrada.</p>
+        </div>
+        <div class="card">
+          <span class="mono-tag">riskTier</span>
+          <h4>Metadado, lido pela Permission Layer</h4>
+          <p>Uma etiqueta (<code>LOW</code>/<code>MEDIUM</code>/<code>HIGH</code>/<code>CRITICAL</code>) que outra camada consulta — nunca lógica embutida na própria tool.</p>
+        </div>
+        <div class="card">
+          <span class="mono-tag">summarize(params)</span>
+          <h4>A frase de confirmação</h4>
+          <p>Gera o texto que o utilizador vê antes de confirmar. Nunca é o modelo a inventar essa frase à solta — é um template controlado por nós, alimentado por parâmetros já validados.</p>
+        </div>
+      </div>
+
+      <p class="measure">O <strong>Tool Registry</strong> é a lista de todas as tools — sete hoje, vinte ou mais amanhã — exposta ao Claude como definições de tool-use. Adicionar <code>pay_debt_installment</code> mais tarde é um novo ficheiro em <code>src/lib/ai/tools/</code>, reaproveitando <code>payInstallment()</code> de <code>src/lib/db/debts.ts</code> (já corre dentro de uma transação SQL com <code>FOR UPDATE</code>), com <code>riskTier: "HIGH"</code>. Nenhuma outra camada muda.</p>
+
+      <div class="callout good">
+        <div class="h">Porque isto não obriga a reconstruir nada depois</div>
+        <p>O Gateway, o Context Builder e a Permission Layer não sabem — nem precisam de saber — quantas tools existem. Só percorrem o Registry. Passar de 7 para 20 tools é um problema de conteúdo, nunca de arquitetura.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================ F -->
+    <section id="permissoes">
+      <div class="kicker">F · Permission System</div>
+      <h2>Risco por chamada, não só por tool</h2>
+      <p class="lead measure">O nível de risco não é fixo por tool para sempre — pode depender também dos parâmetros e do contexto de cada chamada.</p>
+
+      <div class="callout hot">
+        <div class="h">Fórmula</div>
+        <p style="font-family:'IBM Plex Mono',monospace; font-size:.95rem;">risco = tool + parâmetros + contexto</p>
+        <p style="margin-top:8px; font-size:.9rem;">Um <code>create_transaction</code> de 500 CVE numa categoria habitual não tem, em princípio, o mesmo risco que um de 100.000 CVE numa categoria nunca usada — mesma tool, parâmetros diferentes, risco diferente. Para a V1, achatamos essa nuance de propósito: <strong>toda a escrita é HIGH</strong>. A arquitetura já suporta o cálculo fino; só ainda não o usamos.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Nível</th><th>Exemplo</th><th>Comportamento na V1</th><th>Comportamento futuro</th></tr></thead>
+          <tbody>
+            <tr data-risk="low"><td><span class="dot low"></span>LOW</td><td>Ler saldo, listar transações, "quanto posso gastar hoje"</td><td>Executa sempre — nunca escreve nada</td><td>Igual — leitura nunca precisa de confirmação; escrita futura de baixo risco também automática</td></tr>
+            <tr data-risk="medium"><td><span class="dot medium"></span>MEDIUM</td><td>Registar 500 CVE de transporte, categoria habitual, valor típico</td><td class="muted">Tratado como HIGH nesta fase</td><td>Confirmação rápida (um toque), sem resumo alargado</td></tr>
+            <tr data-risk="high"><td><span class="dot high"></span>HIGH</td><td>Criar uma meta, criar uma dívida, pagar uma parcela, um valor fora do padrão</td><td>Confirmação explícita, com resumo dos parâmetros</td><td>Igual — continua sempre a exigir confirmação</td></tr>
+            <tr data-risk="critical"><td><span class="dot critical"></span>CRITICAL</td><td>Eliminar dados, mudar definições de conta, qualquer coisa fora do que um humano já pode fazer na UI</td><td>Recusado — nem chega a propor</td><td class="muted">Continua recusado, sempre</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <div class="h">Regra dura, sem exceções</div>
+        <p>Nenhuma operação destrutiva ganha, através da IA, mais permissão do que o utilizador já tem manualmente na interface. O Konta nunca deu eliminação física a um humano (ver a política de arquivamento já em vigor) — não passa a dar a uma IA.</p>
+      </div>
+
+      <p class="measure">O mecanismo de "subir de nível" é orientado pelos dados do <strong>AI Action Log</strong>, não por opinião: se, ao fim de semanas, uma fatia grande das confirmações de <code>create_transaction</code> for aceite sem qualquer alteração, isso é o sinal de que vale a pena promover valores pequenos e categorias já usadas a MEDIUM. Uma promoção ganha pelo comportamento real, nunca concedida de início.</p>
+    </section>
+
+    <!-- ============================================================ G -->
+    <section id="contexto">
+      <div class="kicker">G · Context &amp; Privacy</div>
+      <h2>Enviar o mínimo, nunca a base toda</h2>
+      <p class="lead measure">Regra arquitetural, não preferência: nenhum pedido ao Claude carrega transações em bruto por omissão. O Context Builder classifica primeiro a intenção e escolhe um de três pacotes.</p>
+
+      <div class="grid cols-3">
+        <div class="card">
+          <span class="mono-tag">leve</span>
+          <h4>"Quanto gastei este mês?"</h4>
+          <p>Só os totais já agregados do mês por conta/moeda — números que o Financial Engine já calcula para o dashboard. Nenhuma transação individual.</p>
+        </div>
+        <div class="card">
+          <span class="mono-tag">completo</span>
+          <h4>"Analisa as minhas finanças."</h4>
+          <p>Resumo alargado: cashflow, poupança, categorias do mês vs. anterior, metas ativas, dívidas com próximas parcelas — tudo já calculado.</p>
+        </div>
+        <div class="card">
+          <span class="mono-tag">dirigido</span>
+          <h4>"Que gastos tive na sexta?"</h4>
+          <p>Só aqui uma tool de leitura específica (<code>get_transactions</code> com filtro de data) busca essas linhas exatas — nunca antecipadamente.</p>
+        </div>
+      </div>
+
+      <h3>Falar de privacidade sem destruir confiança</h3>
+      <p class="measure">A página <code>/help</code> promete hoje "os teus dados são só teus" — continua verdadeiro no sentido em que ninguém mais na plataforma os vê. Mas passa a existir um processamento por um terceiro (a Anthropic) que hoje não existe, e isso merece ser dito em português simples, uma vez, no momento em que a pessoa abre o assistente pela primeira vez.</p>
+
+      <div class="callout">
+        <div class="h">Proposta de texto — primeira abertura do assistente</div>
+        <p style="font-style:italic;">"As tuas mensagens e um resumo dos teus dados financeiros são processados pela Anthropic (a empresa por trás do Claude) para gerar respostas. O Konta nunca envia o histórico completo das tuas transações — só o que é preciso para responder ao que perguntaste."</p>
+      </div>
+    </section>
+
+    <!-- ============================================================ H -->
+    <section id="memoria">
+      <div class="kicker">H · Memory Layer <span class="badge future">Futuro · Proposto</span></div>
+      <h2>Duas memórias, com regras muito mais fortes que conveniências</h2>
+      <p class="lead measure">Não faz parte da V1. Faz parte da arquitetura porque, quando existir, tem de nascer com limites — nunca como um armazenamento livre "para a IA ficar mais esperta".</p>
+
+      <div class="grid cols-2">
+        <div class="card">
+          <h4>Short-term memory</h4>
+          <p style="margin-bottom:12px;">O contexto da conversa atual — a mesma "Conversation State" já desenhada na secção D. Sem isto, nem o exemplo mais simples funciona:</p>
+          <div class="bubble user" style="max-width:100%;">Quero criar uma meta.</div>
+          <div class="bubble ai" style="max-width:100%;">Qual valor?</div>
+          <div class="bubble user" style="max-width:100%;">50 mil.</div>
+        </div>
+        <div class="card">
+          <h4>Long-term memory <span class="badge future">Futuro</span></h4>
+          <p>Informação explícita e útil sobre o utilizador: preferências, hábitos financeiros, objetivos recorrentes, datas importantes, padrões confirmados, preferências de categorias/contas.</p>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <div class="h">Regras que não são negociáveis quando isto for construído</div>
+        <p>Nunca assumir uma memória — só guardar o que foi explicitamente confirmado. Nunca guardar tudo por omissão. A memória tem de ser visível ao utilizador, editável por ele, e eliminável a qualquer momento. E, acima de tudo: <strong>memória nunca é usada para alterar dinheiro sem validação</strong> — uma preferência lembrada pode sugerir, nunca pode, sozinha, justificar uma escrita.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================ I -->
+    <section id="planner">
+      <div class="kicker">I · AI Planner / Orchestrator <span class="badge future">Futuro · Proposto</span></div>
+      <h2>Da chamada única ao planeamento supervisionado</h2>
+      <div class="measure">
+        <p class="lead">A V1 usa tool-calling simples e controlado: uma intenção mapeia, quando muito, para uma tool por turno, sempre com confirmação antes de qualquer escrita. Não introduzimos um framework de agentes pesado na V1 — não há necessidade, e seria complexidade sem prova de valor ainda.</p>
+        <p>A visão final, porém, tem pedidos que exigem vários passos de raciocínio antes de qualquer proposta fazer sentido. O próprio exemplo que motivou este documento é um deles:</p>
+      </div>
+
+      <div class="vignette">
+        <div class="vhead"><b>"Quero comprar um computador de 120.000 CVE até março."</b><span>o que um Planner faria, passo a passo</span></div>
+        <ol class="steps">
+          <li><b>1.</b> Consultar contas — que contas existem, em que moeda.</li>
+          <li><b>2.</b> Consultar histórico — ritmo de receitas e despesas recentes.</li>
+          <li><b>3.</b> Consultar metas existentes — não comprometer o que já está em curso.</li>
+          <li><b>4.</b> Analisar cashflow — quanto sobra, de facto, por mês.</li>
+          <li><b>5.</b> Calcular capacidade de poupança — usando o Financial Engine, nunca uma estimativa do modelo.</li>
+          <li><b>6.</b> Propor uma estratégia — valor mensal, prazo, eventual ajuste.</li>
+          <li><b>7.</b> Criar a meta — só depois de confirmação explícita.</li>
+        </ol>
+      </div>
+
+      <p class="measure">Isto é <em>orquestração supervisionada</em>, não autonomia: cada passo de leitura pode encadear-se livremente (são todos LOW), mas a cadeia para, sempre, no primeiro passo que escreve — o passo 7 nunca acontece sem o utilizador ver e confirmar o plano completo primeiro. A diferença para a V1 não está em "ter mais tools"; está em o AI Gateway permitir várias chamadas de leitura em sequência antes de compor a proposta final, em vez de uma pergunta por turno.</p>
+    </section>
+
+    <!-- ============================================================ J -->
+    <section id="custo">
+      <div class="kicker">J · Cost</div>
+      <h2>Desenhado para um cartão com 592 CVE, não para escalar primeiro</h2>
+      <p class="lead measure">O documento trata isto como uma decisão de engenharia desde o primeiro dia, não como uma preocupação para resolver "se for preciso". A pergunta "quanto custa, em média, uma interação" não é respondida com uma estimativa — é respondida por um número real, medido.</p>
+
+      <div class="grid cols-2">
+        <div class="card"><h4>Antes de gastar um token</h4><p>O AI Gateway verifica o limite diário do utilizador <em>e</em> um limite global antes de construir o pedido. Sem exceção — nem para o dono do projeto.</p></div>
+        <div class="card"><h4>Modelo certo para cada tarefa</h4><p>Um modelo mais pequeno e barato para classificar intenção e extrair campos de frases simples; o modelo mais capaz reservado para análise aberta e planeamento.</p></div>
+        <div class="card"><h4>Contexto mínimo</h4><p>A maior alavanca de custo por si só (secção G): um resumo calculado tem uma fração dos tokens de um histórico em bruto.</p></div>
+        <div class="card"><h4>Prompt caching</h4><p>O prompt de sistema e as definições de tools são praticamente estáticos entre pedidos — candidatos naturais a cache, reduzindo o custo repetido da parte mais pesada de cada chamada.</p></div>
+        <div class="card"><h4>Evitar chamadas desnecessárias</h4><p>Uma pergunta que o Context Builder já consegue responder com dados agregados não chega a acionar uma tool de leitura extra.</p></div>
+        <div class="card"><h4>Crédito pequeno, medido</h4><p>Começar com um valor pequeno de crédito, observar o consumo real por alguns dias, só depois decidir aumentar — nunca ao contrário.</p></div>
+      </div>
+
+      <h3>AiUsageLog</h3>
+      <p class="measure">Uma tabela nova, que grava por cada turno: <code>user</code>, <code>model</code>, <code>inputTokens</code>, <code>outputTokens</code>, <code>cachedTokens</code> (quando disponível), <code>estimatedCost</code>, <code>timestamp</code>, <code>toolUsage</code>. Uma página interna — no mesmo espírito de <code>/admin</code>, que já existe só para o dono do projeto ver totais sem tocar em dados privados de ninguém — mostra o custo médio real por interação, o total do dia e do mês. É essa página, não uma conta feita à mão, que diz quando faz sentido aumentar o crédito.</p>
+
+      <div class="callout">
+        <div class="h">Quando o limite é atingido</div>
+        <p>A resposta é sempre clara e imediata — "chegaste ao limite de hoje, usa a app normalmente ou tenta amanhã" — nunca uma falha silenciosa nem uma cobrança inesperada.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================ K -->
+    <section id="experiencia">
+      <div class="kicker">K · Experiência</div>
+      <h2>Konta AI Workspace, e sete momentos concretos</h2>
+
+      <h3>Konta AI Workspace</h3>
+      <p class="measure">Na Web, o dashboard e a IA vivem lado a lado — nunca um ecrã de chat isolado que substitui o resto da app. A IA pode responder e apontar diretamente para o gráfico ou categoria relevante já visível no ecrã.</p>
+
+      <figure class="diagram" style="max-width:560px;">
+        <svg viewBox="0 0 560 190" role="img" aria-label="Duas áreas lado a lado: o Dashboard com um gráfico de barras, e o Konta AI com uma mensagem — uma seta liga a resposta da IA à barra específica do gráfico a que se refere.">
+          <defs><marker id="arrowWs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs>
+          <rect x="10" y="10" width="270" height="170" rx="10" fill="var(--surface)" stroke="var(--border)"/>
+          <text x="26" y="34" class="lbl" style="font-size:11px; fill:currentColor; font-weight:600;">Dashboard</text>
+          <rect x="30" y="120" width="26" height="40" fill="var(--surface-2)"/>
+          <rect x="65" y="100" width="26" height="60" fill="var(--surface-2)"/>
+          <rect x="100" y="70" width="26" height="90" fill="var(--accent)"/>
+          <rect x="135" y="110" width="26" height="50" fill="var(--surface-2)"/>
+          <rect x="170" y="130" width="26" height="30" fill="var(--surface-2)"/>
+          <text x="113" y="66" text-anchor="middle" class="lbl" style="font-size:9px;">Alimentação</text>
+
+          <rect x="300" y="10" width="250" height="170" rx="10" fill="var(--surface)" stroke="var(--border)"/>
+          <text x="316" y="34" class="lbl" style="font-size:11px; fill:currentColor; font-weight:600;">Konta AI</text>
+          <rect x="316" y="46" width="218" height="52" rx="8" fill="var(--surface-2)" stroke="var(--border)"/>
+          <text x="326" y="66" class="lbl" style="font-size:9.5px;">"As tuas despesas subiram</text>
+          <text x="326" y="80" class="lbl" style="font-size:9.5px;">porque a Alimentação</text>
+          <text x="326" y="94" class="lbl" style="font-size:9.5px;">aumentou 23%."</text>
+
+          <path d="M316,72 C260,72 230,90 113,88" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 3" marker-end="url(#arrowWs)"/>
+        </svg>
+        <figcaption>A resposta da IA não substitui o gráfico — aponta para ele. A interatividade completa deste apontar (navegação automática, destaque animado) é uma capacidade a desenhar em detalhe mais tarde; a ideia arquitetural — a IA lê o mesmo estado que o dashboard mostra — já vale desde a V1.</figcaption>
+      </figure>
+
+      <p class="measure">No Mobile, a IA não é um ecrã de chat a mais no menu — é uma das formas centrais de interagir com o produto, ao lado (nunca em vez) da navegação manual já existente.</p>
+
+      <h3 style="margin-top:40px;">Sete momentos, como realmente aconteceriam</h3>
+
+      <div class="vignette">
+        <div class="vhead"><b>1 · Primeiro contacto</b><span>depois do registo, dashboard vazio</span></div>
+        <div class="bubble ai">Ainda não tens nenhuma conta. Podes criar uma agora, ou dizer-me o que se passou com o teu dinheiro hoje e eu ajudo a começar.</div>
+        <p class="note">O botão "Criar conta" continua ali, do mesmo tamanho — a IA é um convite, nunca um bloqueio ao caminho de sempre.</p>
+      </div>
+
+      <div class="vignette">
+        <div class="vhead"><b>2 · Registar uma transação</b><span>mobile, três contas ativas</span></div>
+        <div class="bubble user">Gastei 750 no almoço</div>
+        <div class="bubble ai">Em que conta? Tens Carteira, Banco BCA e Poupança.</div>
+        <div class="bubble user">Carteira</div>
+        <div class="bubble confirm">Despesa · 750 CVE · Alimentação · Carteira · hoje
+          <div class="btnrow"><span class="yes">Confirmar</span><span class="no">Corrigir</span></div>
+        </div>
+      </div>
+
+      <div class="vignette">
+        <div class="vhead"><b>3 · Criar uma meta</b><span>web, com histórico de 4 meses</span></div>
+        <div class="bubble user">Quero comprar um computador de 120.000 CVE até março</div>
+        <div class="bubble ai">Faltam 6 meses. Com o teu ritmo médio de poupança dos últimos meses, precisarias de guardar cerca de 20.000 CVE/mês — acima do que tens guardado até agora. Queres que crie a meta com esse valor, ou prefiro ajustar o prazo?</div>
+        <div class="bubble confirm">Meta · "Computador" · 120.000 CVE · até 2027-03 · conta nova "Poupança Computador"
+          <div class="btnrow"><span class="yes">Criar</span><span class="no">Ajustar prazo</span></div>
+        </div>
+      </div>
+
+      <div class="vignette">
+        <div class="vhead"><b>4 · Análise financeira</b><span>web, workspace lado a lado</span></div>
+        <div class="bubble user">Como estão as minhas finanças?</div>
+        <div class="bubble ai">Três pontos: a tua taxa de poupança este mês é 12%, abaixo dos 18% de média dos últimos 3 meses; os gastos em Alimentação subiram 23%; a próxima prestação da dívida ao João vence em 5 dias e o teu saldo disponível cobre-a com folga. Queres que veja a Alimentação mais de perto?</div>
+      </div>
+
+      <div class="vignette">
+        <div class="vhead"><b>5 · Uma recomendação</b><span>puxada pelo utilizador, nunca empurrada</span></div>
+        <div class="bubble ai">Registado. Já agora, notei que o Lazer subiu 1.500 CVE este mês em relação à média — se cortares isso, chegas à tua meta do computador cerca de 3 semanas mais cedo. Queres ver como?</div>
+        <p class="note">Aparece só depois de uma ação já concluída, uma vez, com saída fácil — nunca como notificação empurrada.</p>
+      </div>
+
+      <div class="vignette">
+        <div class="vhead"><b>6 · Mobile</b><span>Act — respostas curtas, ação em primeiro lugar</span></div>
+        <div class="bubble user">Quanto posso gastar hoje?</div>
+        <div class="bubble ai">Cerca de 2.800 CVE, sem tocar no que já reservaste para as tuas metas.</div>
+      </div>
+
+      <div class="vignette">
+        <div class="vhead"><b>7 · Web</b><span>Understand — a mesma pergunta, mais espaço</span></div>
+        <div class="bubble user">Simula o que acontece se eu poupar mais 5.000 por mês</div>
+        <div class="bubble ai">Com mais 5.000 CVE/mês, a meta do computador passa de março para janeiro, e a taxa de poupança sobe de 12% para cerca de 19%. Isto é uma simulação — não altera nada até confirmares.</div>
+      </div>
+
+      <h3>Duas capacidades futuras, para completar a experiência</h3>
+      <div class="grid cols-2">
+        <div class="card dim">
+          <h4>AI Inbox <span class="badge future">Futuro</span></h4>
+          <p style="margin-bottom:10px;">Um espaço dentro da app — não uma push notification — para insights, alertas, recomendações e situações que precisam de atenção:</p>
+          <div style="display:flex; flex-direction:column; gap:6px; font-size:.82rem;">
+            <div><span class="dot high"></span>"Os teus gastos com alimentação aumentaram."</div>
+            <div><span class="dot warning" style="background:var(--warning)"></span>"A prestação vence daqui a três dias."</div>
+            <div><span class="dot medium"></span>"Estás acima do ritmo necessário para a tua meta."</div>
+            <div><span class="dot low"></span>"Este mês gastaste menos em transporte."</div>
+          </div>
+        </div>
+        <div class="card dim">
+          <h4>Financial Timeline <span class="badge future">Futuro</span></h4>
+          <p style="margin-bottom:6px;">Uma vista cronológica que combina transações, metas, dívidas, e as próprias ações da IA:</p>
+          <div class="timeline" style="margin:10px 0 0;">
+            <div class="titem"><div class="tlabel">Hoje</div><div class="tbody">Recebeste salário</div></div>
+            <div class="titem"><div class="tlabel">Hoje</div><div class="tbody">Pagaste renda</div></div>
+            <div class="titem ai"><div class="tlabel">Konta AI</div><div class="tbody">Criaste a meta "Computador"</div></div>
+            <div class="titem ai"><div class="tlabel">Konta AI</div><div class="tbody">Recomendou reduzir Lazer</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ L -->
+    <section id="v1">
+      <div class="kicker">L · V1</div>
+      <h2>A menor fatia real da visão — não uma versão de brincar</h2>
+      <p class="lead measure">Cada tool da V1 já é uma instância real de uma capacidade final, na sua forma mais estreita — nenhuma será deitada fora quando o produto crescer.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tool</th><th>Tipo</th><th>O que prova hoje</th><th>Em que cresce depois</th></tr></thead>
+          <tbody>
+            <tr data-risk="low"><td class="mono">get_accounts</td><td class="muted">leitura</td><td>Responder sem navegar</td><td class="muted">—</td></tr>
+            <tr data-risk="low"><td class="mono">get_transactions</td><td class="muted">leitura</td><td>Perguntas dirigidas a um período/categoria</td><td class="muted">—</td></tr>
+            <tr data-risk="low"><td class="mono">get_debts</td><td class="muted">leitura</td><td>"Mostra as minhas dívidas"</td><td class="muted">—</td></tr>
+            <tr data-risk="low"><td class="mono">get_goals</td><td class="muted">leitura</td><td>Progresso de metas em conversa</td><td class="muted">—</td></tr>
+            <tr data-risk="low"><td class="mono">analyze_finances</td><td class="muted">leitura composta</td><td>Compor vários cálculos existentes numa resposta explicada</td><td class="muted">comparação entre períodos, deteção de anomalias, base do AI Inbox</td></tr>
+            <tr data-risk="high"><td class="mono">create_transaction</td><td class="muted">escrita</td><td>Interpretar uma frase ambígua e validar como sempre</td><td class="muted">update_transaction, transferências faladas</td></tr>
+            <tr data-risk="high"><td class="mono">create_goal</td><td class="muted">escrita</td><td>Ligar uma intenção a um plano com números reais</td><td class="muted">update_goal, contribute_to_goal, replaneamento</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid cols-2" style="margin-top:26px;">
+        <div class="card"><h4>Dentro da V1</h4><p>Confirmação obrigatória em toda escrita · AiActionLog e AiUsageLog desde o primeiro dia · limite diário e global de custo · contexto mínimo (secção G) · Tool = contrato reutilizando db/Financial Engine</p></div>
+        <div class="card dim"><h4>Fora da V1, por decisão</h4><p>update_*, pay_debt_installment · memória de longo prazo · autonomia multi-step (Planner) · qualquer delete · proatividade push · voz</p></div>
+      </div>
+
+      <p class="measure">"Feito" para a V1 significa: as sete tools a funcionar em produção, cada escrita sempre com confirmação explícita, cada chamada registada, um limite diário por utilizador desde o primeiro dia — e nenhuma linha de validação nova, só reutilização do que já existe em <code>src/lib/db</code> e <code>src/lib/financial-engine</code>.</p>
+    </section>
+
+    <!-- ============================================================ M -->
+    <section id="roadmap">
+      <div class="kicker">M · Roadmap</div>
+      <h2>V1 → V1.5 → V2 → V3 → V4</h2>
+      <p class="lead measure">Cada fase só avança com o que a anterior provou — nunca com o que parecia uma boa ideia entretanto.</p>
+
+      <div class="roadmap">
+        <div class="stage now">
+          <div class="stagelabel">AGORA</div>
+          <h4>V1 — AI Core</h4>
+          <p style="font-size:.82rem; color:var(--muted); margin-bottom:10px;">Detalhado na secção L.</p>
+          <h5>O ciclo</h5>
+          <ul><li>Intent → Context → Claude → Tool → Confirmation → Execution → Explanation</li></ul>
+          <h5>Fica de fora</h5>
+          <ul><li class="out">Memória, proatividade, autonomia</li></ul>
+        </div>
+
+        <div class="stage">
+          <div class="stagelabel">A SEGUIR</div>
+          <h4>V1.5 — Friction Removal</h4>
+          <h5>Entra</h5>
+          <ul>
+            <li>Onboarding financeiro via conversa (secção seguinte)</li>
+            <li>Melhor resolução de contexto</li>
+            <li>Sugestões inteligentes</li>
+            <li>UX Mobile AI-first</li>
+            <li>Primeiras melhorias ao Permission System</li>
+          </ul>
+        </div>
+
+        <div class="stage">
+          <div class="stagelabel">DEPOIS</div>
+          <h4>V2 — Financial Copilot</h4>
+          <h5>Entra</h5>
+          <ul>
+            <li>update_transaction, update_goal, update_debt, pay_debt_installment</li>
+            <li>calculate_savings_plan, simulate_financial_scenario</li>
+            <li>Análise mais profunda</li>
+            <li>Konta AI Workspace completo</li>
+            <li>AI Inbox inicial</li>
+          </ul>
+        </div>
+
+        <div class="stage">
+          <div class="stagelabel">FUTURO</div>
+          <h4>V3 — Financial Intelligence</h4>
+          <h5>Entra</h5>
+          <ul>
+            <li>Planeamento persistente</li>
+            <li>Insights proativos (dentro da app)</li>
+            <li>Análise de investimentos</li>
+            <li>Simulações avançadas</li>
+            <li>Orçamento como entidade real</li>
+            <li>Financial Timeline</li>
+          </ul>
+        </div>
+
+        <div class="stage">
+          <div class="stagelabel">VISÃO FINAL</div>
+          <h4>V4 — Full Financial Agent</h4>
+          <h5>Entra</h5>
+          <ul>
+            <li>Planeamento multi-passo (AI Planner)</li>
+            <li>Autonomia supervisionada</li>
+            <li>Memória de longo prazo — explícita, visível, editável</li>
+            <li>Voz no Mobile</li>
+            <li>Notificações proativas, com opt-in próprio</li>
+            <li>Planeamento financeiro pessoal contínuo</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Onboarding financeiro via conversa <span class="badge future">V1.5 · Prioridade alta</span></h3>
+      <div class="vignette">
+        <div class="vhead"><b>Em vez de um formulário longo</b><span>primeira sessão</span></div>
+        <div class="bubble user">Recebo 30.000 CVE por mês, pago 8.000 de renda, gasto aproximadamente 5.000 em comida e quero poupar 5.000.</div>
+        <div class="bubble confirm">Vou criar: conta principal · rendimento mensal 30.000 · despesa recorrente "Renda" 8.000 · categoria Alimentação com referência de 5.000/mês · meta de poupança 5.000/mês
+          <div class="btnrow"><span class="yes">Confirmar tudo</span><span class="no">Rever um a um</span></div>
+        </div>
+      </div>
+      <p class="measure">Resolve diretamente a fricção descrita na secção A — o motivo pelo qual isto entra logo a seguir à V1 (V1.5), e não é adiado para mais tarde: é a barreira de entrada em si, não uma funcionalidade de conforto.</p>
+    </section>
+
+    <hr class="rule">
+
+    <section id="principio" style="margin-bottom:0;">
+      <div class="closing">
+        <div class="kicker" style="margin-bottom:6px;">Para fechar — o princípio final</div>
+        <p class="principle">Konta não deve obrigar o utilizador a aprender como gerir o dinheiro. O utilizador explica o que quer fazer, e o Konta ajuda-o a chegar lá.</p>
+        <div class="measure">
+          <p>Uma pessoa que hoje não usaria um gestor financeiro não muda de ideias porque passou a poder escrever em vez de clicar — muda porque a primeira frase que escreveu produziu, sem esforço de configuração, um resultado correto, visível e explicado. É esse o momento que a V1 tem de garantir: não a mais ampla lista de tools, mas a certeza absoluta de que <code>create_transaction</code> nunca engana ninguém.</p>
+          <p>A partir daí, a redução de fricção — automatizar o que hoje pede confirmação, ser proativo sem ser convidado — não é uma promessa do dia 1. É algo que o produto <em>ganha</em>, utilizador a utilizador, medido pelo próprio AI Action Log. É esse o fio que liga a arquitetura de permissões (secção F) à estratégia de produto: confiança não se assume, prova-se, e a arquitetura já está desenhada para guardar a prova.</p>
+        </div>
+        <div class="signoff">visão → mobile/web → personalidade → arquitetura → tools → permissões → contexto → memória → planner → custo → UX → V1 → roadmap — especificação fechada, nenhuma linha de código escrita.</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  (function(){
+    try{
+      var links = document.querySelectorAll('nav.toc a, .toc-mobile a');
+      var sections = Array.from(document.querySelectorAll('section[id]'));
+      if(!('IntersectionObserver' in window)) return;
+      var io = new IntersectionObserver(function(entries){
+        entries.forEach(function(e){
+          if(e.isIntersecting){
+            links.forEach(function(a){
+              a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id);
+            });
+          }
+        });
+      }, { rootMargin: '-15% 0px -70% 0px' });
+      sections.forEach(function(s){ io.observe(s); });
+    }catch(e){}
+  })();
+</script>
