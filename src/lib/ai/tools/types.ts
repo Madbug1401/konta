@@ -69,7 +69,11 @@ export type ToolExecutionResult<TResult = unknown> =
   | { status: "not_found"; toolName: string }
   | { status: "invalid_params"; toolName: string; error: string }
   | { status: "rejected"; toolName: string; reason: string }
-  | { status: "confirmation_required"; toolName: string; riskTier: RiskTier; summary: string }
+  // [Milestone 4] `params` são os parâmetros já validados pelo paramsSchema
+  // — nunca os parâmetros em bruto do modelo. Quem chama executeTool()
+  // (o orquestrador de chat) usa isto para construir um PendingToolCall no
+  // Confirmation Store; nunca para reexecutar sem passar pelo token.
+  | { status: "confirmation_required"; toolName: string; riskTier: RiskTier; summary: string; params: unknown }
   | { status: "executed"; toolName: string; riskTier: RiskTier; result: TResult }
   | { status: "execution_failed"; toolName: string; error: string };
 

@@ -8,7 +8,7 @@ import { SESSION_COOKIE_NAME } from "@/lib/auth/jwt";
 // "middleware" do Next.js, renomeado na versão 16) corre no Edge Runtime e
 // evita importar `jose`/verificação completa aqui só para decidir
 // redirecionar ou não.
-const PROTECTED_PREFIXES = ["/dashboard", "/transactions", "/accounts", "/debts", "/goals"];
+const PROTECTED_PREFIXES = ["/dashboard", "/transactions", "/accounts", "/debts", "/goals", "/assistant"];
 
 export function proxy(request: NextRequest) {
   const isProtected = PROTECTED_PREFIXES.some((p) => request.nextUrl.pathname.startsWith(p));
@@ -24,5 +24,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/transactions/:path*", "/accounts/:path*", "/debts/:path*", "/goals/:path*"],
+  matcher: ["/dashboard/:path*", "/transactions/:path*", "/accounts/:path*", "/debts/:path*", "/goals/:path*", "/assistant/:path*"],
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, List, Wallet, Landmark, Target, Repeat, Plus, LogOut, HelpCircle, BarChart3 } from "lucide-react";
+import { LayoutDashboard, List, Wallet, Landmark, Target, Repeat, Plus, LogOut, HelpCircle, BarChart3, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -9,8 +9,15 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/toast-provider";
 import { cn } from "@/lib/utils";
 
+// [Milestone 4 — Konta AI] "Konta AI" entra logo a seguir a "Resumo", de
+// propósito: é a primeira experiência real do Konta AI, não uma
+// funcionalidade secundária a esconder atrás de "Ajuda"/"Estatísticas"
+// (essas ficam fora desta lista por serem utilitárias, não centrais — ver
+// comentário mais abaixo). Isto sobe a lista de 6 para 7 itens; a barra
+// inferior em mobile deixou de assumir "sempre 6" (ver slice(3) abaixo).
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Resumo", icon: LayoutDashboard },
+  { href: "/assistant", label: "Konta AI", icon: Sparkles },
   { href: "/transactions", label: "Transações", icon: List },
   { href: "/accounts", label: "Contas", icon: Wallet },
   { href: "/debts", label: "Dívidas", icon: Landmark },
@@ -134,7 +141,13 @@ export function AppShell({
               próprio (min-w-0 é o que permite a um filho flex encolher
               abaixo do tamanho do seu conteúdo — sem isto o overflow nunca
               chegava a acontecer); o botão "+" fica fixo e sempre visível no
-              centro, nunca dentro da área de scroll. */}
+              centro, nunca dentro da área de scroll.
+              [Milestone 4] A segunda metade passou de slice(3,6) para
+              slice(3) — com "Konta AI" a entrar em NAV_ITEMS, esta barra
+              passou a ter 7 itens; um limite fixo em 6 faria o último
+              (Recorrências) desaparecer da navegação móvel em silêncio. O
+              scroll horizontal já existente absorve o item extra sem
+              precisar de redesenhar o layout. */}
           <div className="flex min-w-0 flex-1 items-center justify-around gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {NAV_ITEMS.slice(0, 3).map((item) => (
               <MobileNavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
@@ -148,7 +161,7 @@ export function AppShell({
             <Plus className="h-6 w-6" />
           </Link>
           <div className="flex min-w-0 flex-1 items-center justify-around gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {NAV_ITEMS.slice(3, 6).map((item) => (
+            {NAV_ITEMS.slice(3).map((item) => (
               <MobileNavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
             ))}
           </div>

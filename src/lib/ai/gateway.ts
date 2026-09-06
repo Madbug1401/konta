@@ -1,29 +1,38 @@
 // ============================================================================
-// KONTA AI — AI Gateway (Milestone 1).
+// KONTA AI — AI Gateway (Milestone 1, evoluído no Milestone 4).
 //
 // [DECISÃO — Milestone 1] Este é o ÚNICO módulo do projeto autorizado a
 // importar `@anthropic-ai/sdk` ou a construir um pedido para a API da
-// Anthropic — mesmo princípio já usado para `pg` (só `src/lib/db/*`) e para
-// `jose` (só `src/lib/auth/jwt.ts`). Nenhuma rota de API deve chamar o SDK
-// diretamente; deve sempre passar por `sendChatMessage()`.
+// Anthropic. Nenhuma outra camada (orquestrador de chat, Tool Registry,
+// rota de API) pode importar o SDK diretamente; deve sempre passar por
+// `sendChatTurn()`.
 //
-// Âmbito deliberadamente mínimo (Milestone 1 — "AI Gateway sem tools"):
-// nenhum tool-use, nenhum contexto financeiro, nenhuma leitura/escrita na
-// base de dados, nenhuma memória de conversa. Só prova que Konta consegue
-// falar com o Claude e devolver texto. Ver docs/konta-ai-design.html.
+// [Milestone 4] Evolui de "uma mensagem, sem tools" (M1) para suportar
+// tool-calling multi-turno: system prompt, histórico de mensagens (texto e
+// blocos de tool_use/tool_result), e a lista de tools disponíveis. O
+// CONTROLO do loop (quantas vezes chamar Claude, quando parar, quando pausar
+// para confirmação) NUNCA vive aqui — vive em src/lib/ai/chat/orchestrator.ts.
+// Este ficheiro só sabe fazer UMA chamada à Anthropic de cada vez; nunca
+// decide sozinho encadear várias.
+//
+// Os tipos abaixo (ChatMessage, ChatBlock, ...) são deliberadamente tipos
+// PRÓPRIOS do Konta, não um re-export dos tipos do SDK — é isso que permite a
+// qualquer outra camada (orquestrador, Tool Registry) construir/inspecionar
+// mensagens sem nunca importar `@anthropic-ai/sdk`.
 // ============================================================================
 
 import Anthropic from "@anthropic-ai/sdk";
 
-// [DECISÃO — escolha de modelo] Claude Sonnet 5, não Opus 5, por decisão de
-// produto: docs/konta-ai-design.html, secção "custo", enquadra o Konta AI
-// como desenhado para um orçamento pequeno desde o V1 ("não para escalar
-// primeiro") — Sonnet 5 ($2/$10 por MTok) é a opção deliberadamente mais
-// barata face a Opus 5 ($5/$25), não uma redução de qualidade acidental.
+// [DECISÃO — escolha de modelo] Claude Sonnet 5, não Opus 5 — mesma decisão
+// do Milestone 1, mantida sem alteração neste milestone (instrução
+// explícita: não trocar de modelo).
 const MODEL = "claude-sonnet-5";
 
-// Resposta de texto simples, sem tools — não há razão para um limite alto.
-const MAX_TOKENS = 1024;
+// [Milestone 4] Uma resposta com tool-calling pode incluir texto de
+// raciocínio + a chamada da tool; 1024 (limite do M1, pensado só para texto
+// simples) era apertado demais. 2048 continua modesto face ao limite técnico
+// do modelo (128k) — decisão de custo, não uma limitação técnica.
+const MAX_TOKENS = 2048;
 
 export class AiConfigError extends Error {
   constructor(message = "ANTHROPIC_API_KEY não está definido.") {
@@ -41,9 +50,6 @@ export class AiProviderError extends Error {
 
 let client: Anthropic | null = null;
 
-// Espelha o padrão de `getSecret()` em src/lib/auth/jwt.ts: lê a variável de
-// ambiente só quando é mesmo preciso (nunca no import do módulo), com uma
-// mensagem de erro clara em vez de deixar o SDK falhar com um erro genérico.
 function getClient(): Anthropic {
   if (client) return client;
 
@@ -58,13 +64,94 @@ function getClient(): Anthropic {
   return client;
 }
 
+// ----------------------------------------------------------------------------
+// Tipos próprios do Konta — nunca os tipos do SDK, para nenhuma outra camada
+// alguma vez precisar de importar `@anthropic-ai/sdk` só para anotar um tipo.
+// ----------------------------------------------------------------------------
+
+export type ChatRole = "user" | "assistant";
+
+export interface ChatTextBlock {
+  type: "text";
+  text: string;
+}
+
+/** Um pedido de tool feito pelo Claude — nunca produzido por nós, só lido. */
+export interface ChatToolUseBlock {
+  type: "tool_use";
+  id: string;
+  name: string;
+  input: unknown;
+}
+
+/** O resultado de uma tool, para devolver ao Claude — nunca vem do Claude. */
+export interface ChatToolResultBlock {
+  type: "tool_result";
+  toolUseId: string;
+  content: string;
+  isError?: boolean;
+}
+
+export type ChatAssistantBlock = ChatTextBlock | ChatToolUseBlock;
+export type ChatUserBlock = ChatTextBlock | ChatToolResultBlock;
+
+export interface ChatMessage {
+  role: ChatRole;
+  content: string | ChatAssistantBlock[] | ChatUserBlock[];
+}
+
 /**
- * Envia uma única mensagem de texto ao Claude e devolve a resposta em texto.
- * Sem histórico de conversa, sem tools, sem contexto financeiro — ver nota de
- * âmbito no topo do ficheiro. Não recebe `userId`: nesta fase a resposta não
- * depende do utilizador, e passar um id sem o usar seria uma interface falsa.
+ * Forma mínima que uma tool precisa de anunciar ao Claude — nunca
+ * `execute`/`riskTier`/detalhes internos. Ver
+ * src/lib/ai/tools/anthropic-adapter.ts (o único produtor deste tipo; este
+ * ficheiro só o consome).
  */
-export async function sendChatMessage(message: string): Promise<string> {
+export interface ChatToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
+
+export interface SendChatTurnParams {
+  system: string;
+  messages: ChatMessage[];
+  tools?: ChatToolDefinition[];
+}
+
+export type ChatStopReason = "end_turn" | "tool_use" | "max_tokens" | "other";
+
+export interface ChatTurnResult {
+  stopReason: ChatStopReason;
+  content: ChatAssistantBlock[];
+}
+
+function toAnthropicContent(blocks: ChatAssistantBlock[] | ChatUserBlock[]): Anthropic.MessageParam["content"] {
+  return blocks.map((block) => {
+    if (block.type === "text") return { type: "text" as const, text: block.text };
+    if (block.type === "tool_use") return { type: "tool_use" as const, id: block.id, name: block.name, input: block.input };
+    return {
+      type: "tool_result" as const,
+      tool_use_id: block.toolUseId,
+      content: block.content,
+      is_error: block.isError,
+    };
+  });
+}
+
+function toAnthropicMessage(message: ChatMessage): Anthropic.MessageParam {
+  if (typeof message.content === "string") {
+    return { role: message.role, content: message.content };
+  }
+  return { role: message.role, content: toAnthropicContent(message.content) };
+}
+
+/**
+ * Envia UM turno ao Claude (mensagens + system + tools disponíveis) e devolve
+ * a resposta já traduzida para os tipos próprios do Konta. Não sabe nada
+ * sobre loops, confirmação, ou o que uma tool faz — isso é
+ * src/lib/ai/chat/orchestrator.ts e src/lib/ai/tools/*.
+ */
+export async function sendChatTurn(params: SendChatTurnParams): Promise<ChatTurnResult> {
   const anthropic = getClient();
 
   let response: Anthropic.Message;
@@ -72,27 +159,46 @@ export async function sendChatMessage(message: string): Promise<string> {
     response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: message }],
+      system: params.system,
+      messages: params.messages.map(toAnthropicMessage),
+      tools: params.tools?.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
+      })),
     });
   } catch (error) {
-    // Cadeia do mais específico para o mais genérico (nunca comparar
-    // mensagens de erro por texto) — mas para a V1 todas resultam no mesmo
-    // AiProviderError: distinguir retryable/não-retryable fica para quando
-    // houver um mecanismo de retry a sério a decidir com base nisso.
     if (error instanceof Anthropic.APIError) {
       throw new AiProviderError(`Erro ao comunicar com a Anthropic (${error.status ?? "sem status"}): ${error.message}`);
     }
     throw error;
   }
 
-  const textBlock = response.content.find(
-    (block): block is Anthropic.TextBlock => block.type === "text",
-  );
-  if (!textBlock || textBlock.text.trim().length === 0) {
+  const content: ChatAssistantBlock[] = [];
+  for (const block of response.content) {
+    if (block.type === "text") {
+      content.push({ type: "text", text: block.text });
+    } else if (block.type === "tool_use") {
+      content.push({ type: "tool_use", id: block.id, name: block.name, input: block.input });
+    }
+    // Outros tipos de bloco (ex: thinking) nunca são precisos por quem chama
+    // esta função — nem o Gateway nem o orquestrador raciocinam sobre eles.
+  }
+
+  const stopReason: ChatStopReason =
+    response.stop_reason === "tool_use"
+      ? "tool_use"
+      : response.stop_reason === "end_turn"
+        ? "end_turn"
+        : response.stop_reason === "max_tokens"
+          ? "max_tokens"
+          : "other";
+
+  if (content.length === 0 && stopReason !== "tool_use") {
     throw new AiProviderError("O Claude devolveu uma resposta vazia ou inesperada.");
   }
 
-  return textBlock.text;
+  return { stopReason, content };
 }
 
 /** Só para os testes: limpa o cliente singleton entre casos de teste. */

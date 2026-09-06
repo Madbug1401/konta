@@ -28,6 +28,12 @@ describe("get_accounts tool", () => {
     const { getAccountsTool } = await import("./get-accounts");
     expect(getAccountsTool.paramsSchema.safeParse({}).success).toBe(true);
     expect(getAccountsTool.paramsSchema.safeParse({ userId: "outro-user" }).success).toBe(false);
+    // [Milestone 4 — auditoria de tool tampering] riskTier/confirmed nunca
+    // são campos legítimos de nenhuma tool — um Claude manipulado a tentar
+    // "declarar-se" LOW ou "já confirmado" dentro do input é rejeitado pelo
+    // .strict() exatamente como qualquer outro campo desconhecido.
+    expect(getAccountsTool.paramsSchema.safeParse({ riskTier: "LOW" }).success).toBe(false);
+    expect(getAccountsTool.paramsSchema.safeParse({ confirmed: true }).success).toBe(false);
   });
 
   it("devolve um DTO com só id/name/type/currency/balance — nunca passwordHash/email/userId", async () => {

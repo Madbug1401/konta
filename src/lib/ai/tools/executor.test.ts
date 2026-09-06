@@ -69,27 +69,17 @@ describe("executeTool", () => {
       toolName: "fake_tool",
       riskTier: "HIGH",
       summary: "Vou fazer algo importante.",
+      params: { value: "x" },
     });
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it("HIGH: só executa depois de confirmed:true explícito", async () => {
-    const execute = vi.fn().mockResolvedValue({ done: true });
-    getToolMock.mockReturnValue(fakeTool({ riskTier: "HIGH", execute }));
-    const { executeTool } = await import("./executor");
-
-    const result = await executeTool("fake_tool", "user-1", { value: "x" }, { confirmed: true });
-
-    expect(result).toEqual({ status: "executed", toolName: "fake_tool", riskTier: "HIGH", result: { done: true } });
-    expect(execute).toHaveBeenCalledTimes(1);
-  });
-
-  it("CRITICAL: nunca executa, mesmo com confirmed:true — não existe bypass/force execute", async () => {
+  it("CRITICAL: nunca executa — devolve rejected imediatamente, nunca confirmation_required", async () => {
     const execute = vi.fn();
     getToolMock.mockReturnValue(fakeTool({ riskTier: "CRITICAL", execute }));
     const { executeTool } = await import("./executor");
 
-    const result = await executeTool("fake_tool", "user-1", { value: "x" }, { confirmed: true });
+    const result = await executeTool("fake_tool", "user-1", { value: "x" });
 
     expect(result.status).toBe("rejected");
     expect(execute).not.toHaveBeenCalled();
@@ -128,5 +118,53 @@ describe("executeTool", () => {
       expect(result.error).not.toContain("ECONNREFUSED");
     }
     expect(logErrorMock).toHaveBeenCalledWith("ai.tools.execute", expect.any(Error), { toolName: "fake_tool", userId: "user-1" });
+  });
+});
+
+describe("executeConfirmedTool", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("tool inexistente: devolve not_found e nunca executa", async () => {
+    getToolMock.mockReturnValue(undefined);
+    const { executeConfirmedTool } = await import("./executor");
+
+    const result = await executeConfirmedTool("tool_que_nao_existe", "user-1", {});
+
+    expect(result).toEqual({ status: "not_found", toolName: "tool_que_nao_existe" });
+  });
+
+  it("HIGH: executa diretamente com os params já validados, sem voltar a pedir confirmação", async () => {
+    const execute = vi.fn().mockResolvedValue({ done: true });
+    getToolMock.mockReturnValue(fakeTool({ riskTier: "HIGH", execute }));
+    const { executeConfirmedTool } = await import("./executor");
+
+    const result = await executeConfirmedTool("fake_tool", "user-1", { value: "x" });
+
+    expect(result).toEqual({ status: "executed", toolName: "fake_tool", riskTier: "HIGH", result: { done: true } });
+    expect(execute).toHaveBeenCalledWith("user-1", { value: "x" });
+  });
+
+  it("revalida os params contra o paramsSchema atual antes de executar", async () => {
+    const execute = vi.fn();
+    getToolMock.mockReturnValue(fakeTool({ riskTier: "HIGH", execute }));
+    const { executeConfirmedTool } = await import("./executor");
+
+    const result = await executeConfirmedTool("fake_tool", "user-1", { value: 123 }); // devia ser string
+
+    expect(result.status).toBe("invalid_params");
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("CRITICAL: mesmo via executeConfirmedTool, nunca executa — defesa em profundidade, não confia só em quem chama", async () => {
+    const execute = vi.fn();
+    getToolMock.mockReturnValue(fakeTool({ riskTier: "CRITICAL", execute }));
+    const { executeConfirmedTool } = await import("./executor");
+
+    const result = await executeConfirmedTool("fake_tool", "user-1", { value: "x" });
+
+    expect(result.status).toBe("rejected");
+    expect(execute).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-# Konta — Visão geral da arquitetura (Milestone 0–3)
+# Konta — Visão geral da arquitetura (Milestone 0–4)
 
 ## Estrutura de pastas
 
@@ -96,9 +96,10 @@ Especificação completa em `docs/konta-ai-design.html`. Implementado até agora
 
 | Ficheiro/diretório | Responsabilidade | Milestone |
 |---|---|---|
-| `gateway.ts` | Único módulo autorizado a falar com a API da Anthropic (`POST /api/ai/chat`). Sem tools, sem contexto financeiro, sem histórico. | 1 |
-| `context/` | Context Builder — transforma dados do utilizador autenticado num DTO orientado a IA (`AiContext`), nos modos `light`/`full`/`directed`. Consome só funções de domínio já existentes (`src/lib/db`, `src/lib/financial-engine`); nunca serializa um record de base de dados em bruto. **Ainda não ligado ao AI Gateway** — módulo isolado e testado por si, sem nenhum dado a sair para a Anthropic nesta fase. `builder.ts` é o ponto de entrada (`buildAiContext`); `collect.ts` (I/O, ownership por `userId`) e `normalize.ts` (puro, DTOs) são detalhes internos. | 2 |
-| `tools/` | Tool Registry + Permission/Risk Layer + Tool Executor — ver detalhe abaixo. **Ainda não ligado ao Claude/AI Gateway**: nenhuma tool é anunciada à Anthropic nesta fase, esta é só a infraestrutura, isolada e testada por si. | 3 |
+| `gateway.ts` | Único módulo autorizado a falar com a API da Anthropic. Evoluiu no Milestone 4 de "uma mensagem, sem tools" para `sendChatTurn()` — um turno com system prompt, histórico e tools; o CONTROLO do loop (quantas vezes chamar, quando parar) vive em `chat/orchestrator.ts`, nunca aqui. | 1, 4 |
+| `context/` | Context Builder — transforma dados do utilizador autenticado num DTO orientado a IA (`AiContext`), nos modos `light`/`full`/`directed`. Consome só funções de domínio já existentes (`src/lib/db`, `src/lib/financial-engine`); nunca serializa um record de base de dados em bruto. Ligado ao chat desde o Milestone 4 (modo `light` por omissão) via `chat/orchestrator.ts`. `builder.ts` é o ponto de entrada (`buildAiContext`); `collect.ts` (I/O) é interno; `normalize.ts` também expõe `buildDebtSummaries`/`buildGoalSummaries`/`buildTransactionSummaries` para reutilização pelas tools (Milestone 3/4). | 2 |
+| `tools/` | Tool Registry + Permission/Risk Layer + Tool Executor + Confirmation Store — ver detalhe abaixo. Ligado ao Claude desde o Milestone 4 via `tools/anthropic-adapter.ts`. | 3, 4 |
+| `chat/` | Orquestrador do loop de tool-calling, Personality Layer e apresentação do contexto em texto — ver secção "Konta AI Chat" abaixo. | 4 |
 
 ### Tool Registry, Permission Layer e Executor (`src/lib/ai/tools`, Milestone 3)
 
@@ -125,11 +126,25 @@ Prepara o troço `Claude → Tool Registry → Permission/Risk Layer → Tool Ex
 | `HIGH` | `allowed: true, requiresConfirmation: true` — toda escrita financeira; sem exceção, sem "force execute" |
 | `CRITICAL` | `allowed: false` — recusado antes de sequer propor; nenhuma tool da V1 é CRITICAL |
 
-**Tool Executor** (`executor.ts`, `executeTool(toolName, userId, rawParams, { confirmed })`) — fluxo: procura a tool no Registry → valida `rawParams` com `paramsSchema` → pede a decisão à Permission Layer (com `tool.summarize(params)` já calculado) → se `requiresConfirmation` e `!confirmed`, devolve `confirmation_required` sem executar → só executa quando permitido e (LOW, ou HIGH/MEDIUM com `confirmed: true`) → passa sempre `userId` como argumento explícito a `execute` (nunca lido de `params`, que nenhuma tool desta V1 sequer aceita). Resultado sempre tipado (`ToolExecutionResult`: `not_found`/`invalid_params`/`rejected`/`confirmation_required`/`executed`/`execution_failed`) — nunca uma exceção para os casos esperados.
+**Tool Executor** (`executor.ts`) — `executeTool(toolName, userId, rawParams)`: procura a tool no Registry → valida `rawParams` com `paramsSchema` → pede a decisão à Permission Layer (com `tool.summarize(params)` já calculado) → LOW executa já; HIGH/MEDIUM devolve `confirmation_required` (com os `params` validados, nunca executa aqui) → CRITICAL devolve `rejected`. Passa sempre `userId` como argumento explícito a `execute` (nunca lido de `params`, que nenhuma tool desta V1 sequer aceita). Resultado sempre tipado (`ToolExecutionResult`: `not_found`/`invalid_params`/`rejected`/`confirmation_required`/`executed`/`execution_failed`) — nunca uma exceção para os casos esperados.
+
+**Confirmation Store** (`confirmation-store.ts`, Milestone 4) — corrige a limitação identificada no relatório do Milestone 3 (um boolean `confirmed` não amarrava a confirmação aos parâmetros exatos). `createConfirmation()` guarda, num `Map` em memória (mesmo padrão de `src/lib/rate-limit.ts` — nunca persistido, nunca sobrevive a um restart), um token opaco de 256 bits ligado a: utilizador, os `toolCalls` exatos (nunca reconstruídos a partir de um novo pedido do cliente), expiração de 5 minutos, e estado `pending`/`consumed`/`cancelled` (uso único). `consumeConfirmation()`/`cancelConfirmation()` verificam ownership (token de outro utilizador devolve o mesmo "not_found" genérico — anti-enumeração) antes de aceitar. `executeConfirmedTool()` (`executor.ts`) executa uma tool já confirmada, revalidando o schema e recusando sempre CRITICAL como defesa em profundidade.
 
 **7 tools da V1**: `get_accounts`, `get_transactions`, `get_debts`, `get_goals` (LOW); `create_transaction`, `update_transaction`, `delete_transaction` (HIGH). `delete_transaction` reutiliza exatamente `deleteTransaction()` (eliminação física, ownership-scoped) — Transaction não tem arquivamento, ao contrário de Account, e esta tool não inventa um.
 
-**Ainda não construído nesta fase** (documentado, não escondido): ligação ao AI Gateway/Claude, UI de confirmação, `AiActionLog` persistente, tool `get_categories` (torna `categoryId`/`goalId` em `create_transaction` inutilizáveis pelo modelo até existir uma forma de descobrir ids válidos), token de confirmação anti-adulteração entre a proposta e a confirmação.
+**Ainda não construído** (documentado, não escondido): `AiActionLog` persistente; tool `get_categories` (torna `categoryId`/`goalId` em `create_transaction` pouco úteis para o modelo até existir uma forma de descobrir ids válidos); mais do que uma ação a exigir confirmação no mesmo turno (a conversa termina com um erro claro em vez de encadear).
+
+## Konta AI Chat — primeira experiência real (`src/lib/ai/chat`, `/assistant`, Milestone 4)
+
+Liga, pela primeira vez, o AI Gateway ao Context Builder e ao Tool Registry: `User → /assistant (UI) → POST /api/ai/chat → Context Builder (light) → AI Gateway → Claude → Tool Registry → Permission/Risk → (confirmação quando preciso) → Tool Executor → Financial Engine/DB → resposta`.
+
+- **`chat/personality.ts`** — Personality Layer: um prompt curto e explícito (nunca um prompt gigante), separado da lógica técnica. Define identidade, e as regras que o Claude nunca quebra (nunca inventar números, nunca dizer que uma ação foi feita antes do resultado `executed`, nunca contornar uma permissão, nunca revelar detalhes internos).
+- **`chat/context-presentation.ts`** — o passo de serialização que o Context Builder (Milestone 2) deixou deliberadamente por fazer: converte um `AiContext` em texto determinístico para o system prompt. Nunca inclui um campo que o `AiContext` não tenha.
+- **`chat/orchestrator.ts`** — dono do loop de tool-calling (o Gateway só sabe fazer uma chamada de cada vez). `sendMessage()`: constrói contexto `light`, chama `sendChatTurn()`, e para cada `tool_use` que o Claude pedir chama `executeTool()` — LOW continua o loop automaticamente; a primeira tool que exigir confirmação PARA o loop (nunca executa) e cria uma entrada no Confirmation Store, devolvendo o token. `confirmPendingAction()`/`cancelPendingAction()` retomam ou cancelam a partir desse token. Limite de `MAX_TOOL_ROUNDS = 5` por pedido — ao atingir, para com uma resposta segura em vez de continuar indefinidamente.
+- **`POST /api/ai/chat`** — três ações (`message`/`confirm`/`cancel`), validadas com Zod (`z.discriminatedUnion`); sessão obrigatória, `userId` nunca do corpo; histórico de conversa gerido pelo cliente (sem memória persistida — texto simples, máx. 20 turnos, máx. 4000 carateres cada); rate limit básico por utilizador (`src/lib/rate-limit.ts` reutilizado, 20 pedidos/10min — nunca billing a sério, documentado como próximo passo).
+- **`src/components/chat-panel.tsx`** (`/assistant`, entrada "Konta AI" na navegação) — mensagens, sugestões iniciais, estado de confirmação com botões Confirmar/Cancelar, loading e erro. Sem infraestrutura de teste de componentes React neste projeto (Vitest corre em ambiente `node`, sem `@testing-library/react`) — verificado por typecheck/lint, não por teste automatizado; ver relatório do Milestone 4 para o roteiro de teste manual.
+
+**Ainda não construído** (documentado, não escondido): memória persistente entre sessões, `get_categories`, streaming, voz, notificações proativas — todos deliberadamente fora do âmbito desta primeira experiência.
 
 ## Design System (`src/components/ui` + componentes de domínio)
 

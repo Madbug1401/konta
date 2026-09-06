@@ -51,13 +51,37 @@ describe("create_transaction tool", () => {
     expect(createTransactionTool.riskTier).toBe("HIGH");
   });
 
-  it("paramsSchema não tem campo userId — o modelo não tem como fornecer um", async () => {
+  it("paramsSchema não tem campo userId/riskTier/confirmed — campos extra são ignorados pelo schema, nunca lidos por execute()", async () => {
     const { createTransactionTool } = await import("./create-transaction");
-    const result = createTransactionTool.paramsSchema.safeParse({ ...validParams(), userId: "outro-user" });
-    // O campo extra é ignorado pelo schema (reutilizado literalmente da rota
-    // HTTP, que também não usa .strict()) — mas nunca é lido por execute().
+    const result = createTransactionTool.paramsSchema.safeParse({
+      ...validParams(),
+      userId: "outro-user",
+      riskTier: "LOW",
+      confirmed: true,
+    });
+    // O schema reutilizado da rota HTTP não usa .strict() — os campos extra
+    // são apagados (comportamento por omissão do Zod), nunca aceites como
+    // dado válido. execute() só lê params.accountId/type/amountMinor/etc.,
+    // nunca params.userId/riskTier/confirmed — ver teste seguinte.
     expect(result.success).toBe(true);
-    if (result.success) expect(result.data).not.toHaveProperty("userId");
+    if (result.success) {
+      expect(result.data).not.toHaveProperty("userId");
+      expect(result.data).not.toHaveProperty("riskTier");
+      expect(result.data).not.toHaveProperty("confirmed");
+    }
+  });
+
+  it("mesmo que o modelo injete userId/riskTier/confirmed no input, createTransaction() é chamado com o userId real da sessão, e a tool continua HIGH", async () => {
+    getAccountByIdMock.mockResolvedValue(ACCOUNT);
+    findUserByIdMock.mockResolvedValue({ timezone: "Atlantic/Cape_Verde" });
+    createTransactionMock.mockResolvedValue(CREATED);
+    const { createTransactionTool } = await import("./create-transaction");
+
+    const tamperedInput = { ...validParams(), userId: "outro-user", riskTier: "LOW", confirmed: true } as never;
+    await createTransactionTool.execute("user-real", tamperedInput);
+
+    expect(createTransactionMock).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-real" }));
+    expect(createTransactionTool.riskTier).toBe("HIGH"); // riskTier é sempre estático, nunca lido de params
   });
 
   it("rejeita amountMinor inválido: NaN, Infinity, zero, negativo", async () => {
