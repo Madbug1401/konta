@@ -40,6 +40,22 @@ export function getMonthBounds(timezone: string, nowUtc: Date = new Date()): Per
   };
 }
 
+// [Konta AI — Context Builder, Milestone 2] Único uso hoje: comparação
+// "categorias do mês vs. anterior" no contexto "full" (docs/konta-ai-design.html,
+// secção G). Não existia nenhuma forma de obter os limites do mês anterior —
+// esta função só adiciona essa capacidade em falta, não substitui nem
+// duplica getMonthBounds. `.minus({ months: 1 })` antes de `.startOf("month")`
+// lida corretamente com meses de duração diferente (ex: 31 de março - 1 mês
+// não precisa de dar 31 de fevereiro, porque só o mês/ano do resultado
+// importa depois de startOf("month")).
+export function getPreviousMonthBounds(timezone: string, nowUtc: Date = new Date()): PeriodBounds {
+  const local = DateTime.fromJSDate(nowUtc, { zone: "utc" }).setZone(timezone).minus({ months: 1 });
+  return {
+    start: local.startOf("month").toISODate() as ISODate,
+    end: local.endOf("month").toISODate() as ISODate,
+  };
+}
+
 export function getQuarterBounds(timezone: string, nowUtc: Date = new Date()): PeriodBounds {
   const local = DateTime.fromJSDate(nowUtc, { zone: "utc" }).setZone(timezone);
   return {

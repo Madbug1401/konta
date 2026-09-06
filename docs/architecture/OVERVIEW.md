@@ -82,13 +82,22 @@ regressão explícita dos 5 bugs da auditoria (`audit-regressions.test.ts`).
 | Ficheiro | Funções principais |
 |---|---|
 | `money.ts` | `splitIntoInstallments`, `installmentsMatchTotal`, `formatMinor`, `sum`, `abs` |
-| `datetime.ts` | `getTodayInTimezone`, `getMonthBounds`/`getQuarterBounds`/`getYearBounds`/`getWeekBounds`, `addRecurrenceInterval` |
+| `datetime.ts` | `getTodayInTimezone`, `getMonthBounds`/`getPreviousMonthBounds`/`getQuarterBounds`/`getYearBounds`/`getWeekBounds`, `addRecurrenceInterval` |
 | `balance.ts` | `getAccountBalance`, `getNetWorth`, `getAvailableBalance` |
 | `cashflow.ts` | `getIncomeTotal`, `getExpenseTotal`, `getCashflow`, `getSavingsRate`, `getCategoryBreakdown` |
 | `debts.ts` | `generateInstallmentPlan`, `getDebtRemaining`, `getUpcomingInstallments`, `getOverdueInstallments` |
 | `recurring.ts` | `getOccurrencesOfSeries`, `computeNextRunDate`, `advanceSeries` |
 | `goals.ts` | `getGoalProgress`, `calculateGoalProjection` |
 | `investments.ts` | `computeInvestmentPerformance` |
+
+## Konta AI (`src/lib/ai`)
+
+Especificação completa em `docs/konta-ai-design.html`. Implementado até agora:
+
+| Ficheiro/diretório | Responsabilidade | Milestone |
+|---|---|---|
+| `gateway.ts` | Único módulo autorizado a falar com a API da Anthropic (`POST /api/ai/chat`). Sem tools, sem contexto financeiro, sem histórico. | 1 |
+| `context/` | Context Builder — transforma dados do utilizador autenticado num DTO orientado a IA (`AiContext`), nos modos `light`/`full`/`directed`. Consome só funções de domínio já existentes (`src/lib/db`, `src/lib/financial-engine`); nunca serializa um record de base de dados em bruto. **Ainda não ligado ao AI Gateway** — módulo isolado e testado por si, sem nenhum dado a sair para a Anthropic nesta fase. `builder.ts` é o ponto de entrada (`buildAiContext`); `collect.ts` (I/O, ownership por `userId`) e `normalize.ts` (puro, DTOs) são detalhes internos. | 2 |
 
 ## Design System (`src/components/ui` + componentes de domínio)
 
