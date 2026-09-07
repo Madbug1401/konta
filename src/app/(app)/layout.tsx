@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { AssistantProvider } from "@/components/assistant-provider";
 import { isAdminEmail } from "@/lib/auth/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { materializeDueOccurrences } from "@/lib/db/recurring-transactions";
@@ -24,9 +25,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await findUserById(session.userId);
   await materializeDueOccurrences(session.userId, getTodayInTimezone(user?.timezone ?? "Atlantic/Cape_Verde"));
 
+  // [Correção — Konta AI, conversa a desaparecer ao navegar] `AssistantProvider`
+  // fica aqui, acima de `<AppShell>{children}</AppShell>` — este layout é o
+  // único ponto que o App Router NUNCA desmonta ao navegar entre páginas
+  // dentro do grupo (app) (só `children`/`page.tsx` é substituído). Ver
+  // src/components/assistant-provider.tsx para a explicação completa. Sair
+  // para /login (fora deste grupo, outra árvore de layout) desmonta este
+  // provider e limpa a conversa — intencional, para nunca deixar a conversa
+  // de um utilizador visível para o próximo que iniciar sessão no mesmo browser.
   return (
-    <AppShell userEmail={session.email} isAdmin={isAdminEmail(session.email)}>
-      {children}
-    </AppShell>
+    <AssistantProvider>
+      <AppShell userEmail={session.email} isAdmin={isAdminEmail(session.email)}>
+        {children}
+      </AppShell>
+    </AssistantProvider>
   );
 }

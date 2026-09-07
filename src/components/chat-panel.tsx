@@ -3,141 +3,46 @@
 // ============================================================================
 // KONTA AI — Chat Panel (Milestone 4).
 //
-// Cliente fino: guarda a conversa em memória (sem persistência — ver
-// docs/architecture/OVERVIEW.md, "Conversation"), envia `history` (só texto,
-// role+content) a cada mensagem nova, e mostra o cartão de confirmação
-// quando o servidor devolve `confirmation_required`. Nunca decide sozinho
-// que uma ação foi executada — só mostra o texto final que o servidor
-// devolve depois de confirmar.
+// Cliente fino de apresentação: a conversa em si (turns/pending/sending/
+// error) vive agora em src/components/assistant-provider.tsx, montado em
+// src/app/(app)/layout.tsx — não aqui. Isso é o que faz a conversa sobreviver
+// a navegar para outra página e voltar (ver comentário no topo do provider
+// para a explicação completa do bug que isto corrige). Este componente só
+// trata da input de texto local e do scroll — nunca decide sozinho que uma
+// ação foi executada, só mostra o que o provider já resolveu a partir da
+// resposta do servidor.
 // ============================================================================
 
 import { Loader2, Send, Sparkles } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/toast-provider";
+import { useAssistant } from "@/components/assistant-provider";
 import { cn } from "@/lib/utils";
-
-interface ChatTurn {
-  role: "user" | "assistant";
-  content: string;
-}
-
-interface PendingConfirmation {
-  confirmationToken: string;
-  summary: string;
-  riskTier: string;
-}
 
 const SUGGESTIONS = ["Quanto tenho disponível?", "Quanto gastei este mês?", "Mostra-me as minhas dívidas.", "Quais foram as minhas maiores despesas?"];
 
-async function postChat(body: unknown): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
-  const res = await fetch("/api/ai/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, data };
-}
-
 export function ChatPanel() {
-  const toast = useToast();
-  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const { turns, pending, sending, error, sendChat, confirmPending, cancelPending } = useAssistant();
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [pending, setPending] = useState<PendingConfirmation | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // [Auditoria de segurança M4 — double-click] `sending` (estado React) só
-  // atualiza no próximo render; dois cliques na mesma "tick" síncrona podiam,
-  // em teoria, ler `sending === false` nos dois antes de qualquer re-render
-  // acontecer. Um ref muda de valor imediatamente, sem esperar por um
-  // render — fecha essa janela por completo. Isto é uma segunda camada de
-  // defesa: a garantia real contra execução duplicada está no servidor
-  // (confirmation-store.ts consome o token de forma atómica, síncrona,
-  // single-use); isto aqui só evita um pedido de rede supérfluo.
-  const inFlightRef = useRef(false);
 
-  function scrollToBottom() {
-    requestAnimationFrame(() => {
+  // Rola para o fundo sempre que a conversa muda — incluindo ao montar de
+  // novo (ex: ao voltar a esta página) com uma conversa já existente vinda do
+  // provider, não só quando uma mensagem nova chega.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     });
-  }
+    return () => cancelAnimationFrame(frame);
+  }, [turns.length, pending, sending]);
 
-  async function sendChat(message: string) {
-    const trimmed = message.trim();
-    if (!trimmed || inFlightRef.current) return;
-    inFlightRef.current = true;
-
-    const history = turns.map((t) => ({ role: t.role, content: t.content }));
-    setTurns((current) => [...current, { role: "user", content: trimmed }]);
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    const message = input;
     setInput("");
-    setError(null);
-    setSending(true);
-    scrollToBottom();
-
-    try {
-      const { ok, data } = await postChat({ action: "message", message: trimmed, history });
-      if (!ok) {
-        const message = typeof data.error === "string" ? data.error : "Não foi possível falar com o assistente. Tenta novamente.";
-        setError(message);
-        toast.error(message);
-        return;
-      }
-      if (data.status === "confirmation_required") {
-        setPending({
-          confirmationToken: String(data.confirmationToken),
-          summary: String(data.summary),
-          riskTier: String(data.riskTier),
-        });
-      } else if (data.status === "final") {
-        setTurns((current) => [...current, { role: "assistant", content: String(data.reply) }]);
-      }
-    } finally {
-      inFlightRef.current = false;
-      setSending(false);
-      scrollToBottom();
-    }
-  }
-
-  async function handleConfirm() {
-    if (!pending || inFlightRef.current) return;
-    inFlightRef.current = true;
-    setSending(true);
-    try {
-      const { ok, data } = await postChat({ action: "confirm", confirmationToken: pending.confirmationToken });
-      setPending(null);
-      if (!ok) {
-        const message = typeof data.error === "string" ? data.error : "Não foi possível confirmar esta ação.";
-        setError(message);
-        toast.error(message);
-        return;
-      }
-      if (data.status === "final") {
-        setTurns((current) => [...current, { role: "assistant", content: String(data.reply) }]);
-      }
-    } finally {
-      inFlightRef.current = false;
-      setSending(false);
-      scrollToBottom();
-    }
-  }
-
-  async function handleCancel() {
-    if (!pending || inFlightRef.current) return;
-    inFlightRef.current = true;
-    const token = pending.confirmationToken;
-    setPending(null);
-    setTurns((current) => [...current, { role: "assistant", content: "Ação cancelada — não fiz nada." }]);
-    try {
-      // Melhor esforço: mesmo que isto falhe (ex: já expirou sozinho), a UI já
-      // não deixa confirmar outra vez porque `pending` foi limpo acima.
-      await postChat({ action: "cancel", confirmationToken: token }).catch(() => {});
-    } finally {
-      inFlightRef.current = false;
-    }
+    void sendChat(message);
   }
 
   return (
@@ -178,10 +83,10 @@ export function ChatPanel() {
           <Card className="self-stretch border-primary/40 bg-surface-hover">
             <p className="mb-3 text-sm text-foreground">{pending.summary}</p>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => void handleCancel()} disabled={sending}>
+              <Button type="button" variant="outline" size="sm" onClick={() => void cancelPending()} disabled={sending}>
                 Cancelar
               </Button>
-              <Button type="button" size="sm" onClick={() => void handleConfirm()} disabled={sending}>
+              <Button type="button" size="sm" onClick={() => void confirmPending()} disabled={sending}>
                 Confirmar
               </Button>
             </div>
@@ -197,13 +102,7 @@ export function ChatPanel() {
 
       {error && <p className="text-xs text-danger">{error}</p>}
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void sendChat(input);
-        }}
-        className="flex gap-2"
-      >
+      <form onSubmit={handleSubmit} className="flex gap-2">
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
