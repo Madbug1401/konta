@@ -4,7 +4,7 @@ import { AssistantProvider } from "@/components/assistant-provider";
 import { isAdminEmail } from "@/lib/auth/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { materializeDueOccurrences } from "@/lib/db/recurring-transactions";
-import { findUserById } from "@/lib/db/users";
+import { findUserById, isAiEnabled } from "@/lib/db/users";
 import { getTodayInTimezone } from "@/lib/financial-engine";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -25,6 +25,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await findUserById(session.userId);
   await materializeDueOccurrences(session.userId, getTodayInTimezone(user?.timezone ?? "Atlantic/Cape_Verde"));
 
+  // [Sugestão do utilizador — "quero que uma conta nova venha logo sem o
+  // Konta AI, depois de eu ativar para aparecer"] Decide aqui, uma única
+  // vez por navegação, se a entrada "Konta AI" aparece na sidebar/barra
+  // inferior (ver src/components/app-shell.tsx) — nunca a única barreira:
+  // POST /api/ai/chat e a própria /assistant voltam a verificar isAiEnabled
+  // por si mesmas (nunca confiar só em um item de menu estar escondido).
+  const aiEnabled = await isAiEnabled(session.userId);
+
   // [Correção — Konta AI, conversa a desaparecer ao navegar] `AssistantProvider`
   // fica aqui, acima de `<AppShell>{children}</AppShell>` — este layout é o
   // único ponto que o App Router NUNCA desmonta ao navegar entre páginas
@@ -35,7 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // de um utilizador visível para o próximo que iniciar sessão no mesmo browser.
   return (
     <AssistantProvider>
-      <AppShell userEmail={session.email} isAdmin={isAdminEmail(session.email)}>
+      <AppShell userEmail={session.email} isAdmin={isAdminEmail(session.email)} aiEnabled={aiEnabled}>
         {children}
       </AppShell>
     </AssistantProvider>

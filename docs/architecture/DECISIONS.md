@@ -1181,3 +1181,47 @@ versão ser publicada — sem a coluna, tanto `isAiEnabled` como
 
 **Verificação**: `tsc`, `eslint`, suite de testes (284 testes, 17 novos,
 1 ficheiro de teste novo) e `next build` todos limpos.
+
+## Contas novas nascem sem acesso ao Konta AI; item de menu só aparece depois de ativado (07/09/2026)
+
+**Pedido do utilizador**: "ao criar uma conta no meu aplicativo pela
+primeira vez, quero que ela venha logo sem o Konta AI, depois de eu
+ativar para aparecer" — o inverso deliberado da decisão anterior
+(`aiEnabled` nascia `true`).
+
+**Porque não é uma contradição**: a migração 0005 tinha de usar
+`DEFAULT true` — já existiam utilizadores a usar o Konta AI nesse
+momento, e uma migração de schema nunca pode desativar alguém em
+silêncio. Este pedido é sobre o comportamento DAQUI PARA A FRENTE, para
+contas que ainda não existem: mudar o `DEFAULT` outra vez não é voltar
+atrás, é resolver dois problemas diferentes, cada um no seu momento.
+`prisma/manual-sql/0006_ai_access_default_false_for_new_users.sql` faz só
+`ALTER TABLE "User" ALTER COLUMN "aiEnabled" SET DEFAULT false` — nunca um
+`UPDATE` — por isso todos os utilizadores já registados mantêm
+exatamente o `aiEnabled` que já tinham; só uma conta criada a partir de
+agora (`createUser`, `src/lib/db/users.ts`, cujo `INSERT` nunca menciona
+esta coluna, sempre confiou no `DEFAULT` da base de dados) nasce
+desativada. `prisma/schema.prisma` foi atualizado para `@default(false)`
+a acompanhar, com os dois momentos documentados lado a lado no
+comentário do campo.
+
+**"Depois de eu ativar para aparecer" — item de menu, não só acesso
+bloqueado**: `POST /api/ai/chat` e `/assistant` já bloqueavam um
+utilizador desativado (secção anterior) — mas isso by itself deixaria a
+entrada "Konta AI" visível na sidebar/barra inferior para sempre, a levar
+a uma página de "acesso desativado". O pedido é mais literal do que isso:
+a entrada só aparece quando ativada. `src/app/(app)/layout.tsx` passou a
+calcular `isAiEnabled(session.userId)` (mesma função da secção anterior)
+e a passá-lo como prop `aiEnabled` a `AppShell`
+(`src/components/app-shell.tsx`), que filtra o item `/assistant` fora de
+`NAV_ITEMS` antes de o desenhar — a mesma lista filtrada alimenta a
+sidebar e a barra inferior mobile, nunca duas fontes de verdade a
+divergir. Isto é só UX (esconder um link) — a verificação que continua a
+impedir o uso de facto é a de `POST /api/ai/chat`; alguém que soubesse o
+URL `/assistant` de cor continuaria a ver a página "acesso desativado" lá
+descrita, nunca a app real.
+
+**Verificação**: `tsc`, `eslint`, suite de testes (284 testes — nenhum
+teste novo: mudança de `DEFAULT` de coluna e de UI de navegação, sem
+lógica nova testável por mock de `pg`; este repositório não tem testes de
+componente React) e `next build` todos limpos.

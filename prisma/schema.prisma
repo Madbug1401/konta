@@ -112,16 +112,24 @@ model User {
   // — nunca lido como "conta nunca usada" só porque este valor é nulo.
   lastLoginAt   DateTime?
   // [Sugestão do utilizador — "quero poder ativar/desativar o acesso ao
-  // Konta AI por utilizador"] true por omissão para nunca desligar ninguém
-  // que já estava a usar o assistente antes deste campo existir. Só o dono
-  // do projeto (isAdminEmail, ver src/lib/auth/admin.ts) pode alterar este
-  // valor, a partir do painel /admin (POST /api/admin/users/[userId]/ai-access
-  // → setAiEnabledForUser em src/lib/db/admin.ts). Verificado em
-  // POST /api/ai/chat (src/lib/db/users.ts::isAiEnabled) antes de qualquer
-  // chamada ao Claude — fail-closed: se a linha do utilizador não existir
-  // por algum motivo, o acesso é tratado como desativado, nunca como
-  // ativado por omissão.
-  aiEnabled     Boolean  @default(true)
+  // Konta AI por utilizador"] Só o dono do projeto (isAdminEmail, ver
+  // src/lib/auth/admin.ts) pode alterar este valor, a partir do painel
+  // /admin (POST /api/admin/users/[userId]/ai-access → setAiEnabledForUser
+  // em src/lib/db/admin.ts). Verificado em POST /api/ai/chat
+  // (src/lib/db/users.ts::isAiEnabled) antes de qualquer chamada ao Claude
+  // — fail-closed: se a linha do utilizador não existir por algum motivo,
+  // o acesso é tratado como desativado, nunca como ativado por omissão.
+  //
+  // [Sugestão do utilizador — "quero que uma conta nova venha logo sem o
+  // Konta AI, depois de eu ativar para aparecer"] `@default(true)`
+  // (migração 0005) foi o valor certo NAQUELE momento — existiam
+  // utilizadores já a usar o Konta AI, e a migração nunca podia
+  // desativar ninguém sem avisar. Mudado aqui para `@default(false)`
+  // (migração 0006, `ALTER COLUMN ... SET DEFAULT`, nunca um `UPDATE`) —
+  // o oposto exato, mas para o problema oposto: quem já tinha true
+  // continua com true, e só quem se regista a partir de agora entra
+  // desativado, até o dono do projeto o ativar manualmente.
+  aiEnabled     Boolean  @default(false)
 
   accounts             Account[]
   categories           Category[]

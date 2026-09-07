@@ -15,6 +15,16 @@ import { cn } from "@/lib/utils";
 // (essas ficam fora desta lista por serem utilitárias, não centrais — ver
 // comentário mais abaixo). Isto sobe a lista de 6 para 7 itens; a barra
 // inferior em mobile deixou de assumir "sempre 6" (ver slice(3) abaixo).
+//
+// [Sugestão do utilizador — "quero que uma conta nova venha logo sem o
+// Konta AI, depois de eu ativar para aparecer"] Este array continua fixo
+// (sempre com "Konta AI" — mais simples do que duas versões da lista) mas
+// deixa de ser usado diretamente: `AppShell` filtra o item "/assistant"
+// fora dele quando `aiEnabled` é false, antes de o passar à sidebar e à
+// barra inferior. Não é só uma proteção de acesso (isso já existe em
+// POST /api/ai/chat e em /assistant, ver src/lib/db/users.ts::isAiEnabled)
+// — é literalmente o pedido: a entrada "aparece" quando o dono do projeto
+// ativa o utilizador em /admin, não antes.
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Resumo", icon: LayoutDashboard },
   { href: "/assistant", label: "Konta AI", icon: Sparkles },
@@ -37,12 +47,20 @@ export function AppShell({
   children,
   userEmail,
   isAdmin = false,
+  aiEnabled = true,
 }: {
   children: ReactNode;
   userEmail: string;
   isAdmin?: boolean;
+  aiEnabled?: boolean;
 }) {
   const pathname = usePathname();
+  // [Sugestão do utilizador — "quero que uma conta nova venha logo sem o
+  // Konta AI, depois de eu ativar para aparecer"] Ver comentário junto de
+  // NAV_ITEMS acima — filtrado aqui, uma única vez, para a sidebar E a
+  // barra inferior usarem sempre a mesma lista já sem "Konta AI" quando
+  // desativado (nunca duas fontes de verdade a poder divergir).
+  const navItems = aiEnabled ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.href !== "/assistant");
 
   return (
     <div className="flex min-h-screen">
@@ -52,7 +70,7 @@ export function AppShell({
           <ThemeToggle />
         </div>
         <nav className="flex flex-1 flex-col gap-1">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <NavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
           ))}
         </nav>
@@ -149,7 +167,7 @@ export function AppShell({
               scroll horizontal já existente absorve o item extra sem
               precisar de redesenhar o layout. */}
           <div className="flex min-w-0 flex-1 items-center justify-around gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {NAV_ITEMS.slice(0, 3).map((item) => (
+            {navItems.slice(0, 3).map((item) => (
               <MobileNavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
             ))}
           </div>
@@ -161,7 +179,7 @@ export function AppShell({
             <Plus className="h-6 w-6" />
           </Link>
           <div className="flex min-w-0 flex-1 items-center justify-around gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {NAV_ITEMS.slice(3).map((item) => (
+            {navItems.slice(3).map((item) => (
               <MobileNavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
             ))}
           </div>

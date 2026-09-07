@@ -1,0 +1,11 @@
+-- [Sugestão do utilizador — "quero que uma conta nova venha logo sem o
+-- Konta AI, depois de eu ativar para aparecer"] Muda só o DEFAULT da
+-- coluna daqui em diante — nunca faz UPDATE a nenhuma linha existente, por
+-- isso todos os utilizadores já registados mantêm o "aiEnabled" que já
+-- tinham (true, atribuído pela migração 0005). Só quem se registar a
+-- partir de agora entra com "aiEnabled" = false, até o dono do projeto o
+-- ativar manualmente em /admin (ver src/lib/db/admin.ts::setAiEnabledForUser).
+--
+-- Correr manualmente contra a base de dados de produção (Neon) uma única
+-- vez, tal como as migrações anteriores — ver docs/operations/RENDER-NEON.md.
+ALTER TABLE "User" ALTER COLUMN "aiEnabled" SET DEFAULT false;
