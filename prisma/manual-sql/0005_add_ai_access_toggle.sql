@@ -1,0 +1,12 @@
+-- [Sugestão do utilizador — "quero poder ativar/desativar o acesso ao Konta
+-- AI por utilizador"] aiEnabled controla se este utilizador pode usar o
+-- assistente (POST /api/ai/chat). true por omissão: ninguém que já estava a
+-- usar o Konta AI antes desta coluna existir fica bloqueado por acidente só
+-- por causa desta migração. Só o dono do projeto (isAdminEmail) pode mudar
+-- este valor, a partir do painel /admin — ver
+-- src/lib/db/admin.ts::setAiEnabledForUser e
+-- docs/architecture/DECISIONS.md.
+--
+-- Correr manualmente contra a base de dados de produção (Neon) uma única
+-- vez, tal como as migrações anteriores — ver docs/operations/RENDER-NEON.md.
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "aiEnabled" BOOLEAN NOT NULL DEFAULT true;

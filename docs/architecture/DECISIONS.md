@@ -1122,3 +1122,62 @@ continua a mostrar o botão (omitido = `true`).
 
 **Verificação**: `tsc`, `eslint`, suite de testes (93 testes) e `next
 build` sem alterações — mudança de UI pura, sem lógica nova.
+
+## Ativar/desativar o acesso ao Konta AI por utilizador, a partir de /admin (07/09/2026)
+
+**Pedido do utilizador**: "quero adicionar um botão para cada pessoa que
+fez sign in no aplicativo, na página estatísticas aparecer um botão
+respetivo a cada nome, onde esse botão posso ativar e desativar o acesso
+ao Konta AI para cada user."
+
+**Novo campo `aiEnabled`** (`Boolean @default(true)`) em `User`
+(`prisma/manual-sql/0005_add_ai_access_toggle.sql` — quinta migração desde
+`0001_init.sql`, mesma convenção `000N_descrição.sql` de
+`0003_add_last_login.sql`/`0004_add_feedback.sql`). `true` por omissão,
+incluindo para todas as contas já existentes antes desta migração —
+ninguém que já usava o Konta AI fica bloqueado só por causa dela.
+
+**Onde se vê e muda**: tabela de utilizadores em `/admin`
+(`src/app/(app)/admin/page.tsx`), nova coluna "Konta AI" com um botão
+(`src/components/user-ai-access-button.tsx`, mesmo padrão do já existente
+`AccountArchiveButton` — reversível a qualquer momento com o mesmo botão,
+sem `window.confirm`) que chama `POST
+/api/admin/users/[userId]/ai-access`. Esta é a primeira rota de API
+restrita ao dono do projeto: segue a mesma filosofia de autorização já
+usada pela própria página `/admin` — `isAdminEmail` (`src/lib/auth/admin.ts`)
+e, para quem não está em `ADMIN_EMAILS`, um 404 genérico ("Não
+encontrado."), nunca "não autorizado"/403, para não confirmar sequer que
+a rota existe a quem esteja a adivinhar URLs. A escrita em si vive em
+`setAiEnabledForUser` (`src/lib/db/admin.ts`) — tal como o resto deste
+ficheiro, não verifica `isAdminEmail` a si própria, a rota é que tem de o
+fazer antes de chamar.
+
+**Onde se aplica de facto**: `POST /api/ai/chat`
+(`src/app/api/ai/chat/route.ts`) passou a verificar
+`isAiEnabled(session.userId)` (nova consulta dedicada em
+`src/lib/db/users.ts`, mesmo padrão pontual de `touchLastLogin` — não
+acrescentada a `UserRow`/`findUserById`, que é usado por muito mais
+código sem nenhuma razão para carregar este valor) logo a seguir à sessão,
+antes até do rate limit e do parsing do corpo — nas três ações possíveis
+(`message`/`confirm`/`cancel`), nunca só em `message`: desativar o acesso
+é uma paragem total, não um "não inicies conversas novas". Fail-closed,
+mesma filosofia de `isAdminEmail`: se a linha do utilizador não existir
+por algum motivo, `isAiEnabled` devolve `false`, nunca assume acesso
+ativo por omissão. `src/app/(app)/assistant/page.tsx` (Server Component)
+faz a mesma verificação só por UX — mostra um estado claro em vez de
+montar o `ChatPanel` só para a primeira mensagem falhar com um erro; a
+verificação que realmente impede o uso continua a ser a da rota.
+
+**Nunca escondido do próprio utilizador desativado de forma confusa**: a
+mensagem em `/assistant` e o erro 403 de `/api/ai/chat` dizem
+explicitamente que o acesso foi desativado — em nenhum dos dois sítios o
+Konta AI finge estar disponível e depois falha silenciosamente.
+
+**Operacional, antes de ir para produção**:
+`0005_add_ai_access_toggle.sql` tem de ser aplicado manualmente à base de
+dados Neon de produção (ver `docs/operations/RENDER-NEON.md`) antes desta
+versão ser publicada — sem a coluna, tanto `isAiEnabled` como
+`setAiEnabledForUser` falham a consultar/escrever um campo inexistente.
+
+**Verificação**: `tsc`, `eslint`, suite de testes (284 testes, 17 novos,
+1 ficheiro de teste novo) e `next build` todos limpos.

@@ -111,6 +111,17 @@ model User {
   // em cada login E registo bem-sucedido (touchLastLogin, src/lib/db/users.ts)
   // — nunca lido como "conta nunca usada" só porque este valor é nulo.
   lastLoginAt   DateTime?
+  // [Sugestão do utilizador — "quero poder ativar/desativar o acesso ao
+  // Konta AI por utilizador"] true por omissão para nunca desligar ninguém
+  // que já estava a usar o assistente antes deste campo existir. Só o dono
+  // do projeto (isAdminEmail, ver src/lib/auth/admin.ts) pode alterar este
+  // valor, a partir do painel /admin (POST /api/admin/users/[userId]/ai-access
+  // → setAiEnabledForUser em src/lib/db/admin.ts). Verificado em
+  // POST /api/ai/chat (src/lib/db/users.ts::isAiEnabled) antes de qualquer
+  // chamada ao Claude — fail-closed: se a linha do utilizador não existir
+  // por algum motivo, o acesso é tratado como desativado, nunca como
+  // ativado por omissão.
+  aiEnabled     Boolean  @default(true)
 
   accounts             Account[]
   categories           Category[]

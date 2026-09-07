@@ -5,8 +5,17 @@ const getSessionUserMock = vi.fn();
 const sendMessageMock = vi.fn();
 const confirmPendingActionMock = vi.fn();
 const cancelPendingActionMock = vi.fn();
+// [Sugestão do utilizador — "quero poder ativar/desativar o acesso ao Konta
+// AI por utilizador"] Por omissão resolve `true` em todos os testes já
+// existentes (nenhum deles é sobre este interruptor) — clearAllMocks() só
+// limpa histórico de chamadas, nunca a implementação definida com
+// mockResolvedValue, por isso este valor por omissão sobrevive entre
+// testes. Os testes do novo bloco "acesso desativado" abaixo é que o
+// substituem, um de cada vez, com mockResolvedValueOnce(false).
+const isAiEnabledMock = vi.fn().mockResolvedValue(true);
 
 vi.mock("@/lib/auth/session", () => ({ getSessionUser: getSessionUserMock }));
+vi.mock("@/lib/db/users", () => ({ isAiEnabled: isAiEnabledMock }));
 vi.mock("@/lib/ai/chat", () => ({
   sendMessage: sendMessageMock,
   confirmPendingAction: confirmPendingActionMock,
@@ -77,6 +86,66 @@ describe("POST /api/ai/chat", () => {
       const { POST } = await import("./route");
       const response = await POST(postRequest({ action: "confirm" }));
       expect(response.status).toBe(400);
+    });
+  });
+
+  // [Sugestão do utilizador — "quero poder ativar/desativar o acesso ao
+  // Konta AI por utilizador"] Verificação nova, à frente de tudo o resto
+  // (antes do rate limit e do parsing do corpo) — ver comentário em
+  // ./route.ts junto de isAiEnabled.
+  describe("acesso desativado (isAiEnabled)", () => {
+    it("bloqueia 'message' com 403 quando o acesso está desativado, sem chamar o orquestrador nem gastar rate limit", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      isAiEnabledMock.mockResolvedValueOnce(false);
+
+      const { POST } = await import("./route");
+      const response = await POST(postRequest({ action: "message", message: "Olá" }));
+
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ error: "O acesso ao Konta AI foi desativado para a tua conta." });
+      expect(sendMessageMock).not.toHaveBeenCalled();
+    });
+
+    it("bloqueia também 'confirm' com 403 — desativar o acesso é uma paragem total, não só \"não inicies conversas novas\"", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      isAiEnabledMock.mockResolvedValueOnce(false);
+
+      const { POST } = await import("./route");
+      const response = await POST(postRequest({ action: "confirm", confirmationToken: "tok_abc" }));
+
+      expect(response.status).toBe(403);
+      expect(confirmPendingActionMock).not.toHaveBeenCalled();
+    });
+
+    it("bloqueia também 'cancel' com 403", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      isAiEnabledMock.mockResolvedValueOnce(false);
+
+      const { POST } = await import("./route");
+      const response = await POST(postRequest({ action: "cancel", confirmationToken: "tok_abc" }));
+
+      expect(response.status).toBe(403);
+      expect(cancelPendingActionMock).not.toHaveBeenCalled();
+    });
+
+    it("verifica isAiEnabled com o userId da sessão, nunca com um valor do corpo do pedido", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      sendMessageMock.mockResolvedValue({ type: "final", reply: "ok" });
+
+      const { POST } = await import("./route");
+      await POST(postRequest({ action: "message", message: "Olá", userId: "outro-utilizador" }));
+
+      expect(isAiEnabledMock).toHaveBeenCalledWith("user-1");
+    });
+
+    it("com o acesso ativado (omisso — valor por omissão do mock), o pedido segue normalmente", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      sendMessageMock.mockResolvedValue({ type: "final", reply: "ok" });
+
+      const { POST } = await import("./route");
+      const response = await POST(postRequest({ action: "message", message: "Olá" }));
+
+      expect(response.status).toBe(200);
     });
   });
 

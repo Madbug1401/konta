@@ -4,6 +4,7 @@ import { withErrorHandling } from "@/lib/api-error";
 import { AiConfigError, AiProviderError } from "@/lib/ai/gateway";
 import { cancelPendingAction, confirmPendingAction, sendMessage } from "@/lib/ai/chat";
 import { getSessionUser } from "@/lib/auth/session";
+import { isAiEnabled } from "@/lib/db/users";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 // [Milestone 4] Três ações possíveis — nunca um campo "userId" em nenhuma
@@ -38,6 +39,18 @@ const CHAT_RATE_WINDOW_MS = 10 * 60 * 1000;
 export const POST = withErrorHandling("api.ai.chat.post", async (request: Request) => {
   const session = await getSessionUser();
   if (!session) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+
+  // [Sugestão do utilizador — "quero poder ativar/desativar o acesso ao
+  // Konta AI por utilizador"] Verificado ANTES do rate limit e de qualquer
+  // parsing do corpo — um utilizador desativado não deve sequer gastar a
+  // sua quota de pedidos a descobrir isso. Aplica-se às três ações
+  // (message/confirm/cancel): desativar o acesso bloqueia por completo,
+  // nunca só "não inicies conversas novas" — mesma leitura estrita que um
+  // dono de produto esperaria de um interruptor "desativar para este
+  // utilizador". Ver src/lib/db/users.ts::isAiEnabled (fail-closed).
+  if (!(await isAiEnabled(session.userId))) {
+    return NextResponse.json({ error: "O acesso ao Konta AI foi desativado para a tua conta." }, { status: 403 });
+  }
 
   const rateLimit = checkRateLimit(`ai.chat:${session.userId}`, CHAT_RATE_LIMIT, CHAT_RATE_WINDOW_MS);
   if (!rateLimit.allowed) {

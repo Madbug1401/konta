@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { getPlatformTotals, listUsersWithActivity } from "@/lib/db/admin";
 import { listFeedback } from "@/lib/db/feedback";
 import { Card } from "@/components/ui/card";
+import { UserAiAccessButton } from "@/components/user-ai-access-button";
 
 // [Sugestão do utilizador — "como posso observar os meus utilizadores"]
 // Página só para o dono do projeto (ver src/lib/auth/admin.ts). Devolve
@@ -38,14 +39,15 @@ export default async function AdminPage() {
           <p className="text-sm text-muted-foreground">Ainda não há nenhum utilizador registado.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-left text-sm">
+            <table className="w-full min-w-[720px] text-left text-sm">
               <thead>
                 <tr className="border-b border-border text-xs text-muted-foreground">
                   <th className="pb-2 pr-3 font-medium">Utilizador</th>
                   <th className="pb-2 pr-3 font-medium">Registo</th>
                   <th className="pb-2 pr-3 font-medium">Último login</th>
                   <th className="pb-2 pr-3 text-right font-medium">Contas</th>
-                  <th className="pb-2 text-right font-medium">Transações</th>
+                  <th className="pb-2 pr-3 text-right font-medium">Transações</th>
+                  <th className="pb-2 text-right font-medium">Konta AI</th>
                 </tr>
               </thead>
               <tbody>
@@ -57,7 +59,10 @@ export default async function AdminPage() {
                       {user.lastLoginAt ? formatDate(user.lastLoginAt) : "Nunca"}
                     </td>
                     <td className="py-2 pr-3 text-right text-muted-foreground">{user.accountsCount}</td>
-                    <td className="py-2 text-right text-muted-foreground">{user.transactionsCount}</td>
+                    <td className="py-2 pr-3 text-right text-muted-foreground">{user.transactionsCount}</td>
+                    <td className="py-2 text-right">
+                      <UserAiAccessButton userId={user.id} aiEnabled={user.aiEnabled} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

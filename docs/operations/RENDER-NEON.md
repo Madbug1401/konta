@@ -39,6 +39,7 @@ psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f pr
 psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0002_seed_categories.sql
 psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0003_add_last_login.sql
 psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0004_add_feedback.sql
+psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0005_add_ai_access_toggle.sql
 ```
 
 Alternativa: dá-me a connection string temporariamente (por um canal
@@ -55,12 +56,13 @@ que as tabelas (`User`, `Account`, `Transaction`, `Category`, etc.) existem.
 cada ficheiro novo em `prisma/manual-sql/` (nome `000N_descrição.sql`,
 ordem crescente) é uma migração a mais, nunca uma substituição das
 anteriores — corre só o(s) ficheiro(s) que ainda não aplicaste, pela mesma
-ordem. Por exemplo, se já tens `0001`–`0003` aplicados e só falta a mais
-recente (`0004_add_feedback.sql`, cria a tabela `Feedback` para o botão de
-feedback em `/help`), corre só essa, isoladamente:
+ordem. Por exemplo, se já tens `0001`–`0004` aplicados e só falta a mais
+recente (`0005_add_ai_access_toggle.sql`, acrescenta a coluna `aiEnabled`
+a `User` para o botão "Ativar/Desativar Konta AI" em `/admin`), corre só
+essa, isoladamente:
 
 ```powershell
-psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0004_add_feedback.sql
+psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0005_add_ai_access_toggle.sql
 ```
 
 Faz sempre um backup antes (secção 5) — pequeno neste caso (`CREATE TABLE`

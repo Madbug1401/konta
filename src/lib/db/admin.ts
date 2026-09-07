@@ -46,6 +46,11 @@ export interface UserActivityRow {
   lastLoginAt: string | null;
   accountsCount: number;
   transactionsCount: number;
+  // [Sugestão do utilizador — "quero poder ativar/desativar o acesso ao
+  // Konta AI por utilizador"] Ver setAiEnabledForUser abaixo e
+  // src/lib/db/users.ts::isAiEnabled (a consulta que a rota do chat usa de
+  // facto — este campo aqui é só para desenhar o botão certo em /admin).
+  aiEnabled: boolean;
 }
 
 export async function listUsersWithActivity(): Promise<UserActivityRow[]> {
@@ -56,12 +61,13 @@ export async function listUsersWithActivity(): Promise<UserActivityRow[]> {
       u.name,
       u."createdAt",
       u."lastLoginAt",
+      u."aiEnabled",
       COUNT(DISTINCT a.id) AS "accountsCount",
       COUNT(DISTINCT t.id) AS "transactionsCount"
     FROM "User" u
     LEFT JOIN "Account" a ON a."userId" = u.id
     LEFT JOIN "Transaction" t ON t."accountId" = a.id
-    GROUP BY u.id, u.email, u.name, u."createdAt", u."lastLoginAt"
+    GROUP BY u.id, u.email, u.name, u."createdAt", u."lastLoginAt", u."aiEnabled"
     ORDER BY u."createdAt" DESC
   `);
   return rows.map((row) => ({
@@ -72,5 +78,22 @@ export async function listUsersWithActivity(): Promise<UserActivityRow[]> {
     lastLoginAt: (row.lastLoginAt as string | null) ?? null,
     accountsCount: Number(row.accountsCount),
     transactionsCount: Number(row.transactionsCount),
+    aiEnabled: Boolean(row.aiEnabled),
   }));
+}
+
+// [Sugestão do utilizador — "quero poder ativar/desativar o acesso ao Konta
+// AI por utilizador"] Único sítio que ESCREVE "aiEnabled" — leitura
+// autoritativa para POST /api/ai/chat continua a ser isAiEnabled
+// (src/lib/db/users.ts), não este ficheiro (que, como o resto de
+// admin.ts, nunca verifica isAdminEmail a si próprio — quem chama é que
+// tem de o fazer antes). Devolve false sem tocar em nada se o userId não
+// corresponder a ninguém, para a rota poder devolver 404 em vez de fingir
+// sucesso.
+export async function setAiEnabledForUser(userId: string, enabled: boolean): Promise<boolean> {
+  const result = await getPool().query(`UPDATE "User" SET "aiEnabled" = $2, "updatedAt" = now() WHERE id = $1`, [
+    userId,
+    enabled,
+  ]);
+  return (result.rowCount ?? 0) > 0;
 }

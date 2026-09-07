@@ -70,3 +70,36 @@ describe("touchLastLogin", () => {
     expect(queryMock).toHaveBeenCalledWith(expect.stringContaining('SET "lastLoginAt" = now()'), ["u1"]);
   });
 });
+
+// [Sugestão do utilizador — "quero poder ativar/desativar o acesso ao Konta
+// AI por utilizador"] isAiEnabled é a verificação que POST /api/ai/chat usa
+// para bloquear ou não um pedido — tem de falhar fechado (false) sempre
+// que não houver uma linha "aiEnabled = true" clara, nunca assumir acesso
+// ativo por omissão.
+describe("isAiEnabled", () => {
+  afterEach(() => {
+    queryMock.mockReset();
+  });
+
+  it("devolve true quando aiEnabled é true na base de dados", async () => {
+    queryMock.mockResolvedValue({ rows: [{ aiEnabled: true }] });
+    const { isAiEnabled } = await import("./users");
+
+    expect(await isAiEnabled("u1")).toBe(true);
+    expect(queryMock).toHaveBeenCalledWith(expect.stringContaining('SELECT "aiEnabled"'), ["u1"]);
+  });
+
+  it("devolve false quando aiEnabled é false na base de dados", async () => {
+    queryMock.mockResolvedValue({ rows: [{ aiEnabled: false }] });
+    const { isAiEnabled } = await import("./users");
+
+    expect(await isAiEnabled("u1")).toBe(false);
+  });
+
+  it("fail-closed: devolve false (nunca true) quando a query não encontra nenhuma linha", async () => {
+    queryMock.mockResolvedValue({ rows: [] });
+    const { isAiEnabled } = await import("./users");
+
+    expect(await isAiEnabled("utilizador-inexistente")).toBe(false);
+  });
+});

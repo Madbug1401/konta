@@ -51,6 +51,21 @@ export async function touchLastLogin(userId: string): Promise<void> {
   await getPool().query(`UPDATE "User" SET "lastLoginAt" = now() WHERE id = $1`, [userId]);
 }
 
+// [Sugestão do utilizador — "quero poder ativar/desativar o acesso ao Konta
+// AI por utilizador"] Consulta dedicada (mesmo padrão de touchLastLogin
+// acima) em vez de acrescentar "aiEnabled" a UserRow/findUserById — este
+// valor só interessa a um único chamador (POST /api/ai/chat, antes de
+// sequer construir o contexto ou chamar o Claude), nunca precisa de
+// viajar por todo o resto do código que já usa findUserById para outras
+// coisas (timezone, etc.). Fail-closed, mesma filosofia de isAdminEmail
+// (src/lib/auth/admin.ts): se a linha não existir por algum motivo,
+// `rows[0]` é undefined e `Boolean(undefined)` é false — nunca se assume
+// acesso ativo por omissão quando a consulta não devolve nada.
+export async function isAiEnabled(userId: string): Promise<boolean> {
+  const { rows } = await getPool().query(`SELECT "aiEnabled" FROM "User" WHERE id = $1`, [userId]);
+  return Boolean(rows[0]?.aiEnabled);
+}
+
 export async function createUser(input: {
   email: string;
   passwordHash: string;
