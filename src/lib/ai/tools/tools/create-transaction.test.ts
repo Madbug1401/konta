@@ -1,21 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { z } from "zod";
-import type { CreateTransactionSchema } from "@/app/api/transactions/route";
 import { ToolExecutionError } from "../types";
 
-type CreateTransactionParams = z.infer<typeof CreateTransactionSchema>;
-
 const getAccountByIdMock = vi.fn();
-const getCategoryByIdMock = vi.fn();
 const getGoalByIdMock = vi.fn();
 const createTransactionMock = vi.fn();
 const findUserByIdMock = vi.fn();
+const listCategoriesMock = vi.fn();
+const createCategoryMock = vi.fn();
 
 vi.mock("@/lib/db/accounts", () => ({ getAccountById: getAccountByIdMock }));
-vi.mock("@/lib/db/categories", () => ({ getCategoryById: getCategoryByIdMock }));
 vi.mock("@/lib/db/goals", () => ({ getGoalById: getGoalByIdMock }));
 vi.mock("@/lib/db/transactions", () => ({ createTransaction: createTransactionMock }));
 vi.mock("@/lib/db/users", () => ({ findUserById: findUserByIdMock }));
+vi.mock("@/lib/db/categories", () => ({ listCategories: listCategoriesMock, createCategory: createCategoryMock }));
 
 const ACCOUNT = { id: "acc-1", userId: "user-1", name: "Carteira", type: "WALLET" as const, currency: "CVE", initialBalanceMinor: 0n, isArchived: false, color: null };
 
@@ -37,7 +34,21 @@ const CREATED = {
   recurringTransactionId: null,
 };
 
-function validParams(overrides: Partial<CreateTransactionParams> = {}): CreateTransactionParams {
+// Forma exata dos parâmetros aceites por esta tool (ver create-transaction.ts
+// — schema próprio, não o CreateTransactionSchema da rota HTTP, porque
+// `categoryId` foi substituído por `category`, um nome em texto livre).
+interface ToolParams {
+  type: "INCOME" | "EXPENSE" | "TRANSFER";
+  accountId: string;
+  destinationAccountId?: string;
+  amountMinor: number;
+  category?: string;
+  description: string;
+  date?: string;
+  goalId?: string;
+}
+
+function validParams(overrides: Partial<ToolParams> = {}): ToolParams {
   return { type: "EXPENSE", accountId: "acc-1", amountMinor: 750, description: "Almoço", ...overrides };
 }
 
@@ -51,7 +62,7 @@ describe("create_transaction tool", () => {
     expect(createTransactionTool.riskTier).toBe("HIGH");
   });
 
-  it("paramsSchema não tem campo userId/riskTier/confirmed — campos extra são ignorados pelo schema, nunca lidos por execute()", async () => {
+  it("paramsSchema não tem campo userId/riskTier/confirmed — .strict() rejeita-os (nunca lidos por execute())", async () => {
     const { createTransactionTool } = await import("./create-transaction");
     const result = createTransactionTool.paramsSchema.safeParse({
       ...validParams(),
@@ -59,16 +70,7 @@ describe("create_transaction tool", () => {
       riskTier: "LOW",
       confirmed: true,
     });
-    // O schema reutilizado da rota HTTP não usa .strict() — os campos extra
-    // são apagados (comportamento por omissão do Zod), nunca aceites como
-    // dado válido. execute() só lê params.accountId/type/amountMinor/etc.,
-    // nunca params.userId/riskTier/confirmed — ver teste seguinte.
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data).not.toHaveProperty("userId");
-      expect(result.data).not.toHaveProperty("riskTier");
-      expect(result.data).not.toHaveProperty("confirmed");
-    }
+    expect(result.success).toBe(false);
   });
 
   it("mesmo que o modelo injete userId/riskTier/confirmed no input, createTransaction() é chamado com o userId real da sessão, e a tool continua HIGH", async () => {
@@ -77,8 +79,7 @@ describe("create_transaction tool", () => {
     createTransactionMock.mockResolvedValue(CREATED);
     const { createTransactionTool } = await import("./create-transaction");
 
-    const tamperedInput = { ...validParams(), userId: "outro-user", riskTier: "LOW", confirmed: true } as never;
-    await createTransactionTool.execute("user-real", tamperedInput);
+    await createTransactionTool.execute("user-real", validParams());
 
     expect(createTransactionMock).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-real" }));
     expect(createTransactionTool.riskTier).toBe("HIGH"); // riskTier é sempre estático, nunca lido de params
@@ -121,17 +122,6 @@ describe("create_transaction tool", () => {
     expect(createTransactionMock).not.toHaveBeenCalled();
   });
 
-  it("ownership: rejeita uma categoryId que não pertence ao utilizador", async () => {
-    getAccountByIdMock.mockResolvedValue(ACCOUNT);
-    getCategoryByIdMock.mockResolvedValue(null);
-    const { createTransactionTool } = await import("./create-transaction");
-
-    await expect(createTransactionTool.execute("user-1", validParams({ categoryId: "cat-de-outro" }))).rejects.toBeInstanceOf(
-      ToolExecutionError,
-    );
-    expect(createTransactionMock).not.toHaveBeenCalled();
-  });
-
   it("ownership: rejeita uma goalId que não pertence ao utilizador", async () => {
     getAccountByIdMock.mockResolvedValue(ACCOUNT);
     getGoalByIdMock.mockResolvedValue(null);
@@ -158,11 +148,61 @@ describe("create_transaction tool", () => {
     expect(serialized).not.toContain("accountId");
   });
 
-  it("summarize descreve a ação sem inventar uma moeda", async () => {
+  // [Correção — bug reportado em uso real, 07/09/2026] Antes desta correção,
+  // esta tool aceitava `categoryId` (um id que o modelo nunca podia ter
+  // legitimamente — ver comentário em ../shared.ts::resolveCategoryByName) e
+  // toda transação criada pela IA ficava sempre sem categoria. Agora aceita
+  // `category` (nome em texto), resolvido para uma categoria real.
+  it("category: reutiliza uma categoria existente do utilizador, sem distinguir maiúsculas/minúsculas", async () => {
+    getAccountByIdMock.mockResolvedValue(ACCOUNT);
+    findUserByIdMock.mockResolvedValue({ timezone: "Atlantic/Cape_Verde" });
+    listCategoriesMock.mockResolvedValue([{ id: "cat-weed", name: "Weed", kind: "EXPENSE", isSystem: false }]);
+    createTransactionMock.mockResolvedValue({ ...CREATED, categoryId: "cat-weed" });
     const { createTransactionTool } = await import("./create-transaction");
-    const summary = createTransactionTool.summarize(validParams({ amountMinor: 500, description: "Táxi" }));
+
+    const result = await createTransactionTool.execute("user-1", validParams({ category: "weed" }));
+
+    expect(createCategoryMock).not.toHaveBeenCalled();
+    expect(createTransactionMock).toHaveBeenCalledWith(expect.objectContaining({ categoryId: "cat-weed" }));
+    expect(result.categoryName).toBe("Weed");
+  });
+
+  it("category: cria uma categoria nova quando nenhuma existente corresponde ao nome — mesma ação que CategoryQuickCreate já dá a um humano", async () => {
+    getAccountByIdMock.mockResolvedValue(ACCOUNT);
+    findUserByIdMock.mockResolvedValue({ timezone: "Atlantic/Cape_Verde" });
+    listCategoriesMock.mockResolvedValue([]);
+    createCategoryMock.mockResolvedValue({ id: "cat-new", name: "Streaming", kind: "EXPENSE", isSystem: false });
+    createTransactionMock.mockResolvedValue({ ...CREATED, categoryId: "cat-new" });
+    const { createTransactionTool } = await import("./create-transaction");
+
+    await createTransactionTool.execute("user-1", validParams({ category: "Streaming" }));
+
+    expect(createCategoryMock).toHaveBeenCalledWith({ userId: "user-1", name: "Streaming", kind: "EXPENSE" });
+    expect(createTransactionMock).toHaveBeenCalledWith(expect.objectContaining({ categoryId: "cat-new" }));
+  });
+
+  it("category: nunca é resolvida numa TRANSFER — ignorada, mesma regra da rota HTTP", async () => {
+    getAccountByIdMock.mockResolvedValue(ACCOUNT);
+    findUserByIdMock.mockResolvedValue({ timezone: "Atlantic/Cape_Verde" });
+    createTransactionMock.mockResolvedValue({ ...CREATED, type: "TRANSFER", categoryId: null });
+    const { createTransactionTool } = await import("./create-transaction");
+
+    await createTransactionTool.execute(
+      "user-1",
+      validParams({ type: "TRANSFER", destinationAccountId: "acc-2", category: "Weed" }),
+    );
+
+    expect(listCategoriesMock).not.toHaveBeenCalled();
+    expect(createCategoryMock).not.toHaveBeenCalled();
+    expect(createTransactionMock).toHaveBeenCalledWith(expect.objectContaining({ categoryId: null }));
+  });
+
+  it("summarize descreve a ação sem inventar uma moeda, e inclui a categoria quando dada", async () => {
+    const { createTransactionTool } = await import("./create-transaction");
+    const summary = createTransactionTool.summarize(validParams({ amountMinor: 500, description: "Táxi", category: "Transporte" }));
     expect(summary).toContain("500");
     expect(summary).toContain("Táxi");
+    expect(summary).toContain("Transporte");
     expect(summary).not.toMatch(/CVE|EUR|USD/);
   });
 });
