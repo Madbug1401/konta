@@ -5,10 +5,14 @@ referências a ficheiros reais — não uma descrição de intenções. Escrito
 originalmente em 25/08/2026; as secções 5, 7 e 10 foram atualizadas em
 06/09/2026 (Dívidas, Metas, arquivamento/remoção de conta, painel de
 Estatísticas, feedback in-app, agrupamento por moeda no Dashboard); as
-secções 1, 4, 5, 7, 8 e 10 foram atualizadas de novo em 07/09/2026 para
-refletir o Milestone 1–4 do Konta AI (Gateway, Context Builder, Tool
-Registry/Permission Layer, orquestrador de chat e a página `/assistant`) —
-ver `git log` para o histórico exato.
+secções 1, 4, 5, 7, 8 e 10 foram atualizadas de novo em 07/09/2026, em duas
+passagens, para refletir o Milestone 1–4 do Konta AI (Gateway, Context
+Builder, Tool Registry/Permission Layer, orquestrador de chat e a página
+`/assistant`) e, na mesma data, quatro correções/funcionalidades feitas em
+uso real: conversa do chat a sobreviver a navegação, categorização por nome
+nas tools de escrita, e acesso ao Konta AI a tornar-se opt-in por
+utilizador (ativado por um admin em `/admin`, desativado por omissão para
+quem se regista de agora em diante) — ver `git log` para o histórico exato.
 
 ## 1. O que é o Konta hoje
 
@@ -31,7 +35,9 @@ Nove entidades, cada uma com responsabilidade própria — ao contrário do
 protótipo, que misturava tudo num único registo genérico:
 
 - **User** — inclui `timezone` e `defaultCurrency` por utilizador (nunca
-  assumido globalmente).
+  assumido globalmente), e `aiEnabled` (booleano, controla o acesso ao Konta
+  AI; `false` por omissão para contas novas desde `manual-sql/0006`, só um
+  admin liga em `/admin`).
 - **Account** — carteira, banco, poupança, cartão de crédito, investimento,
   fundo de emergência. Tem o seu próprio `initialBalanceMinor`; o saldo
   "atual" nunca é guardado diretamente, é sempre calculado.
@@ -108,12 +114,19 @@ poder ser reutilizado por Web, futuro Mobile, relatórios e (mais tarde) IA.
   edição, progresso e projeção de data de conclusão
 - `/recurring` — séries recorrentes (criação, edição)
 - `/admin` — estatísticas da plataforma, só visível para emails em
-  `ADMIN_EMAILS`
+  `ADMIN_EMAILS`; inclui agora um botão por utilizador para ativar/desativar
+  o acesso ao Konta AI (`UserAiAccessButton`, `POST
+  /api/admin/users/[userId]/ai-access`)
 - Feedback in-app (formulário ligado a `POST /api/feedback`, visível para o
   dono em `/admin`)
 - `/assistant` — Konta AI: chat com Claude sobre os dados financeiros do
   utilizador, com pedido de confirmação explícita (botões Confirmar/Cancelar)
-  antes de qualquer escrita (criar/editar/apagar transação)
+  antes de qualquer escrita (criar/editar/apagar transação). Só visível na
+  navegação (`AppShell`) para contas com `aiEnabled = true`; a conversa vive
+  agora em `AssistantProvider` (montado em `src/app/(app)/layout.tsx`, nunca
+  desmontado ao navegar dentro da app) em vez de dentro da própria página,
+  por isso sobrevive a trocar de página — continua 100% em memória, sem
+  persistência no servidor, perdida ao dar refresh ou sair para `/login`
 
 **Ainda por construir** — nenhuma UI dedicada, mesmo com dados/motor prontos
 onde aplicável:
@@ -164,12 +177,12 @@ de API (`transactions`, `transactions/[id]`, `health`, `ai/chat`), e todo o
 Konta AI (`gateway`, `context/builder`, `context/normalize`,
 `chat/orchestrator`, `chat/context-presentation`, `tools/registry`,
 `tools/permissions`, `tools/executor`, `tools/confirmation-store`,
-`tools/anthropic-adapter`, as 7 tools individuais) — 38 ficheiros `*.test.ts`
-no total, 261 testes. Confirmado a passar de facto em 07/09/2026 (`npx
-vitest run`), junto com `npx tsc --noEmit`, `npx eslint .` e `npm run
-build`, os quatro sem erros — mas corre `npm test` para o número atual em
-vez de confiar num valor escrito neste documento, que fica desatualizado a
-cada novo teste.
+`tools/anthropic-adapter`, as 7 tools individuais, e `admin.ts`/`users.ts`
+para o toggle de acesso ao Konta AI) — 39 ficheiros `*.test.ts` no total,
+284 testes. Confirmado a passar de facto em 07/09/2026 (`npx vitest run`),
+junto com `npx tsc --noEmit`, `npx eslint .` e `npm run build`, os quatro
+sem erros — mas corre `npm test` para o número atual em vez de confiar num
+valor escrito neste documento, que fica desatualizado a cada novo teste.
 
 ## 8. Onde a arquitetura ainda não é a "final"
 
@@ -195,7 +208,15 @@ cada novo teste.
   de uma ação a exigir confirmação no mesmo turno). `AiActionLog`
   persistente (registo de auditoria de ações da IA) ainda não existe.
   Requer `ANTHROPIC_API_KEY` (ver `.env.example`); `render.yaml` já declara
-  a variável para o deploy de produção.
+  a variável para o deploy de produção. `create_transaction`/
+  `update_transaction` corrigidas (07/09/2026, bug de uso real) para
+  categorizar por **nome** em texto livre (`resolveCategoryByName`,
+  `src/lib/ai/tools/shared.ts` — reutiliza categoria existente do mesmo
+  `kind` ou cria uma nova) em vez do `categoryId` que nenhuma tool desta V1
+  alguma vez expõe ao modelo, o que fazia toda transação criada pela IA
+  ficar sempre sem categoria. Acesso ao Konta AI é agora opt-in por
+  utilizador (`User.aiEnabled`, `false` por omissão desde
+  `manual-sql/0006`), ativado apenas por um admin em `/admin`.
 
 ## 9. Como correr
 
@@ -219,7 +240,9 @@ Frentes em aberto, sem uma depender da outra:
    VPS real seguindo `docs/architecture/DEPLOYMENT.md` e
    `docs/architecture/BACKUP.md`.
 2. **Evoluir o Konta AI** — `AiActionLog` persistente, tool `get_categories`,
-   memória entre sessões, ou encadear mais de uma ação por turno.
+   memória entre sessões, encadear mais de uma ação por turno, ou decidir
+   como/quando ativar `aiEnabled` para os utilizadores existentes da Beta
+   (hoje só um admin o faz manualmente, um de cada vez, em `/admin`).
 3. **Migração do protótipo** — o mapeamento está em
    `docs/architecture/MIGRATION.md`; o script executável ainda não foi
    escrito.
