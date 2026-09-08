@@ -26,6 +26,7 @@
 // ============================================================================
 
 import { logError } from "@/lib/logger";
+import { AttachmentError } from "@/lib/ai/attachments";
 import { buildAiContext, type ContextMode } from "@/lib/ai/context";
 import {
   AiConfigError,
@@ -35,7 +36,9 @@ import {
   type ChatMessage,
   type ChatToolResultBlock,
   type ChatToolUseBlock,
+  type ChatUserBlock,
 } from "@/lib/ai/gateway";
+import { resolveAttachmentsForMessage } from "./attachments";
 import {
   consumeConfirmation,
   cancelConfirmation,
@@ -200,7 +203,32 @@ async function runLoop({ userId, system, messages, roundsUsed }: RunLoopParams):
 export interface SendMessageInput {
   userId: string;
   message: string;
+  /** [Milestone 5a — Multimodal] Ids já resolvidos por POST /api/ai/attachments — nunca bytes/attachments em bruto neste input. */
+  attachmentIds?: string[];
   history?: ChatHistoryTurn[];
+}
+
+/**
+ * [Milestone 5a — Multimodal] Constrói o conteúdo da última mensagem do
+ * utilizador. Sem attachments, mantém exatamente o comportamento anterior
+ * (uma string simples — nunca um array de blocos só para uma mensagem de
+ * texto). Com attachments: texto (se houver) + imagem/documento resolvidos;
+ * uma transcrição de áudio (Milestone 5c) entra como texto simples, nunca
+ * como bloco — por isso pode acabar por não precisar de nenhum bloco e
+ * continuar uma string simples também.
+ */
+function buildUserMessageContent(userId: string, message: string, attachmentIds: string[] | undefined): string | ChatUserBlock[] {
+  if (!attachmentIds || attachmentIds.length === 0) return message;
+
+  const { blocks, transcribedTexts } = resolveAttachmentsForMessage(userId, attachmentIds);
+  const text = [message, ...transcribedTexts].filter((part) => part.trim().length > 0).join("\n\n");
+
+  if (blocks.length === 0) return text;
+
+  const content: ChatUserBlock[] = [];
+  if (text.length > 0) content.push({ type: "text", text });
+  content.push(...blocks);
+  return content;
 }
 
 export async function sendMessage(input: SendMessageInput): Promise<NonCancelledOutcome> {
@@ -212,7 +240,20 @@ export async function sendMessage(input: SendMessageInput): Promise<NonCancelled
     return { type: "error", message: "Não foi possível carregar os teus dados financeiros agora. Tenta novamente." };
   }
 
-  const messages: ChatMessage[] = [...historyToMessages(input.history), { role: "user", content: input.message }];
+  let content: string | ChatUserBlock[];
+  try {
+    content = buildUserMessageContent(input.userId, input.message, input.attachmentIds);
+  } catch (error) {
+    if (error instanceof AttachmentError) {
+      return { type: "error", message: error.message };
+    }
+    throw error;
+  }
+  if (content.length === 0) {
+    return { type: "error", message: "Escreve uma mensagem ou anexa pelo menos um ficheiro." };
+  }
+
+  const messages: ChatMessage[] = [...historyToMessages(input.history), { role: "user", content }];
   return runLoop({ userId: input.userId, system, messages, roundsUsed: 0 });
 }
 

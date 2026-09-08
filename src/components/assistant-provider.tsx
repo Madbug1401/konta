@@ -28,10 +28,14 @@
 
 import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import { useToast } from "@/components/toast-provider";
+import type { AiAttachmentKind } from "@/lib/ai/attachments";
 
 export interface ChatTurn {
   role: "user" | "assistant";
   content: string;
+  // [Milestone 5a — Multimodal] Só para exibição — nunca reenviado ao
+  // servidor (o histórico continua só texto, ver postChat abaixo).
+  attachments?: { filename: string; kind: AiAttachmentKind }[];
 }
 
 export interface PendingConfirmation {
@@ -40,11 +44,29 @@ export interface PendingConfirmation {
   riskTier: string;
 }
 
+// [Milestone 5a] Mantém sincronizado com MAX_ATTACHMENTS_PER_MESSAGE em
+// src/lib/ai/attachments/validate.ts — duplicado aqui de propósito: este
+// ficheiro corre no browser, e esse módulo arrasta código só-de-servidor
+// (node:crypto, pdf-parse) que nunca deve ser incluído no bundle do cliente.
+const MAX_ATTACHMENTS = 4;
+
+export interface PendingAttachment {
+  localId: string;
+  file: File;
+  status: "uploading" | "uploaded" | "error";
+  attachmentId?: string;
+  kind?: AiAttachmentKind;
+  error?: string;
+}
+
 interface AssistantContextValue {
   turns: ChatTurn[];
   pending: PendingConfirmation | null;
   sending: boolean;
   error: string | null;
+  pendingAttachments: PendingAttachment[];
+  addAttachments: (files: File[]) => void;
+  removeAttachment: (localId: string) => void;
   sendChat: (message: string) => Promise<void>;
   confirmPending: () => Promise<void>;
   cancelPending: () => Promise<void>;
@@ -68,12 +90,34 @@ async function postChat(body: unknown): Promise<{ ok: boolean; data: Record<stri
   return { ok: res.ok, data };
 }
 
+// [Milestone 5a] Faz upload de UM ficheiro para POST /api/ai/attachments —
+// nunca envia bytes através de POST /api/ai/chat (esse continua só JSON).
+async function uploadAttachment(file: File): Promise<{ ok: true; attachmentId: string; kind: AiAttachmentKind } | { ok: false; error: string }> {
+  const form = new FormData();
+  form.set("file", file);
+  try {
+    const res = await fetch("/api/ai/attachments", { method: "POST", body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: typeof data.error === "string" ? data.error : "Não foi possível enviar o ficheiro." };
+    }
+    return { ok: true, attachmentId: String(data.attachmentId), kind: data.kind as AiAttachmentKind };
+  } catch {
+    return { ok: false, error: "Não foi possível enviar o ficheiro. Verifica a tua ligação." };
+  }
+}
+
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const toast = useToast();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [pending, setPending] = useState<PendingConfirmation | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  // [Correção — remover durante upload] `removeAttachment` só apaga o item
+  // da lista visível; sem isto, um upload em curso que termina DEPOIS de o
+  // utilizador o remover voltaria a inserir o resultado na lista sozinho.
+  const removedAttachmentIdsRef = useRef<Set<string>>(new Set());
   // [Auditoria de segurança M4 — double-click] Ver comentário equivalente que
   // existia antes em chat-panel.tsx: um ref muda de valor imediatamente, sem
   // esperar por um render — fecha a janela de dois cliques na mesma "tick"
@@ -109,18 +153,76 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // [Milestone 5a] `files` novos entram sempre como "uploading" — o upload
+  // real acontece aqui, em paralelo entre si, nunca bloqueando a UI (o
+  // utilizador pode continuar a escrever enquanto um ficheiro grande sobe).
+  function addAttachments(files: File[]) {
+    const room = Math.max(0, MAX_ATTACHMENTS - pendingAttachments.length);
+    if (room === 0) {
+      toast.error(`Só podes anexar até ${MAX_ATTACHMENTS} ficheiros de cada vez.`);
+      return;
+    }
+    const accepted = files.slice(0, room);
+    if (files.length > accepted.length) {
+      toast.error(`Só podes anexar até ${MAX_ATTACHMENTS} ficheiros de cada vez.`);
+    }
+
+    const items: PendingAttachment[] = accepted.map((file) => ({
+      localId: crypto.randomUUID(),
+      file,
+      status: "uploading",
+    }));
+    setPendingAttachments((current) => [...current, ...items]);
+
+    for (const item of items) {
+      void uploadAttachment(item.file).then((result) => {
+        if (removedAttachmentIdsRef.current.has(item.localId)) return;
+        setPendingAttachments((current) =>
+          current.map((a) =>
+            a.localId !== item.localId
+              ? a
+              : result.ok
+                ? { ...a, status: "uploaded", attachmentId: result.attachmentId, kind: result.kind }
+                : { ...a, status: "error", error: result.error },
+          ),
+        );
+      });
+    }
+  }
+
+  function removeAttachment(localId: string) {
+    removedAttachmentIdsRef.current.add(localId);
+    setPendingAttachments((current) => current.filter((a) => a.localId !== localId));
+  }
+
   async function sendChat(message: string) {
     const trimmed = message.trim();
-    if (!trimmed || inFlightRef.current) return;
+    if (inFlightRef.current) return;
+    if (pendingAttachments.some((a) => a.status === "uploading")) return; // botão de enviar deve estar desativado neste estado
+    const uploaded = pendingAttachments.filter((a): a is PendingAttachment & { attachmentId: string; kind: AiAttachmentKind } => a.status === "uploaded");
+    if (!trimmed && uploaded.length === 0) return;
     inFlightRef.current = true;
 
     const history = turns.map((t) => ({ role: t.role, content: t.content }));
-    setTurns((current) => [...current, { role: "user", content: trimmed }]);
+    setTurns((current) => [
+      ...current,
+      {
+        role: "user",
+        content: trimmed,
+        attachments: uploaded.length > 0 ? uploaded.map((a) => ({ filename: a.file.name, kind: a.kind })) : undefined,
+      },
+    ]);
+    setPendingAttachments([]);
     setError(null);
     setSending(true);
 
     try {
-      const { ok, data } = await postChat({ action: "message", message: trimmed, history });
+      const { ok, data } = await postChat({
+        action: "message",
+        message: trimmed,
+        attachmentIds: uploaded.length > 0 ? uploaded.map((a) => a.attachmentId) : undefined,
+        history,
+      });
       if (!ok) {
         const message = typeof data.error === "string" ? data.error : "Não foi possível falar com o assistente. Tenta novamente.";
         setError(message);
@@ -174,7 +276,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AssistantContext.Provider value={{ turns, pending, sending, error, sendChat, confirmPending, cancelPending }}>
+    <AssistantContext.Provider
+      value={{ turns, pending, sending, error, pendingAttachments, addAttachments, removeAttachment, sendChat, confirmPending, cancelPending }}
+    >
       {children}
     </AssistantContext.Provider>
   );

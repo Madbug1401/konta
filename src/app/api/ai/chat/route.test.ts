@@ -89,6 +89,40 @@ describe("POST /api/ai/chat", () => {
     });
   });
 
+  // [Milestone 5a — Multimodal]
+  describe("attachments", () => {
+    it("mensagem só com attachmentIds (sem texto) é aceite — uma imagem pode não ter legenda", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      sendMessageMock.mockResolvedValue({ type: "final", reply: "ok" });
+      const { POST } = await import("./route");
+
+      const response = await POST(postRequest({ action: "message", message: "", attachmentIds: ["att_1"] }));
+
+      expect(response.status).toBe(200);
+      expect(sendMessageMock).toHaveBeenCalledWith(expect.objectContaining({ attachmentIds: ["att_1"] }));
+    });
+
+    it("mensagem vazia E sem attachmentIds continua rejeitada com 400", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      const { POST } = await import("./route");
+
+      const response = await POST(postRequest({ action: "message", message: "", attachmentIds: [] }));
+
+      expect(response.status).toBe(400);
+      expect(sendMessageMock).not.toHaveBeenCalled();
+    });
+
+    it("rejeita mais attachmentIds do que o limite permitido por mensagem", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      const { POST } = await import("./route");
+
+      const response = await POST(postRequest({ action: "message", message: "olá", attachmentIds: ["a", "b", "c", "d", "e"] }));
+
+      expect(response.status).toBe(400);
+      expect(sendMessageMock).not.toHaveBeenCalled();
+    });
+  });
+
   // [Sugestão do utilizador — "quero poder ativar/desativar o acesso ao
   // Konta AI por utilizador"] Verificação nova, à frente de tudo o resto
   // (antes do rate limit e do parsing do corpo) — ver comentário em

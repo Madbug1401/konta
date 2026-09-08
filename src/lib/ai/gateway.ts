@@ -21,7 +21,7 @@
 // mensagens sem nunca importar `@anthropic-ai/sdk`.
 // ============================================================================
 
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic, { toFile } from "@anthropic-ai/sdk";
 
 // [DECISÃO — escolha de modelo] Claude Sonnet 5, não Opus 5 — mesma decisão
 // do Milestone 1, mantida sem alteração neste milestone (instrução
@@ -92,8 +92,30 @@ export interface ChatToolResultBlock {
   isError?: boolean;
 }
 
+// [Milestone 5a — Multimodal] Fonte de um bloco de imagem/documento: nunca
+// bytes soltos a atravessar a arquitetura — ou já foram convertidos em
+// base64 no momento da chamada (nunca guardados assim), ou já foram
+// carregados uma vez para a Anthropic Files API (`file`, ver
+// `uploadFileToAnthropic` abaixo) e só a referência (`fileId`) circula daqui
+// para a frente. `text` cobre TXT/CSV — não precisam de upload, entram
+// diretamente como documento de texto simples.
+export type ChatMediaSource = { kind: "base64"; mediaType: string; data: string } | { kind: "file"; fileId: string };
+
+/** Uma imagem (JPEG/PNG/WebP/GIF) — nunca produzida pelo Claude, só enviada a ele. */
+export interface ChatImageBlock {
+  type: "image";
+  source: ChatMediaSource;
+}
+
+/** Um documento (PDF via `file`/`base64`, ou TXT/CSV já como texto simples) — nunca produzido pelo Claude. */
+export interface ChatDocumentBlock {
+  type: "document";
+  source: ChatMediaSource | { kind: "text"; data: string };
+  title?: string;
+}
+
 export type ChatAssistantBlock = ChatTextBlock | ChatToolUseBlock;
-export type ChatUserBlock = ChatTextBlock | ChatToolResultBlock;
+export type ChatUserBlock = ChatTextBlock | ChatToolResultBlock | ChatImageBlock | ChatDocumentBlock;
 
 export interface ChatMessage {
   role: ChatRole;
@@ -125,16 +147,33 @@ export interface ChatTurnResult {
   content: ChatAssistantBlock[];
 }
 
+function toAnthropicImageSource(source: ChatMediaSource): Anthropic.ImageBlockParam["source"] {
+  if (source.kind === "file") return { type: "file", file_id: source.fileId };
+  return { type: "base64", media_type: source.mediaType as Anthropic.Base64ImageSource["media_type"], data: source.data };
+}
+
+function toAnthropicDocumentSource(source: ChatDocumentBlock["source"]): Anthropic.DocumentBlockParam["source"] {
+  if (source.kind === "text") return { type: "text", media_type: "text/plain", data: source.data };
+  if (source.kind === "file") return { type: "file", file_id: source.fileId };
+  return { type: "base64", media_type: "application/pdf", data: source.data };
+}
+
 function toAnthropicContent(blocks: ChatAssistantBlock[] | ChatUserBlock[]): Anthropic.MessageParam["content"] {
   return blocks.map((block) => {
     if (block.type === "text") return { type: "text" as const, text: block.text };
     if (block.type === "tool_use") return { type: "tool_use" as const, id: block.id, name: block.name, input: block.input };
-    return {
-      type: "tool_result" as const,
-      tool_use_id: block.toolUseId,
-      content: block.content,
-      is_error: block.isError,
-    };
+    if (block.type === "tool_result") {
+      return {
+        type: "tool_result" as const,
+        tool_use_id: block.toolUseId,
+        content: block.content,
+        is_error: block.isError,
+      };
+    }
+    if (block.type === "image") {
+      return { type: "image" as const, source: toAnthropicImageSource(block.source) };
+    }
+    return { type: "document" as const, source: toAnthropicDocumentSource(block.source), title: block.title ?? null };
   });
 }
 
@@ -199,6 +238,28 @@ export async function sendChatTurn(params: SendChatTurnParams): Promise<ChatTurn
   }
 
   return { stopReason, content };
+}
+
+/**
+ * [Milestone 5a — Multimodal] Carrega um ficheiro (imagem/PDF) para a
+ * Anthropic Files API, para poder ser referenciado por `fileId` em
+ * mensagens futuras sem reenviar os bytes. `expiresInSeconds` é sempre
+ * definido explicitamente (mínimo aceite pela API: 3600s/1h) — nunca um
+ * upload sem prazo de expiração; ver src/lib/ai/attachments/store.ts para o
+ * TTL correspondente do lado do Konta.
+ */
+export async function uploadFileToAnthropic(bytes: Uint8Array, filename: string, mimeType: string, expiresInSeconds: number): Promise<string> {
+  const anthropic = getClient();
+  try {
+    const file = await toFile(bytes, filename, { type: mimeType });
+    const uploaded = await anthropic.files.upload({ file, expires_in_seconds: expiresInSeconds });
+    return uploaded.id;
+  } catch (error) {
+    if (error instanceof Anthropic.APIError) {
+      throw new AiProviderError(`Erro ao enviar ficheiro para a Anthropic (${error.status ?? "sem status"}): ${error.message}`);
+    }
+    throw error;
+  }
 }
 
 /** Só para os testes: limpa o cliente singleton entre casos de teste. */

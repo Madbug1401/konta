@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { _resetAttachmentStoreForTests, createAttachment } from "@/lib/ai/attachments/store";
 
 const buildAiContextMock = vi.fn();
 const sendChatTurnMock = vi.fn();
@@ -225,6 +226,96 @@ describe("sendMessage", () => {
     if (result.type === "error") {
       expect(result.message).not.toContain("falhou");
     }
+  });
+
+  describe("Multimodal (Milestone 5a) — attachmentIds", () => {
+    afterEach(() => {
+      _resetAttachmentStoreForTests();
+    });
+
+    it("com um attachment de imagem: a última mensagem inclui o texto + o bloco de imagem", async () => {
+      setDefaults();
+      sendChatTurnMock.mockResolvedValue({ stopReason: "end_turn", content: [{ type: "text", text: "Encontrei uma despesa de 25€." }] });
+      const attachment = createAttachment({
+        userId: "user-1",
+        kind: "image",
+        filename: "recibo.jpg",
+        sizeBytes: 100,
+        content: { form: "file", fileId: "file_recibo", mimeType: "image/jpeg" },
+      });
+      const { sendMessage } = await import("./orchestrator");
+
+      await sendMessage({ userId: "user-1", message: "O que é isto?", attachmentIds: [attachment.id] });
+
+      const lastMessage = sendChatTurnMock.mock.calls[0][0].messages.at(-1);
+      expect(lastMessage).toEqual({
+        role: "user",
+        content: [{ type: "text", text: "O que é isto?" }, { type: "image", source: { kind: "file", fileId: "file_recibo" } }],
+      });
+    });
+
+    it("só attachment, sem texto: a mensagem não tem bloco de texto vazio", async () => {
+      setDefaults();
+      sendChatTurnMock.mockResolvedValue({ stopReason: "end_turn", content: [{ type: "text", text: "ok" }] });
+      const attachment = createAttachment({
+        userId: "user-1",
+        kind: "image",
+        filename: "recibo.jpg",
+        sizeBytes: 100,
+        content: { form: "file", fileId: "file_recibo", mimeType: "image/jpeg" },
+      });
+      const { sendMessage } = await import("./orchestrator");
+
+      await sendMessage({ userId: "user-1", message: "", attachmentIds: [attachment.id] });
+
+      const lastMessage = sendChatTurnMock.mock.calls[0][0].messages.at(-1);
+      expect(lastMessage).toEqual({ role: "user", content: [{ type: "image", source: { kind: "file", fileId: "file_recibo" } }] });
+    });
+
+    it("attachment de áudio (transcrição) sem texto: mensagem final continua uma string simples, exatamente como uma mensagem de texto normal", async () => {
+      setDefaults();
+      sendChatTurnMock.mockResolvedValue({ stopReason: "end_turn", content: [{ type: "text", text: "ok" }] });
+      const attachment = createAttachment({
+        userId: "user-1",
+        kind: "audio",
+        filename: "voz.webm",
+        sizeBytes: 100,
+        content: { form: "text", text: "Regista 25 euros que gastei no supermercado." },
+      });
+      const { sendMessage } = await import("./orchestrator");
+
+      await sendMessage({ userId: "user-1", message: "", attachmentIds: [attachment.id] });
+
+      const lastMessage = sendChatTurnMock.mock.calls[0][0].messages.at(-1);
+      expect(lastMessage).toEqual({ role: "user", content: "Regista 25 euros que gastei no supermercado." });
+    });
+
+    it("attachment de outro utilizador: devolve error sem nunca chamar o Claude — ownership vem sempre do userId da sessão", async () => {
+      setDefaults();
+      const attachment = createAttachment({
+        userId: "user-2",
+        kind: "image",
+        filename: "recibo.jpg",
+        sizeBytes: 100,
+        content: { form: "file", fileId: "file_recibo", mimeType: "image/jpeg" },
+      });
+      const { sendMessage } = await import("./orchestrator");
+
+      const result = await sendMessage({ userId: "user-1", message: "O que é isto?", attachmentIds: [attachment.id] });
+
+      expect(result.type).toBe("error");
+      expect(sendChatTurnMock).not.toHaveBeenCalled();
+    });
+
+    it("mensagem vazia e sem attachments: devolve error sem chamar o Claude", async () => {
+      setDefaults();
+      const { sendMessage } = await import("./orchestrator");
+
+      const result = await sendMessage({ userId: "user-1", message: "" });
+
+      expect(result).toEqual({ type: "error", message: expect.stringContaining("anexa") });
+      expect(sendChatTurnMock).not.toHaveBeenCalled();
+    });
   });
 });
 

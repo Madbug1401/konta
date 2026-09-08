@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withErrorHandling } from "@/lib/api-error";
+import { MAX_ATTACHMENTS_PER_MESSAGE } from "@/lib/ai/attachments";
 import { AiConfigError, AiProviderError } from "@/lib/ai/gateway";
 import { cancelPendingAction, confirmPendingAction, sendMessage } from "@/lib/ai/chat";
 import { getSessionUser } from "@/lib/auth/session";
@@ -11,9 +12,20 @@ import { checkRateLimit } from "@/lib/rate-limit";
 // delas. A identidade vem sempre de getSessionUser() (regra 6 do briefing,
 // já aplicada em todas as outras rotas); o cliente não tem forma de se
 // fazer passar por outro utilizador.
+//
+// [Milestone 5a — Multimodal] `message` deixou de exigir `min(1)` — uma
+// mensagem pode ser só um attachment (ex: uma foto de recibo sem legenda).
+// A regra "tem de haver pelo menos texto OU um attachment" é validada à
+// parte, depois do parse (ver abaixo) — um `.refine()` aqui quebraria
+// `z.discriminatedUnion` (mesma limitação já documentada em
+// src/lib/ai/tools/tools/create-transaction.ts).
 const SendMessageSchema = z.object({
   action: z.literal("message"),
-  message: z.string().trim().min(1).max(4000),
+  message: z.string().trim().max(4000),
+  // [Milestone 5a] Ids devolvidos por POST /api/ai/attachments — nunca
+  // bytes no corpo desta rota. Ownership verificado de novo no Orchestrator
+  // (nunca confiar só em o cliente ter recebido o id de um upload seu).
+  attachmentIds: z.array(z.string().min(1).max(64)).max(MAX_ATTACHMENTS_PER_MESSAGE).optional(),
   // Histórico gerido pelo cliente (sem memória persistida no servidor nesta
   // fase — ver docs/architecture/OVERVIEW.md). Limitado em tamanho e em
   // número de turnos para nunca virar um payload arbitrariamente grande.
@@ -66,6 +78,12 @@ export const POST = withErrorHandling("api.ai.chat.post", async (request: Reques
     return NextResponse.json({ error: "Dados inválidos.", details: parsed.error.flatten() }, { status: 400 });
   }
 
+  // [Milestone 5a] Ver comentário junto de SendMessageSchema — esta regra não
+  // pode viver num `.refine()` do schema (quebraria o discriminatedUnion).
+  if (parsed.data.action === "message" && parsed.data.message.length === 0 && !parsed.data.attachmentIds?.length) {
+    return NextResponse.json({ error: "Escreve uma mensagem ou anexa pelo menos um ficheiro." }, { status: 400 });
+  }
+
   try {
     if (parsed.data.action === "cancel") {
       const outcome = cancelPendingAction(session.userId, parsed.data.confirmationToken);
@@ -78,7 +96,12 @@ export const POST = withErrorHandling("api.ai.chat.post", async (request: Reques
     const outcome =
       parsed.data.action === "confirm"
         ? await confirmPendingAction(session.userId, parsed.data.confirmationToken)
-        : await sendMessage({ userId: session.userId, message: parsed.data.message, history: parsed.data.history });
+        : await sendMessage({
+            userId: session.userId,
+            message: parsed.data.message,
+            attachmentIds: parsed.data.attachmentIds,
+            history: parsed.data.history,
+          });
 
     if (outcome.type === "final") {
       return NextResponse.json({ status: "final", reply: outcome.reply });
