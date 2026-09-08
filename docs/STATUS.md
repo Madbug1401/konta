@@ -1,11 +1,14 @@
-# Konta — Estado atual do projeto (atualizado 06/09/2026)
+# Konta — Estado atual do projeto (atualizado 07/09/2026)
 
 Este documento é um retrato honesto do que existe hoje no repositório, com
 referências a ficheiros reais — não uma descrição de intenções. Escrito
 originalmente em 25/08/2026; as secções 5, 7 e 10 foram atualizadas em
-06/09/2026 para refletir trabalho feito desde então (Dívidas, Metas,
-arquivamento/remoção de conta, painel de Estatísticas, feedback in-app,
-agrupamento por moeda no Dashboard) — ver `git log` para o histórico exato.
+06/09/2026 (Dívidas, Metas, arquivamento/remoção de conta, painel de
+Estatísticas, feedback in-app, agrupamento por moeda no Dashboard); as
+secções 1, 4, 5, 7, 8 e 10 foram atualizadas de novo em 07/09/2026 para
+refletir o Milestone 1–4 do Konta AI (Gateway, Context Builder, Tool
+Registry/Permission Layer, orquestrador de chat e a página `/assistant`) —
+ver `git log` para o histórico exato.
 
 ## 1. O que é o Konta hoje
 
@@ -13,9 +16,14 @@ Um gestor financeiro pessoal (Next.js 16 + React 19 + TypeScript + Tailwind
 v4, API própria em Node, PostgreSQL) que evoluiu o protótipo `index.html`
 (um único ficheiro, tudo em `localStorage`, um campo `type` genérico) para
 uma aplicação multi-utilizador, com base de dados real, autenticação própria,
-e um motor de cálculo financeiro isolado da interface — arquitetado para que
+um motor de cálculo financeiro isolado da interface — arquitetado para que
 uma app mobile (React Native/Expo) possa consumir exatamente a mesma lógica
-mais tarde, sem reescrever nada.
+mais tarde, sem reescrever nada — e, desde o Milestone 4, um assistente de
+IA (Claude, via `@anthropic-ai/sdk`) capaz de responder sobre os dados
+financeiros do utilizador e propor ações (criar/editar/apagar transação),
+sempre com confirmação explícita para qualquer escrita. Ver
+`docs/architecture/OVERVIEW.md`, secções "Konta AI" e "Konta AI Chat", para
+o desenho completo.
 
 ## 2. Modelo de dados (`prisma/schema.prisma`, 398 linhas)
 
@@ -72,9 +80,13 @@ poder ser reutilizado por Web, futuro Mobile, relatórios e (mais tarde) IA.
 - `src/app/proxy.ts` — bloqueia acesso a rotas protegidas sem sessão.
 - Rotas reais e validadas com Zod: `POST /api/auth/{register,login,logout}`,
   `GET /api/auth/me`, `GET/POST /api/accounts`, `GET/POST /api/transactions`,
-  `GET/PATCH/DELETE /api/transactions/[id]`, `GET /api/categories`.
+  `GET/PATCH/DELETE /api/transactions/[id]`, `GET /api/categories`, e as
+  rotas de Dívidas, Metas, Recorrências e Feedback listadas na tabela de
+  `docs/architecture/OVERVIEW.md`.
 - Isolamento por utilizador confirmado com teste real: um segundo utilizador
   registado recebe uma lista vazia de contas, mesmo havendo dados de outro.
+- `POST /api/ai/chat` — três ações (`message`/`confirm`/`cancel`), sessão
+  obrigatória, `userId` nunca do corpo; ver secção "Konta AI" abaixo.
 
 ## 5. Páginas (estado real, não aspiracional)
 
@@ -99,6 +111,9 @@ poder ser reutilizado por Web, futuro Mobile, relatórios e (mais tarde) IA.
   `ADMIN_EMAILS`
 - Feedback in-app (formulário ligado a `POST /api/feedback`, visível para o
   dono em `/admin`)
+- `/assistant` — Konta AI: chat com Claude sobre os dados financeiros do
+  utilizador, com pedido de confirmação explícita (botões Confirmar/Cancelar)
+  antes de qualquer escrita (criar/editar/apagar transação)
 
 **Ainda por construir** — nenhuma UI dedicada, mesmo com dados/motor prontos
 onde aplicável:
@@ -106,8 +121,10 @@ onde aplicável:
 - Materialização automática de `RecurringTransaction` em `Transaction` real
   (o cálculo de próxima ocorrência já existe em `financial-engine/recurring.ts`,
   falta o job/rota que a executa)
-- Onboarding e qualquer camada de IA (ver `docs/konta-ai-design.html` —
-  especificação fechada, nenhum código escrito ainda)
+- Onboarding
+- No Konta AI: memória persistente entre sessões, tool `get_categories`,
+  streaming de resposta, voz, notificações proativas — ver secção "Konta AI"
+  abaixo e `docs/architecture/OVERVIEW.md` para o detalhe de cada um
 
 ## 6. Bugs — os 5 da auditoria original + 1 encontrado em uso real
 
@@ -142,12 +159,17 @@ A suite (Vitest) cresceu desde a versão original deste documento — cobre
 hoje, além do Financial Engine (`money`, `balance`, `cashflow`,
 `audit-regressions`), também `accounts`, `debts`, `goals`,
 `recurring-transactions`, `users`, `admin`, `feedback`, `client` (tratamento
-de erro da pool do Postgres), `pagination`, `rate-limit`, `api-error`, e
-rotas de API (`transactions`, `transactions/[id]`, `health`) — 19 ficheiros
-`*.test.ts` no total. O número exato de testes/estado "a passar" não é
-reafirmado aqui sem correr a suite de facto (última confirmação real ficou
-registada em `docs/architecture/DECISIONS.md`, por data) — corre `npm test`
-para o número atual em vez de confiar num valor escrito neste documento.
+de erro da pool do Postgres), `pagination`, `rate-limit`, `api-error`, rotas
+de API (`transactions`, `transactions/[id]`, `health`, `ai/chat`), e todo o
+Konta AI (`gateway`, `context/builder`, `context/normalize`,
+`chat/orchestrator`, `chat/context-presentation`, `tools/registry`,
+`tools/permissions`, `tools/executor`, `tools/confirmation-store`,
+`tools/anthropic-adapter`, as 7 tools individuais) — 38 ficheiros `*.test.ts`
+no total, 261 testes. Confirmado a passar de facto em 07/09/2026 (`npx
+vitest run`), junto com `npx tsc --noEmit`, `npx eslint .` e `npm run
+build`, os quatro sem erros — mas corre `npm test` para o número atual em
+vez de confiar num valor escrito neste documento, que fica desatualizado a
+cada novo teste.
 
 ## 8. Onde a arquitetura ainda não é a "final"
 
@@ -163,12 +185,17 @@ para o número atual em vez de confiar num valor escrito neste documento.
 - **Migração do protótipo** — só o mapeamento/desenho existe
   (`docs/architecture/MIGRATION.md`); o script executável de migração dos
   dados de `localStorage` ainda não foi escrito.
-- **IA (Konta AI)** — deliberadamente fora de âmbito nesta fase. A
-  especificação de produto e arquitetura já está fechada em
-  `docs/konta-ai-design.html` (AI Gateway, Context Builder, Tool Registry,
-  Permission Layer, tools de V1) — nenhuma linha de código de IA foi escrita
-  ainda; o Financial Engine já está isolado em funções puras reutilizáveis
-  por essa futura camada.
+- **IA (Konta AI)** — Milestones 1–4 implementados: AI Gateway
+  (`src/lib/ai/gateway.ts`), Context Builder (`src/lib/ai/context/`), Tool
+  Registry + Permission/Risk Layer + Executor + Confirmation Store
+  (`src/lib/ai/tools/`), e o orquestrador de chat + página `/assistant`
+  (`src/lib/ai/chat/`) — ver `docs/architecture/OVERVIEW.md`, secções "Konta
+  AI" e "Konta AI Chat", para o detalhe completo de cada peça e o que cada
+  uma ainda não faz (memória persistente, `get_categories`, streaming, mais
+  de uma ação a exigir confirmação no mesmo turno). `AiActionLog`
+  persistente (registo de auditoria de ações da IA) ainda não existe.
+  Requer `ANTHROPIC_API_KEY` (ver `.env.example`); `render.yaml` já declara
+  a variável para o deploy de produção.
 
 ## 9. Como correr
 
@@ -179,9 +206,23 @@ migrações SQL em `prisma/manual-sql/` (por ordem numérica), `npm test`,
 
 ## 10. Próximo passo recomendado
 
-Dívidas e Metas já têm interface — deixou de ser o próximo passo. Duas
-frentes ficam em aberto, sem uma depender da outra: (1) Konta AI Milestone 1
-(AI Gateway sem tools, ver `docs/konta-ai-design.html` e o audit técnico
-correspondente), e (2) o script de migração real do `localStorage` do
-protótipo, se preferires garantir primeiro que nenhum
-dado antigo se perde.
+Konta AI já tem uma primeira experiência real (Milestone 4, chat + tools com
+confirmação) — deixou de ser o próximo passo em aberto. `docs/KONTA_BETA_GATE.md`
+(29/08/2026) classifica o projeto como **NOT BETA READY**, mas apenas por uma
+checklist de infraestrutura de produção (HTTPS/TLS real, `docker build`
+confirmado num ambiente com Docker Hub, cron de backup agendado, segredos de
+produção novos, ciclo backup→restauro real) — não por dívida de código.
+Frentes em aberto, sem uma depender da outra:
+
+1. **Fechar o Beta Gate de infraestrutura** — os 5 pontos de
+   `docs/KONTA_BETA_GATE.md`, secção "Ainda bloqueia Beta", executáveis num
+   VPS real seguindo `docs/architecture/DEPLOYMENT.md` e
+   `docs/architecture/BACKUP.md`.
+2. **Evoluir o Konta AI** — `AiActionLog` persistente, tool `get_categories`,
+   memória entre sessões, ou encadear mais de uma ação por turno.
+3. **Migração do protótipo** — o mapeamento está em
+   `docs/architecture/MIGRATION.md`; o script executável ainda não foi
+   escrito.
+4. **Adoção final do Prisma Client** — `src/lib/db/*.ts` continua sobre `pg`
+   direto (ver secção 8); só necessário quando `prisma generate` puder
+   correr sem bloqueio de rede.
