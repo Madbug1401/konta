@@ -13,13 +13,21 @@
 // resposta do servidor.
 // ============================================================================
 
-import { FileText, Image as ImageIcon, Loader2, Paperclip, Send, Sparkles, X } from "lucide-react";
+import { FileText, Image as ImageIcon, Loader2, Mic, Paperclip, Send, Sparkles, Square, X } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAssistant } from "@/components/assistant-provider";
+import { useAudioRecorder } from "@/components/use-audio-recorder";
+import { useToast } from "@/components/toast-provider";
 import { cn } from "@/lib/utils";
+
+function formatElapsed(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 
 const SUGGESTIONS = ["Quanto tenho disponível?", "Quanto gastei este mês?", "Mostra-me as minhas dívidas.", "Quais foram as minhas maiores despesas?"];
 
@@ -31,9 +39,31 @@ const ACCEPTED_ATTACHMENT_TYPES = "image/jpeg,image/png,image/webp,image/gif,app
 export function ChatPanel() {
   const { turns, pending, sending, error, pendingAttachments, addAttachments, removeAttachment, sendChat, confirmPending, cancelPending } =
     useAssistant();
+  const toast = useToast();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // [Milestone 5c — Voz] A transcrição só preenche o composer de texto —
+  // nunca envia nada sozinha. O utilizador revê/corrige e carrega em Enviar
+  // como faria com qualquer texto escrito à mão (secção 9 do pedido).
+  function handleTranscribed(text: string) {
+    if (!text) return;
+    setInput((current) => (current.trim().length > 0 ? `${current.trim()} ${text}` : text));
+  }
+  const recorder = useAudioRecorder(handleTranscribed);
+
+  useEffect(() => {
+    if (recorder.error) toast.error(recorder.error);
+  }, [recorder.error, toast]);
+
+  function handleMicClick() {
+    if (recorder.status === "recording") {
+      recorder.stop();
+    } else if (recorder.status === "idle" || recorder.status === "error") {
+      void recorder.start();
+    }
+  }
 
   // Rola para o fundo sempre que a conversa muda — incluindo ao montar de
   // novo (ex: ao voltar a esta página) com uma conversa já existente vinda do
@@ -135,6 +165,22 @@ export function ChatPanel() {
 
       {error && <p className="text-xs text-danger">{error}</p>}
 
+      {/* [Milestone 5c — Voz] Estados claros de gravação/transcrição (secção 8 do pedido) */}
+      {recorder.status === "recording" && (
+        <div className="flex items-center gap-2 text-xs text-danger">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-danger" aria-hidden="true" />
+          A gravar... {formatElapsed(recorder.elapsedSeconds)}
+          <button type="button" onClick={recorder.cancel} className="underline underline-offset-2">
+            Cancelar
+          </button>
+        </div>
+      )}
+      {recorder.status === "processing" && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> A transcrever...
+        </div>
+      )}
+
       {pendingAttachments.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {pendingAttachments.map((a) => (
@@ -187,6 +233,24 @@ export function ChatPanel() {
         >
           <Paperclip className="h-4 w-4" />
         </Button>
+        {recorder.supported && (
+          <Button
+            type="button"
+            variant={recorder.status === "recording" ? "danger" : "outline"}
+            onClick={handleMicClick}
+            disabled={sending || !!pending || recorder.status === "processing"}
+            aria-label={recorder.status === "recording" ? "Parar gravação e transcrever" : "Gravar mensagem de voz"}
+            className="px-3"
+          >
+            {recorder.status === "recording" ? (
+              <Square className="h-4 w-4" />
+            ) : recorder.status === "processing" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Mic className="h-4 w-4" />
+            )}
+          </Button>
+        )}
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}

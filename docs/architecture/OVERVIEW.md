@@ -188,8 +188,27 @@ arquitetura de IA, de escrita, ou de confirmação.
   que conta a transação vai ficar; nunca influencia a escrita real (isso
   continua a ser sempre `accountId`, verificado por ownership).
 
-**Ainda não construído**: voz (Milestone 5c), `get_categories`, memória
-persistente entre sessões.
+- **`src/lib/ai/transcription/`** (Milestone 5c, Voz) — `POST
+  /api/ai/transcription` (sessão + `isAiEnabled` + rate limit próprio +
+  validação de conteúdo real do áudio, mesma filosofia do 5a: assinatura
+  binária, nunca o MIME do browser — só WebM/Opus e MP4/AAC, os dois
+  formatos que os browsers realmente produzem via `MediaRecorder`) →
+  `transcribeAudio()` (Groq, Whisper `large-v3-turbo`, único ficheiro
+  autorizado a falar com essa API — mesma disciplina de isolamento do
+  `gateway.ts`) → devolve só texto. **A transcrição nunca é um attachment**:
+  ao contrário de imagem/PDF, não fica em nenhum store, não tem id, não
+  sobrevive ao pedido HTTP — o cliente recebe o texto e o utilizador
+  revê/edita no composer antes de enviar, exatamente como uma mensagem
+  escrita à mão. `src/components/use-audio-recorder.ts` (hook,
+  `MediaRecorder` nativo) é o único ficheiro do frontend que sabe gravar
+  áudio; o `ChatPanel` só conhece `start()`/`stop()`/`cancel()`, nunca a API
+  da Groq. Sem alterações ao Financial Engine, Tool Registry, Permission
+  Layer ou Confirmation Store — a transcrição entra no chat pelo mesmo
+  campo `message` de sempre.
+
+**Ainda não construído**: `get_categories`, memória persistente entre
+sessões, resposta em voz (fora de âmbito por desenho — ver Milestone 5c,
+"Voice Input", nunca "Voice Assistant").
 
 ## Design System (`src/components/ui` + componentes de domínio)
 

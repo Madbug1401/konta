@@ -183,6 +183,13 @@ export default function HelpPage() {
           <li>A sessão usa um token assinado (JWT), guardado num cookie que o teu navegador nunca expõe a scripts.</li>
           <li>Os teus dados são isolados por conta de utilizador — ninguém mais os vê, nem outros utilizadores do Konta.</li>
           <li>Em produção, a ligação entre o teu navegador e o Konta é sempre feita por HTTPS.</li>
+          <li>
+            O acesso ao Konta AI é opcional e desligado por omissão. Quando ativado e usado, as tuas mensagens e um
+            resumo dos teus dados financeiros são enviados à Anthropic (o fornecedor do modelo Claude) para gerar a
+            resposta; imagens, PDFs e ficheiros que anexares são enviados da mesma forma, só enquanto precisos para
+            essa conversa. Se usares o microfone, o áudio é enviado à Groq só para o transcrever em texto — o Konta
+            nunca guarda o áudio, antes ou depois de transcrito.
+          </li>
         </ul>
       </Card>
 
