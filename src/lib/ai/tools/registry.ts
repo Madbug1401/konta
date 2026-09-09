@@ -15,6 +15,7 @@ import { getAccountsTool } from "./tools/get-accounts";
 import { getDebtsTool } from "./tools/get-debts";
 import { getGoalsTool } from "./tools/get-goals";
 import { getTransactionsTool } from "./tools/get-transactions";
+import { proposeTransactionsTool } from "./tools/propose-transactions";
 import { updateTransactionTool } from "./tools/update-transaction";
 
 const TOOLS: AiTool<unknown, unknown>[] = [
@@ -25,6 +26,9 @@ const TOOLS: AiTool<unknown, unknown>[] = [
   defineTool(deleteTransactionTool),
   defineTool(getDebtsTool),
   defineTool(getGoalsTool),
+  // [Milestone 5b] LOW — nunca escreve, só resolve/valida extrações de
+  // attachments contra dados reais do utilizador. Ver propose-transactions.ts.
+  defineTool(proposeTransactionsTool),
 ];
 
 const TOOLS_BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]));

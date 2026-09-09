@@ -46,6 +46,7 @@ interface ToolParams {
   description: string;
   date?: string;
   goalId?: string;
+  accountName?: string;
 }
 
 function validParams(overrides: Partial<ToolParams> = {}): ToolParams {
@@ -204,5 +205,33 @@ describe("create_transaction tool", () => {
     expect(summary).toContain("Táxi");
     expect(summary).toContain("Transporte");
     expect(summary).not.toMatch(/CVE|EUR|USD/);
+  });
+
+  // [Milestone 5b] accountName é só cosmético — usado pelo texto de
+  // confirmação quando propose_transactions já resolveu o nome real da
+  // conta; nunca influencia em que conta a transação é criada (isso é
+  // sempre accountId, verificado por ownership em execute()).
+  it("summarize inclui o nome da conta quando accountName é dado", async () => {
+    const { createTransactionTool } = await import("./create-transaction");
+    const summary = createTransactionTool.summarize(validParams({ accountName: "Carteira" }));
+    expect(summary).toContain('em "Carteira"');
+  });
+
+  it("summarize omite a conta quando accountName não é dado — nunca inventa um nome", async () => {
+    const { createTransactionTool } = await import("./create-transaction");
+    const summary = createTransactionTool.summarize(validParams());
+    expect(summary).not.toContain(" em \"");
+  });
+
+  it("accountName nunca é lido por execute() — só accountId decide onde a transação é criada", async () => {
+    getAccountByIdMock.mockResolvedValue(ACCOUNT);
+    findUserByIdMock.mockResolvedValue({ timezone: "Atlantic/Cape_Verde" });
+    createTransactionMock.mockResolvedValue(CREATED);
+    const { createTransactionTool } = await import("./create-transaction");
+
+    await createTransactionTool.execute("user-1", validParams({ accountName: "Um Nome Qualquer Inventado" }));
+
+    expect(getAccountByIdMock).toHaveBeenCalledWith("user-1", "acc-1");
+    expect(createTransactionMock).toHaveBeenCalledWith(expect.objectContaining({ accountId: "acc-1" }));
   });
 });

@@ -38,6 +38,16 @@ const CreateTransactionToolSchema = z
     description: z.string().trim().min(1).max(255),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     goalId: z.string().min(1).optional(),
+    // [Milestone 5b — Extração multimodal] Puramente cosmético: o NOME da
+    // conta, só para aparecer no texto de confirmação (summarize() abaixo).
+    // NUNCA usado para resolver/escolher a conta real — isso continua a ser
+    // sempre `accountId`, obrigatório, sempre verificado por ownership em
+    // `execute()`. Se o modelo mentir aqui (nome errado, de outra conta,
+    // etc.), o pior caso é o texto de confirmação mostrar um nome incorreto
+    // — nunca afeta em que conta a transação é criada. Preenchido por
+    // `propose_transactions` (que já resolveu o nome real da conta) quando o
+    // Claude decide registar uma transação extraída de um attachment.
+    accountName: z.string().trim().max(255).optional(),
   })
   .strict()
   .refine((data) => (data.type === "TRANSFER" ? !!data.destinationAccountId : true), {
@@ -111,19 +121,19 @@ function describeType(type: CreateTransactionParams["type"]): string {
 export const createTransactionTool: AiTool<CreateTransactionParams, AiToolTransaction> = {
   name: "create_transaction",
   description:
-    'Regista uma nova transação (receita, despesa ou transferência) numa conta do utilizador. Usa `category` (o NOME da categoria, ex: "Alimentação", "Transporte", nunca um id) sempre que a descrição do utilizador corresponder claramente a um tipo de despesa/receita — se já existir uma categoria com esse nome é reutilizada, senão é criada uma nova automaticamente. Nunca uses `category` numa transferência (não têm categoria). Escrita financeira — exige confirmação explícita.',
+    'Regista uma nova transação (receita, despesa ou transferência) numa conta do utilizador. Usa `category` (o NOME da categoria, ex: "Alimentação", "Transporte", nunca um id) sempre que a descrição do utilizador corresponder claramente a um tipo de despesa/receita — se já existir uma categoria com esse nome é reutilizada, senão é criada uma nova automaticamente. Nunca uses `category` numa transferência (não têm categoria). Quando `accountId` vier de uma proposta já resolvida por `propose_transactions`, passa também `accountName` (o nome dessa conta) para o texto de confirmação mostrar claramente em que conta vai ficar. Escrita financeira — exige confirmação explícita.',
   paramsSchema: CreateTransactionToolSchema,
   riskTier: "HIGH",
   // [Limitação conhecida, documentada] summarize() é síncrono e só recebe
-  // `params` — não pode resolver o nome da conta (só tem o id, e nenhuma
-  // tool desta V1 devolve id de conta ao modelo para "re-perguntar" o nome).
-  // A categoria já não tem este problema desde a correção acima: `category`
-  // é o próprio nome em texto, por isso pode aparecer aqui sem qualquer
-  // consulta extra. A moeda também não é conhecida sem consultar a conta —
-  // por isso nunca se inventa um símbolo de moeda.
+  // `params` — não pode resolver o nome da conta sozinho (só tem o id). Por
+  // isso o texto só mostra a conta quando quem chamou já sabia o nome e o
+  // passou em `accountName` (ver comentário no schema) — nunca inventado
+  // aqui. A moeda também não é conhecida sem consultar a conta — por isso
+  // nunca se inventa um símbolo de moeda.
   summarize: (params) => {
     const categoryPhrase = params.category && params.type !== "TRANSFER" ? ` na categoria "${params.category}"` : "";
-    return `Registar ${describeType(params.type)} de ${params.amountMinor.toLocaleString("pt-CV")} (moeda da conta)${categoryPhrase} — "${params.description}"${
+    const accountPhrase = params.accountName ? ` em "${params.accountName}"` : "";
+    return `Registar ${describeType(params.type)} de ${params.amountMinor.toLocaleString("pt-CV")} (moeda da conta)${categoryPhrase}${accountPhrase} — "${params.description}"${
       params.date ? `, em ${params.date}` : ", hoje"
     }.`;
   },

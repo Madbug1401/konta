@@ -9,10 +9,11 @@ const EXPECTED_TOOL_NAMES = [
   "delete_transaction",
   "get_debts",
   "get_goals",
+  "propose_transactions",
 ];
 
 describe("Tool Registry", () => {
-  it("regista exatamente as 7 tools da V1 — nenhuma a mais, nenhuma a menos", () => {
+  it("regista exatamente as 8 tools (V1 + propose_transactions do Milestone 5b) — nenhuma a mais, nenhuma a menos", () => {
     const names = listTools()
       .map((t) => t.name)
       .sort();
@@ -49,6 +50,7 @@ describe("Tool Registry", () => {
       get_transactions: "LOW",
       get_debts: "LOW",
       get_goals: "LOW",
+      propose_transactions: "LOW",
       create_transaction: "HIGH",
       update_transaction: "HIGH",
       delete_transaction: "HIGH",

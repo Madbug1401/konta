@@ -128,6 +128,80 @@ describe("sendMessage", () => {
     expect(sendChatTurnMock).toHaveBeenCalledTimes(1); // nunca continuou o loop
   });
 
+  // [Milestone 5b — confirmação agrupada] Substitui a antiga política V1
+  // ("para no primeiro, os outros ficam bloqueados") — agora TODOS os
+  // tool_use HIGH do mesmo turno entram juntos numa única confirmação.
+  it("múltiplos HIGH no mesmo turno (ex: várias transações extraídas de um extrato): UMA confirmação agrupada, com resumo combinado", async () => {
+    setDefaults();
+    sendChatTurnMock.mockResolvedValueOnce({
+      stopReason: "tool_use",
+      content: [
+        { type: "tool_use", id: "toolu_1", name: "create_transaction", input: { description: "Supermercado" } },
+        { type: "tool_use", id: "toolu_2", name: "create_transaction", input: { description: "Táxi" } },
+        { type: "tool_use", id: "toolu_3", name: "create_transaction", input: { description: "Restaurante" } },
+      ],
+    });
+    executeToolMock
+      .mockResolvedValueOnce({ status: "confirmation_required", toolName: "create_transaction", riskTier: "HIGH", summary: "Registar despesa de 5000 — \"Supermercado\".", params: { description: "Supermercado" } })
+      .mockResolvedValueOnce({ status: "confirmation_required", toolName: "create_transaction", riskTier: "HIGH", summary: "Registar despesa de 1200 — \"Táxi\".", params: { description: "Táxi" } })
+      .mockResolvedValueOnce({ status: "confirmation_required", toolName: "create_transaction", riskTier: "HIGH", summary: "Registar despesa de 3500 — \"Restaurante\".", params: { description: "Restaurante" } });
+    createConfirmationMock.mockReturnValue({ token: "tok_grupo" });
+    const { sendMessage } = await import("./orchestrator");
+
+    const result = await sendMessage({ userId: "user-1", message: "Regista estas 3 despesas do extrato" });
+
+    expect(result.type).toBe("confirmation_required");
+    if (result.type !== "confirmation_required") throw new Error("unreachable");
+    expect(result.confirmationToken).toBe("tok_grupo");
+    expect(result.riskTier).toBe("HIGH");
+    // UMA única confirmação, cobrindo as 3 — nunca 3 confirmações separadas.
+    expect(createConfirmationMock).toHaveBeenCalledTimes(1);
+    expect(createConfirmationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCalls: [
+          { toolUseId: "toolu_1", toolName: "create_transaction", params: { description: "Supermercado" } },
+          { toolUseId: "toolu_2", toolName: "create_transaction", params: { description: "Táxi" } },
+          { toolUseId: "toolu_3", toolName: "create_transaction", params: { description: "Restaurante" } },
+        ],
+      }),
+    );
+    // Resumo combinado, numerado — nunca só o primeiro item a esconder os outros dois.
+    expect(result.summary).toContain("Supermercado");
+    expect(result.summary).toContain("Táxi");
+    expect(result.summary).toContain("Restaurante");
+    expect(result.summary).toContain("3");
+    expect(sendChatTurnMock).toHaveBeenCalledTimes(1); // nunca continuou o loop sem confirmação
+  });
+
+  it("LOW + HIGH no mesmo turno (antes da pausa): o resultado LOW já executado fica guardado para depois da confirmação, nunca perdido", async () => {
+    setDefaults();
+    sendChatTurnMock.mockResolvedValueOnce({
+      stopReason: "tool_use",
+      content: [
+        { type: "tool_use", id: "toolu_low", name: "get_accounts", input: {} },
+        { type: "tool_use", id: "toolu_high", name: "create_transaction", input: { amountMinor: 500 } },
+      ],
+    });
+    executeToolMock.mockImplementation(async (name: string) => {
+      if (name === "get_accounts") return { status: "executed", toolName: "get_accounts", riskTier: "LOW", result: { accounts: [] } };
+      return { status: "confirmation_required", toolName: "create_transaction", riskTier: "HIGH", summary: "Registar uma despesa de 500.", params: { amountMinor: 500 } };
+    });
+    createConfirmationMock.mockReturnValue({ token: "tok_abc" });
+    const { sendMessage } = await import("./orchestrator");
+
+    await sendMessage({ userId: "user-1", message: "Quanto tenho e regista 500 de despesa" });
+
+    // A confirmação só congela a ação HIGH — o LOW já foi resolvido e vai à parte.
+    expect(createConfirmationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCalls: [{ toolUseId: "toolu_high", toolName: "create_transaction", params: { amountMinor: 500 } }],
+        conversationSnapshot: expect.objectContaining({
+          preResolvedResults: [{ type: "tool_result", toolUseId: "toolu_low", content: JSON.stringify({ accounts: [] }) }],
+        }),
+      }),
+    );
+  });
+
   it("CRITICAL (rejected): devolve um tool_result de erro ao Claude e continua a conversa normalmente", async () => {
     setDefaults();
     sendChatTurnMock
@@ -330,7 +404,7 @@ describe("confirmPendingAction", () => {
       ok: true,
       confirmation: {
         toolCalls: [{ toolUseId: "toolu_1", toolName: "create_transaction", params: { amountMinor: 500 } }],
-        conversationSnapshot: { system: "sys", messages: [{ role: "user", content: "Gastei 500" }], triggerToolUseId: "toolu_1" },
+        conversationSnapshot: { system: "sys", messages: [{ role: "user", content: "Gastei 500" }], preResolvedResults: [] },
         roundsUsed: 1,
       },
     });
@@ -349,72 +423,99 @@ describe("confirmPendingAction", () => {
     expect(executeConfirmedToolMock).toHaveBeenCalledWith("create_transaction", "user-1", { amountMinor: 500 });
   });
 
-  it("LOW + HIGH no mesmo turno: ao confirmar, ambos são (re)executados e os dois tool_results chegam ao Claude", async () => {
+  it("preResolvedResults (LOW já resolvido no turno original, ex: get_accounts) é combinado com a ação HIGH confirmada, nunca reexecutado", async () => {
     setDefaults();
     consumeConfirmationMock.mockReturnValue({
       ok: true,
       confirmation: {
-        toolCalls: [
-          { toolUseId: "toolu_low", toolName: "get_accounts", params: {} },
-          { toolUseId: "toolu_high", toolName: "create_transaction", params: { amountMinor: 500 } },
-        ],
-        conversationSnapshot: { system: "sys", messages: [{ role: "user", content: "Gastei 500" }], triggerToolUseId: "toolu_high" },
+        // Só a ação HIGH entra em toolCalls — o resultado LOW já foi
+        // calculado ANTES da pausa (ver runLoop/evaluateToolUseBlocks) e
+        // viaja congelado em preResolvedResults.
+        toolCalls: [{ toolUseId: "toolu_high", toolName: "create_transaction", params: { amountMinor: 500 } }],
+        conversationSnapshot: {
+          system: "sys",
+          messages: [{ role: "user", content: "Gastei 500" }],
+          preResolvedResults: [{ type: "tool_result", toolUseId: "toolu_low", content: JSON.stringify({ accounts: [] }) }],
+        },
         roundsUsed: 1,
       },
     });
-    executeToolMock.mockResolvedValue({ status: "executed", toolName: "get_accounts", riskTier: "LOW", result: { accounts: [] } });
     executeConfirmedToolMock.mockResolvedValue({ status: "executed", toolName: "create_transaction", riskTier: "HIGH", result: { id: "tx-1" } });
     sendChatTurnMock.mockResolvedValue({ stopReason: "end_turn", content: [{ type: "text", text: "Feito." }] });
     const { confirmPendingAction } = await import("./orchestrator");
 
     await confirmPendingAction("user-1", "tok_abc123");
 
-    // A tool LOW é reavaliada (fresca) via executeTool — nunca reaproveita um
-    // resultado calculado antes da pausa (ver política V1 no topo do ficheiro).
-    expect(executeToolMock).toHaveBeenCalledWith("get_accounts", "user-1", {});
+    // Nunca reexecuta o LOW ao confirmar — o resultado congelado é reaproveitado tal e qual.
+    expect(executeToolMock).not.toHaveBeenCalled();
     expect(executeConfirmedToolMock).toHaveBeenCalledWith("create_transaction", "user-1", { amountMinor: 500 });
     const toolResultMessage = sendChatTurnMock.mock.calls[0][0].messages.at(-1);
     expect(toolResultMessage.content).toHaveLength(2);
+    expect(toolResultMessage.content.map((b: { toolUseId: string }) => b.toolUseId)).toEqual(["toolu_low", "toolu_high"]);
   });
 
-  it("HIGH + HIGH no mesmo turno: a ação confirmada executa sempre, a outra nunca executa e vira um tool_result de erro (nunca aborta a conversa)", async () => {
+  it("grupo com várias ações HIGH: TODAS executam ao confirmar, cada uma com o seu próprio resultado", async () => {
     setDefaults();
     consumeConfirmationMock.mockReturnValue({
       ok: true,
       confirmation: {
-        // A ordem propositadamente NÃO tem o trigger em primeiro lugar — prova
-        // que a execução da ação confirmada não depende da posição no array.
         toolCalls: [
-          { toolUseId: "toolu_other_high", toolName: "create_transaction", params: { description: "outra" } },
-          { toolUseId: "toolu_confirmed", toolName: "create_transaction", params: { description: "confirmada" } },
+          { toolUseId: "toolu_1", toolName: "create_transaction", params: { description: "primeira" } },
+          { toolUseId: "toolu_2", toolName: "create_transaction", params: { description: "segunda" } },
+          { toolUseId: "toolu_3", toolName: "create_transaction", params: { description: "terceira" } },
         ],
-        conversationSnapshot: { system: "sys", messages: [{ role: "user", content: "..." }], triggerToolUseId: "toolu_confirmed" },
+        conversationSnapshot: { system: "sys", messages: [{ role: "user", content: "..." }], preResolvedResults: [] },
         roundsUsed: 1,
       },
     });
-    executeConfirmedToolMock.mockResolvedValue({ status: "executed", toolName: "create_transaction", riskTier: "HIGH", result: { id: "tx-confirmed" } });
-    // A OUTRA tool, reavaliada do zero, continua HIGH e pede confirmação outra vez.
-    executeToolMock.mockResolvedValue({
-      status: "confirmation_required",
-      toolName: "create_transaction",
-      riskTier: "HIGH",
-      summary: "Registar outra despesa.",
-      params: { description: "outra" },
+    executeConfirmedToolMock.mockResolvedValue({ status: "executed", toolName: "create_transaction", riskTier: "HIGH", result: { id: "tx" } });
+    sendChatTurnMock.mockResolvedValue({ stopReason: "end_turn", content: [{ type: "text", text: "Registei as 3." }] });
+    const { confirmPendingAction } = await import("./orchestrator");
+
+    await confirmPendingAction("user-1", "tok_abc123");
+
+    expect(executeConfirmedToolMock).toHaveBeenCalledTimes(3);
+    expect(executeConfirmedToolMock).toHaveBeenNthCalledWith(1, "create_transaction", "user-1", { description: "primeira" });
+    expect(executeConfirmedToolMock).toHaveBeenNthCalledWith(2, "create_transaction", "user-1", { description: "segunda" });
+    expect(executeConfirmedToolMock).toHaveBeenNthCalledWith(3, "create_transaction", "user-1", { description: "terceira" });
+    // Nunca cria uma segunda confirmação para o grupo já confirmado.
+    expect(createConfirmationMock).not.toHaveBeenCalled();
+  });
+
+  // [Milestone 5b, secção 15 — sem atomicidade fictícia] Uma falha no meio do
+  // grupo nunca impede as outras de executar, nunca é escondida, e nunca é
+  // apresentada como sucesso.
+  it("execução parcial: uma falha no meio do grupo não impede as outras, e o resultado de cada uma reflete a verdade", async () => {
+    setDefaults();
+    consumeConfirmationMock.mockReturnValue({
+      ok: true,
+      confirmation: {
+        toolCalls: [
+          { toolUseId: "toolu_ok1", toolName: "create_transaction", params: { description: "ok1" } },
+          { toolUseId: "toolu_fail", toolName: "create_transaction", params: { description: "falha" } },
+          { toolUseId: "toolu_ok2", toolName: "create_transaction", params: { description: "ok2" } },
+        ],
+        conversationSnapshot: { system: "sys", messages: [{ role: "user", content: "..." }], preResolvedResults: [] },
+        roundsUsed: 1,
+      },
     });
-    sendChatTurnMock.mockResolvedValue({ stopReason: "end_turn", content: [{ type: "text", text: "Registei a primeira; a segunda ainda precisa da tua confirmação." }] });
+    executeConfirmedToolMock
+      .mockResolvedValueOnce({ status: "executed", toolName: "create_transaction", riskTier: "HIGH", result: { id: "tx-ok1" } })
+      .mockResolvedValueOnce({ status: "execution_failed", toolName: "create_transaction", error: "Conta não encontrada." })
+      .mockResolvedValueOnce({ status: "executed", toolName: "create_transaction", riskTier: "HIGH", result: { id: "tx-ok2" } });
+    sendChatTurnMock.mockResolvedValue({ stopReason: "end_turn", content: [{ type: "text", text: "2 adicionadas, 1 falhou." }] });
     const { confirmPendingAction } = await import("./orchestrator");
 
     const result = await confirmPendingAction("user-1", "tok_abc123");
 
-    // A ação confirmada executa sempre — nunca é perdida por causa da outra.
-    expect(executeConfirmedToolMock).toHaveBeenCalledWith("create_transaction", "user-1", { description: "confirmada" });
-    // A criação de uma SEGUNDA confirmação nunca acontece aqui (sem fila de confirmações nesta V1).
-    expect(createConfirmationMock).not.toHaveBeenCalled();
-    // A conversa continua normalmente (nunca um "error" genérico que esconda que a primeira ação já foi feita).
-    expect(result).toEqual({ type: "final", reply: "Registei a primeira; a segunda ainda precisa da tua confirmação." });
+    expect(executeConfirmedToolMock).toHaveBeenCalledTimes(3); // a falha a meio nunca interrompe as restantes
+    expect(result).toEqual({ type: "final", reply: "2 adicionadas, 1 falhou." });
     const toolResultMessage = sendChatTurnMock.mock.calls[0][0].messages.at(-1);
-    const blockedResult = toolResultMessage.content.find((b: { toolUseId: string }) => b.toolUseId === "toolu_other_high");
-    expect(blockedResult.isError).toBe(true);
+    const byId = Object.fromEntries(toolResultMessage.content.map((b: { toolUseId: string; isError?: boolean }) => [b.toolUseId, b]));
+    expect(byId.toolu_ok1.isError).toBeUndefined();
+    expect(byId.toolu_fail.isError).toBe(true);
+    expect(byId.toolu_fail.content).toContain("Conta não encontrada");
+    expect(byId.toolu_ok2.isError).toBeUndefined(); // nunca mascarado nem cancelado pela falha anterior
   });
 
   it("token errado: rejeita sem executar nada", async () => {
@@ -479,5 +580,87 @@ describe("cancelPendingAction", () => {
     const result = cancelPendingAction("user-1", "tok_ja_usado");
 
     expect(result.type).toBe("error");
+  });
+
+  // [Milestone 5b, secção 14 — cancelar o grupo] Cancelar uma confirmação
+  // agrupada (várias transações extraídas) cancela o GRUPO inteiro de uma
+  // vez — cancelConfirmation nem olha para quantas ações estão dentro,
+  // por isso nenhuma delas chega a executar, nunca "só algumas".
+  it("cancelamento de uma confirmação agrupada (várias transações): nenhuma ação do grupo executa", () => {
+    cancelConfirmationMock.mockReturnValue({ ok: true });
+    return import("./orchestrator").then(({ cancelPendingAction }) => {
+      const result = cancelPendingAction("user-1", "tok_grupo");
+      expect(result).toEqual({ type: "cancelled" });
+      expect(executeConfirmedToolMock).not.toHaveBeenCalled();
+      expect(executeToolMock).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// [Milestone 5b, secção 25 — cadeia completa] propose_transactions (LOW,
+// resolve/valida) → create_transaction (HIGH, mesma tool do Milestone 3) →
+// confirmação → executeConfirmedTool. Nenhum mecanismo novo de escrita:
+// este teste prova que a composição das duas tools existentes passa pelo
+// MESMO caminho (Tool Registry → Permission Layer → Confirmation Store →
+// Executor) que qualquer outra escrita HIGH já passava antes do Milestone 5b.
+describe("Extração multimodal → proposta → confirmação (Milestone 5b, cadeia completa)", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("uma transação extraída: propose_transactions resolve, create_transaction pede confirmação HIGH, confirmar executa", async () => {
+    setDefaults();
+    // Turno 1: Claude chama propose_transactions com o que "viu" na imagem.
+    sendChatTurnMock
+      .mockResolvedValueOnce({
+        stopReason: "tool_use",
+        content: [{ type: "tool_use", id: "toolu_propose", name: "propose_transactions", input: { transactions: [{ type: "EXPENSE", amountMinor: 2500, date: "2026-09-08", description: "Shell", account: "Carteira" }] } }],
+      })
+      // Turno 2: com a conta já resolvida, Claude propõe a escrita real.
+      .mockResolvedValueOnce({
+        stopReason: "tool_use",
+        content: [{ type: "tool_use", id: "toolu_create", name: "create_transaction", input: { type: "EXPENSE", accountId: "acc-wallet", accountName: "Carteira", amountMinor: 2500, description: "Shell" } }],
+      });
+    executeToolMock.mockImplementation(async (name: string, _userId: string, input: unknown) => {
+      if (name === "propose_transactions") {
+        return {
+          status: "executed",
+          toolName: "propose_transactions",
+          riskTier: "LOW",
+          result: [{ index: 0, status: "ready", type: "EXPENSE", amountMinor: 2500, description: "Shell", date: "2026-09-08", category: null, accountId: "acc-wallet", accountName: "Carteira", possibleDuplicate: false, clarification: null }],
+        };
+      }
+      return {
+        status: "confirmation_required",
+        toolName: "create_transaction",
+        riskTier: "HIGH",
+        summary: 'Registar uma despesa de 2500 (moeda da conta) em "Carteira" — "Shell", em 2026-09-08.',
+        params: input,
+      };
+    });
+    createConfirmationMock.mockReturnValue({ token: "tok_recibo" });
+    const { sendMessage, confirmPendingAction } = await import("./orchestrator");
+
+    const proposeResult = await sendMessage({ userId: "user-1", message: "Regista esta despesa", attachmentIds: undefined });
+    expect(proposeResult.type).toBe("confirmation_required");
+    if (proposeResult.type !== "confirmation_required") throw new Error("unreachable");
+    expect(proposeResult.summary).toContain("Carteira");
+    expect(proposeResult.riskTier).toBe("HIGH");
+
+    consumeConfirmationMock.mockReturnValue({
+      ok: true,
+      confirmation: createConfirmationMock.mock.calls[0][0], // usa exatamente o que o orquestrador congelou
+    });
+    executeConfirmedToolMock.mockResolvedValue({ status: "executed", toolName: "create_transaction", riskTier: "HIGH", result: { id: "tx-1" } });
+    sendChatTurnMock.mockResolvedValueOnce({ stopReason: "end_turn", content: [{ type: "text", text: "Registei a despesa." }] });
+
+    const confirmResult = await confirmPendingAction("user-1", "tok_recibo");
+
+    expect(confirmResult).toEqual({ type: "final", reply: "Registei a despesa." });
+    expect(executeConfirmedToolMock).toHaveBeenCalledWith(
+      "create_transaction",
+      "user-1",
+      expect.objectContaining({ accountId: "acc-wallet", amountMinor: 2500 }),
+    );
   });
 });

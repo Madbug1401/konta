@@ -108,7 +108,13 @@ export function ChatPanel() {
 
         {pending && (
           <Card className="self-stretch border-primary/40 bg-surface-hover">
-            <p className="mb-3 text-sm text-foreground">{pending.summary}</p>
+            {/* [Milestone 5b] Uma confirmação agrupada (várias transações
+                extraídas de um attachment) chega como texto com quebras de
+                linha (lista numerada) — `whitespace-pre-line` é o que faz
+                essas quebras aparecerem; para uma confirmação de uma única
+                ação (o caso comum) o texto continua uma linha só, sem
+                alteração visual nenhuma. */}
+            <p className="mb-3 whitespace-pre-line text-sm text-foreground">{pending.summary}</p>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => void cancelPending()} disabled={sending}>
                 Cancelar

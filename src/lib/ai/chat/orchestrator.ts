@@ -13,16 +13,20 @@
 // [Isolamento] Não importa `@anthropic-ai/sdk` — só os tipos próprios do
 // Gateway (ChatMessage/ChatAssistantBlock/...) e o Tool Registry.
 //
-// [Política V1 sobre múltiplas tools no mesmo turno — documentada, não
-// escondida] Os blocos tool_use de um turno são avaliados SEQUENCIALMENTE.
-// Ao encontrar o primeiro que exige confirmação, a avaliação para aí — os
-// blocos seguintes só são avaliados depois de confirmado. Se, ao retomar,
-// outro bloco também exigir confirmação, a conversa termina com um erro
-// claro em vez de encadear confirmações silenciosamente. Isto cobre bem o
-// caso comum (uma ação de escrita de cada vez, que é o que o Personality
-// Prompt já incentiva) sem a complexidade de um mecanismo de confirmações
-// múltiplas em fila — considerado fora de âmbito para esta primeira
-// experiência real.
+// [Milestone 5b — confirmação agrupada] Os blocos tool_use de um turno são
+// TODOS avaliados (nunca se para no primeiro que precise de confirmação —
+// política antiga do Milestone 4, substituída aqui). LOW/MEDIUM-sem-
+// confirmação executam já; todos os que exigirem confirmação (tipicamente
+// N chamadas a `create_transaction`, uma por transação extraída de um
+// attachment) entram juntos numa ÚNICA `PendingConfirmation` — "tudo ou
+// nada" ao nível do GRUPO na decisão do utilizador (confirmar/cancelar),
+// mas cada ação executa e é reportada de forma independente (ver
+// `confirmPendingAction`): uma falha numa nunca esconde nem desfaz o
+// sucesso de outra, e nunca se finge uma atomicidade que o executor não
+// tem. Isto substitui o mecanismo anterior de "uma tool 'trigger' executa,
+// as outras do mesmo turno ficam bloqueadas e têm de ser pedidas outra vez"
+// — mais simples e corresponde ao que o utilizador realmente vê no ecrã
+// (uma lista, um Confirmar).
 // ============================================================================
 
 import { logError } from "@/lib/logger";
@@ -62,7 +66,13 @@ const MAX_TOOL_ROUNDS = 5;
 interface ConversationSnapshot {
   system: string;
   messages: ChatMessage[];
-  triggerToolUseId: string;
+  // [Milestone 5b] Resultados de blocos do MESMO turno que já executaram
+  // (LOW, ou HIGH/MEDIUM sem confirmação pendente) antes de encontrarmos os
+  // que precisam de confirmação — nunca perdidos nem reexecutados ao
+  // retomar; combinados com os resultados da confirmação para responder a
+  // TODOS os tool_use do turno original de uma só vez (exigência da API:
+  // um tool_use sem tool_result correspondente bloqueia a conversa).
+  preResolvedResults: ChatToolResultBlock[];
 }
 
 async function buildSystemForUser(userId: string, mode: ContextMode): Promise<string> {
@@ -96,36 +106,53 @@ function toToolResultBlock(toolUseId: string, evaluation: Exclude<ToolExecutionR
   return { type: "tool_result", toolUseId, content: message, isError: true };
 }
 
-/**
- * Usado quando um SEGUNDO bloco do mesmo turno também exigia confirmação
- * (ver política V1 no topo do ficheiro). Nunca executa essa segunda ação —
- * devolve um tool_result de erro para o Claude poder explicar a situação ao
- * utilizador em vez de a conversa terminar com um erro genérico.
- */
-function toBlockedByConfirmationResult(toolUseId: string): ChatToolResultBlock {
-  return {
-    type: "tool_result",
-    toolUseId,
-    content: "Esta ação também precisa de confirmação explícita, em separado — ainda não foi executada.",
-    isError: true,
-  };
+/** Um bloco do turno que a Permission Layer marcou como precisando de confirmação — ainda NUNCA executado. */
+interface PendingBlock {
+  toolUseId: string;
+  toolName: string;
+  params: unknown;
+  summary: string;
+  riskTier: RiskTier;
 }
 
 type BatchEvaluation =
   | { kind: "resolved"; results: ChatToolResultBlock[] }
-  | { kind: "confirmation_required"; triggerToolUseId: string; summary: string; riskTier: RiskTier };
+  | { kind: "confirmation_required"; pending: PendingBlock[]; preResolvedResults: ChatToolResultBlock[] };
 
-/** Avalia os tool_use de um turno, um a um, parando no primeiro que exigir confirmação (ver política V1 no topo do ficheiro). */
+/**
+ * [Milestone 5b] Avalia TODOS os tool_use de um turno — nunca para no
+ * primeiro que precisar de confirmação. `executeTool` para um bloco
+ * HIGH/MEDIUM nunca executa nada (só valida e verifica permissão), por isso
+ * é sempre seguro continuar a avaliar os restantes mesmo sabendo que um já
+ * vai ficar pendente.
+ */
 async function evaluateToolUseBlocks(userId: string, blocks: ChatToolUseBlock[]): Promise<BatchEvaluation> {
-  const results: ChatToolResultBlock[] = [];
+  const resolvedResults: ChatToolResultBlock[] = [];
+  const pending: PendingBlock[] = [];
+
   for (const block of blocks) {
     const evaluation = await executeTool(block.name, userId, block.input);
     if (evaluation.status === "confirmation_required") {
-      return { kind: "confirmation_required", triggerToolUseId: block.id, summary: evaluation.summary, riskTier: evaluation.riskTier };
+      pending.push({ toolUseId: block.id, toolName: block.name, params: evaluation.params, summary: evaluation.summary, riskTier: evaluation.riskTier });
+      continue;
     }
-    results.push(toToolResultBlock(block.id, evaluation));
+    resolvedResults.push(toToolResultBlock(block.id, evaluation));
   }
-  return { kind: "resolved", results };
+
+  if (pending.length === 0) return { kind: "resolved", results: resolvedResults };
+  return { kind: "confirmation_required", pending, preResolvedResults: resolvedResults };
+}
+
+/** Resume o texto de confirmação de um grupo — uma linha simples para 1 ação (igual ao comportamento anterior), lista numerada para várias. */
+function buildGroupedSummary(pending: PendingBlock[]): string {
+  if (pending.length === 1) return pending[0].summary;
+  const lines = pending.map((p, i) => `${i + 1}. ${p.summary}`);
+  return `Encontrei ${pending.length} ações a confirmar:\n${lines.join("\n")}`;
+}
+
+/** HIGH é sempre o mais severo entre as tools desta V1 (MEDIUM nunca é usado) — mas calculado, nunca assumido. */
+function highestRiskTier(pending: PendingBlock[]): RiskTier {
+  return pending.some((p) => p.riskTier === "HIGH") ? "HIGH" : pending[0].riskTier;
 }
 
 interface RunLoopParams {
@@ -175,24 +202,25 @@ async function runLoop({ userId, system, messages, roundsUsed }: RunLoopParams):
     const evaluation = await evaluateToolUseBlocks(userId, toolUseBlocks);
 
     if (evaluation.kind === "confirmation_required") {
-      const toolCalls: PendingToolCall[] = toolUseBlocks.map((block) => ({
-        toolUseId: block.id,
-        toolName: block.name,
-        params: block.input,
+      const toolCalls: PendingToolCall[] = evaluation.pending.map((p) => ({
+        toolUseId: p.toolUseId,
+        toolName: p.toolName,
+        params: p.params,
       }));
-      const snapshot: ConversationSnapshot = { system, messages: nextMessages, triggerToolUseId: evaluation.triggerToolUseId };
+      const summary = buildGroupedSummary(evaluation.pending);
+      const snapshot: ConversationSnapshot = { system, messages: nextMessages, preResolvedResults: evaluation.preResolvedResults };
       const confirmation = createConfirmation({
         userId,
         toolCalls,
-        summary: evaluation.summary,
+        summary,
         conversationSnapshot: snapshot,
         roundsUsed: rounds,
       });
       return {
         type: "confirmation_required",
         confirmationToken: confirmation.token,
-        summary: evaluation.summary,
-        riskTier: evaluation.riskTier,
+        summary,
+        riskTier: highestRiskTier(evaluation.pending),
       };
     }
 
@@ -265,40 +293,28 @@ export async function confirmPendingAction(userId: string, confirmationToken: st
   const { confirmation } = consumed;
   const snapshot = confirmation.conversationSnapshot as ConversationSnapshot;
 
-  const triggerCall = confirmation.toolCalls.find((c) => c.toolUseId === snapshot.triggerToolUseId);
-  if (!triggerCall) {
-    // Nunca deveria acontecer — runLoop sempre inclui o próprio trigger em
-    // toolCalls antes de criar a confirmação. Defesa, não um caminho esperado.
-    logError("ai.chat.orchestrator", new Error("Confirmação sem o tool call que a originou"), { userId });
-    return { type: "error", message: "Não foi possível concluir esta confirmação." };
-  }
-
-  // [Correção — auditoria de segurança do Milestone 4] A ação que o
-  // utilizador confirmou executa SEMPRE primeiro, independentemente da
-  // posição em que apareceu no turno original do Claude — antes, se o
-  // Claude tivesse pedido duas tools HIGH na mesma vez e a confirmada não
-  // fosse a primeira do array, a ação que o utilizador genuinamente
-  // confirmou podia nunca chegar a executar. Qualquer OUTRA tool do mesmo
-  // turno que também exija confirmação nunca executa aqui — vira um
-  // tool_result de erro (nunca aborta a conversa inteira), para o Claude
-  // poder explicar a situação e pedir essa confirmação em separado.
-  const results: ChatToolResultBlock[] = [];
-  const triggerEvaluation = await executeConfirmedTool(triggerCall.toolName, userId, triggerCall.params);
-  results.push(
-    triggerEvaluation.status === "confirmation_required"
-      ? toBlockedByConfirmationResult(triggerCall.toolUseId) // executeConfirmedTool nunca devolve isto de facto — defesa
-      : toToolResultBlock(triggerCall.toolUseId, triggerEvaluation),
-  );
-
+  // [Milestone 5b — confirmação agrupada, sem atomicidade fictícia] TODAS as
+  // ações congeladas nesta confirmação executam — sequencialmente, cada uma
+  // com o resultado (sucesso ou falha) que realmente teve. Nenhuma ordem
+  // "trigger primeiro" é precisa: o utilizador confirmou o GRUPO inteiro tal
+  // como lhe foi mostrado, não uma ação em particular. Uma falha numa NUNCA
+  // impede as outras de executar, nunca é escondida, e nunca é apresentada
+  // como sucesso — o Claude vê o resultado real de cada uma (via
+  // `toToolResultBlock`, que já marca `isError` corretamente) e reporta-o ao
+  // utilizador no próximo turno (ex: "3 adicionadas, 1 falhou"). O Executor
+  // (`executeConfirmedTool`) não muda: continua a revalidar cada schema e a
+  // recusar sempre CRITICAL, chamado aqui uma vez por ação, nunca em lote.
+  const confirmedResults: ChatToolResultBlock[] = [];
   for (const call of confirmation.toolCalls) {
-    if (call.toolUseId === triggerCall.toolUseId) continue;
-    const evaluation = await executeTool(call.toolName, userId, call.params);
-    results.push(
-      evaluation.status === "confirmation_required" ? toBlockedByConfirmationResult(call.toolUseId) : toToolResultBlock(call.toolUseId, evaluation),
+    const evaluation = await executeConfirmedTool(call.toolName, userId, call.params);
+    confirmedResults.push(
+      evaluation.status === "confirmation_required"
+        ? { type: "tool_result", toolUseId: call.toolUseId, content: "Esta ação não pôde ser confirmada.", isError: true } // executeConfirmedTool nunca devolve isto de facto — defesa
+        : toToolResultBlock(call.toolUseId, evaluation),
     );
   }
 
-  const nextMessages: ChatMessage[] = [...snapshot.messages, { role: "user", content: results }];
+  const nextMessages: ChatMessage[] = [...snapshot.messages, { role: "user", content: [...snapshot.preResolvedResults, ...confirmedResults] }];
   return runLoop({ userId, system: snapshot.system, messages: nextMessages, roundsUsed: confirmation.roundsUsed });
 }
 

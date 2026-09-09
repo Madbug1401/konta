@@ -140,11 +140,56 @@ Liga, pela primeira vez, o AI Gateway ao Context Builder e ao Tool Registry: `Us
 
 - **`chat/personality.ts`** — Personality Layer: um prompt curto e explícito (nunca um prompt gigante), separado da lógica técnica. Define identidade, e as regras que o Claude nunca quebra (nunca inventar números, nunca dizer que uma ação foi feita antes do resultado `executed`, nunca contornar uma permissão, nunca revelar detalhes internos).
 - **`chat/context-presentation.ts`** — o passo de serialização que o Context Builder (Milestone 2) deixou deliberadamente por fazer: converte um `AiContext` em texto determinístico para o system prompt. Nunca inclui um campo que o `AiContext` não tenha.
-- **`chat/orchestrator.ts`** — dono do loop de tool-calling (o Gateway só sabe fazer uma chamada de cada vez). `sendMessage()`: constrói contexto `light`, chama `sendChatTurn()`, e para cada `tool_use` que o Claude pedir chama `executeTool()` — LOW continua o loop automaticamente; a primeira tool que exigir confirmação PARA o loop (nunca executa) e cria uma entrada no Confirmation Store, devolvendo o token. `confirmPendingAction()`/`cancelPendingAction()` retomam ou cancelam a partir desse token. Limite de `MAX_TOOL_ROUNDS = 5` por pedido — ao atingir, para com uma resposta segura em vez de continuar indefinidamente.
+- **`chat/orchestrator.ts`** — dono do loop de tool-calling (o Gateway só sabe fazer uma chamada de cada vez). `sendMessage()`: constrói contexto `light`, chama `sendChatTurn()`, e avalia TODOS os `tool_use` que o Claude pedir no mesmo turno — LOW continua o loop automaticamente; todos os que exigirem confirmação entram juntos numa ÚNICA entrada do Confirmation Store (confirmação agrupada, ver secção "Konta AI Multimodal" abaixo), devolvendo um token só. `confirmPendingAction()`/`cancelPendingAction()` retomam ou cancelam o grupo inteiro a partir desse token. Limite de `MAX_TOOL_ROUNDS = 5` por pedido — ao atingir, para com uma resposta segura em vez de continuar indefinidamente.
 - **`POST /api/ai/chat`** — três ações (`message`/`confirm`/`cancel`), validadas com Zod (`z.discriminatedUnion`); sessão obrigatória, `userId` nunca do corpo; histórico de conversa gerido pelo cliente (sem memória persistida — texto simples, máx. 20 turnos, máx. 4000 carateres cada); rate limit básico por utilizador (`src/lib/rate-limit.ts` reutilizado, 20 pedidos/10min — nunca billing a sério, documentado como próximo passo).
 - **`src/components/chat-panel.tsx`** (`/assistant`, entrada "Konta AI" na navegação) — mensagens, sugestões iniciais, estado de confirmação com botões Confirmar/Cancelar, loading e erro. Sem infraestrutura de teste de componentes React neste projeto (Vitest corre em ambiente `node`, sem `@testing-library/react`) — verificado por typecheck/lint, não por teste automatizado; ver relatório do Milestone 4 para o roteiro de teste manual.
 
 **Ainda não construído** (documentado, não escondido): memória persistente entre sessões, `get_categories`, streaming, voz, notificações proativas — todos deliberadamente fora do âmbito desta primeira experiência.
+
+## Konta AI Multimodal — attachments, extração e propostas (Milestone 5a/5b)
+
+Adiciona imagens/PDF/TXT/CSV como input do chat (5a) e entendimento
+financeiro real desses attachments (5b) — sem criar nenhuma segunda
+arquitetura de IA, de escrita, ou de confirmação.
+
+- **`src/lib/ai/attachments/`** (5a) — validação por conteúdo real (nunca
+  MIME/extensão do cliente), limites, Attachment Store em memória com TTL
+  (mesmo padrão do Confirmation Store), contagem de páginas de PDF
+  (`pdf-lib`). `POST /api/ai/attachments` faz o upload; imagem/PDF vão para
+  a Anthropic Files API (`gateway.ts::uploadFileToAnthropic`), TXT/CSV
+  ficam inline como texto.
+- **`chat/attachments.ts`** (5a) — resolve `attachmentIds` (sempre
+  ownership-scoped) para blocos `image`/`document` do Gateway. Texto de
+  TXT/CSV é envolvido numa boundary aleatória de 128 bits, gerada por
+  chamada (`wrapUntrustedText`) — nunca uma tag fixa, para nenhum ficheiro
+  a poder reproduzir e "fechar" a fronteira mais cedo (correção de
+  segurança M5a.1, com testes dedicados ao ataque).
+- **`tools/tools/propose-transactions.ts`** (5b, LOW) — o único sítio que
+  entende extração financeira: recebe do Claude uma lista de transações
+  extraídas (nomes em texto livre, nunca ids — `.strict()` rejeita
+  `accountId`/`categoryId`/`confirmed` inventados), resolve `account`
+  contra as contas reais do utilizador (0 correspondências ou mais do que
+  1 ficam por resolver, nunca uma escolha arbitrária), verifica moeda/data
+  impossíveis, e sinaliza possíveis duplicados (mesma conta/tipo/data/valor
+  já existente) — nunca escreve nada. `category` passa tal e qual para
+  `create_transaction`, que já sabe resolvê-la (Milestone 3). Limite de
+  `MAX_EXTRACTED_TRANSACTIONS = 20` por chamada.
+- **Confirmação agrupada** (5b, `chat/orchestrator.ts`) — quando o mesmo
+  turno tem várias tools a exigir confirmação (tipicamente N chamadas a
+  `create_transaction`, uma por transação extraída), entram todas juntas
+  numa única `PendingConfirmation`, com um resumo combinado e numerado. Ao
+  confirmar, `executeConfirmedTool` corre uma vez por ação, sequencialmente
+  — sem fingir atomicidade que o executor não tem: uma falha a meio nunca
+  impede nem esconde o sucesso das outras (`"3 adicionadas, 1 falhou"` é um
+  resultado válido, nunca mascarado). Substitui a política do Milestone 4
+  ("para na primeira, as outras ficam bloqueadas").
+- **`create_transaction`** ganhou um campo opcional `accountName`
+  (Milestone 5b) — só cosmético, só para o texto de confirmação mostrar em
+  que conta a transação vai ficar; nunca influencia a escrita real (isso
+  continua a ser sempre `accountId`, verificado por ownership).
+
+**Ainda não construído**: voz (Milestone 5c), `get_categories`, memória
+persistente entre sessões.
 
 ## Design System (`src/components/ui` + componentes de domínio)
 
