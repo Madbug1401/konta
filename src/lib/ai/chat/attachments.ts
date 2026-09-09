@@ -13,13 +13,30 @@
 // delimitadores explícitos, para o Claude ter um sinal estrutural de que
 // aquilo é DADO do utilizador a analisar, nunca uma instrução do sistema
 // (reforça a regra já explícita na Personality Layer, ver personality.ts).
+//
+// [Correção — auditoria M5a, "delimiter escape"] A boundary usada tem de
+// ser IMPREVISÍVEL para quem prepara o ficheiro com antecedência. Uma tag
+// fixa (o nome era literalmente visível neste ficheiro) podia ser
+// reproduzida tal e qual dentro do próprio TXT/CSV — um ficheiro que
+// incluísse a string `</dados_de_ficheiro_do_utilizador>` fechava a
+// boundary mais cedo do que devia, fazendo tudo o que viesse a seguir
+// parecer, aos olhos do modelo, estar FORA da zona de dados não confiável.
+// Corrigido gerando um sufixo aleatório de 128 bits por CHAMADA — quem
+// prepara um ficheiro de antemão não tem como adivinhar esse sufixo, por
+// isso nunca consegue reproduzi-lo dentro do conteúdo. Nunca reutilizado
+// entre attachments/mensagens (cada chamada gera o seu próprio), para um
+// attachment nunca poder "aprender" a boundary usada por outro.
 // ============================================================================
 
+import { randomBytes } from "node:crypto";
 import { getAttachment, AttachmentError, type AiAttachment } from "@/lib/ai/attachments";
 import type { ChatDocumentBlock, ChatImageBlock } from "@/lib/ai/gateway";
 
+const UNTRUSTED_TAG_PREFIX = "dados_de_ficheiro_do_utilizador";
+
 function wrapUntrustedText(text: string): string {
-  return `<dados_de_ficheiro_do_utilizador>\n${text}\n</dados_de_ficheiro_do_utilizador>`;
+  const boundary = `${UNTRUSTED_TAG_PREFIX}_${randomBytes(16).toString("hex")}`;
+  return `<${boundary}>\n${text}\n</${boundary}>`;
 }
 
 function attachmentToBlock(attachment: AiAttachment): ChatImageBlock | ChatDocumentBlock | null {
