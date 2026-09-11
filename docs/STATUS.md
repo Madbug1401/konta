@@ -20,8 +20,13 @@ respostas do Claude, textarea com auto-resize, "Enter envia/Shift+Enter
 nova linha") — incluindo uma correção de segurança encontrada e corrigida
 durante essa mesma passagem: o cartão de confirmação de ações HIGH nunca
 interpreta Markdown (texto literal sempre), porque description/categoria
-são texto livre que pode vir de um attachment ou de uma transcrição de voz
-— ver `git log` para o histórico exato (commits `0b14f9f` e `3c77909`).
+são texto livre que pode vir de um attachment ou de uma transcrição de voz.
+As secções 1, 5, 7 e 8 foram atualizadas de novo, na mesma data, para o
+Milestone 6 — cobertura completa: o Konta AI passou de 8 para 27 tools,
+ganhando escrita/leitura de contas, dívidas, metas, recorrências e
+investimentos (antes só transações) — ver `git log` para o histórico exato
+e `docs/architecture/OVERVIEW.md`, secção "Konta AI — Cobertura Completa",
+para a matriz completa de capacidades e as decisões de arquitetura.
 
 ## 1. O que é o Konta hoje
 
@@ -33,14 +38,19 @@ um motor de cálculo financeiro isolado da interface — arquitetado para que
 uma app mobile (React Native/Expo) possa consumir exatamente a mesma lógica
 mais tarde, sem reescrever nada — e, desde o Milestone 4, um assistente de
 IA (Claude, via `@anthropic-ai/sdk`) capaz de responder sobre os dados
-financeiros do utilizador e propor ações (criar/editar/apagar transação),
-sempre com confirmação explícita para qualquer escrita. Desde o Milestone
-5c, o utilizador também pode falar em vez de escrever (gravação por
-microfone, transcrita via Groq Whisper e colocada no composer para revisão
-— nunca enviada sozinha), e as respostas do assistente são renderizadas em
-Markdown seguro (títulos, listas, tabelas, negrito — nunca HTML/links/
-imagens vindos do texto da IA). Ver `docs/architecture/OVERVIEW.md`,
-secções "Konta AI" e "Konta AI Chat", para o desenho completo.
+financeiros do utilizador e propor ações. Desde o Milestone 6, essas ações
+cobrem praticamente tudo o que a UI já permite — contas, transações,
+dívidas, metas, recorrências e investimentos, criar/editar e não só
+consultar — sempre com confirmação explícita para qualquer escrita, sempre
+pela mesma pilha (Financial Engine, Permission Layer, Confirmation Store)
+que a interface manual já usava, nunca uma segunda lógica financeira. Desde
+o Milestone 5c, o utilizador também pode falar em vez de escrever (gravação
+por microfone, transcrita via Groq Whisper e colocada no composer para
+revisão — nunca enviada sozinha), e as respostas do assistente são
+renderizadas em Markdown seguro (títulos, listas, tabelas, negrito — nunca
+HTML/links/imagens vindos do texto da IA). Ver `docs/architecture/OVERVIEW.md`,
+secções "Konta AI", "Konta AI Chat" e "Konta AI — Cobertura Completa", para
+o desenho completo.
 
 ## 2. Modelo de dados (`prisma/schema.prisma`, 398 linhas)
 
@@ -139,7 +149,8 @@ poder ser reutilizado por Web, futuro Mobile, relatórios e (mais tarde) IA.
   dono em `/admin`)
 - `/assistant` — Konta AI: chat com Claude sobre os dados financeiros do
   utilizador, com pedido de confirmação explícita (botões Confirmar/Cancelar)
-  antes de qualquer escrita (criar/editar/apagar transação). Só visível na
+  antes de qualquer escrita — transações, contas, dívidas, metas,
+  recorrências ou investimentos (Milestone 6). Só visível na
   navegação (`AppShell`) para contas com `aiEnabled = true`; a conversa vive
   agora em `AssistantProvider` (montado em `src/app/(app)/layout.tsx`, nunca
   desmontado ao navegar dentro da app) em vez de dentro da própria página,
@@ -166,8 +177,8 @@ onde aplicável:
   (o cálculo de próxima ocorrência já existe em `financial-engine/recurring.ts`,
   falta o job/rota que a executa)
 - Onboarding
-- No Konta AI: memória persistente entre sessões, tool `get_categories`,
-  streaming de resposta, notificações proativas — ver secção "Konta AI"
+- No Konta AI: memória persistente entre sessões, streaming de resposta,
+  notificações proativas, `AiActionLog` persistente — ver secção "Konta AI"
   abaixo e `docs/architecture/OVERVIEW.md` para o detalhe de cada um
 
 ## 6. Bugs — os 5 da auditoria original + 1 encontrado em uso real
@@ -216,12 +227,18 @@ transcrição de voz (`transcription/service`, `transcription/groq-provider`,
 `@vitest-environment`, o resto da suite continua em "node") que cobrem
 especificamente Markdown seguro nas respostas (sem `<script>`/`<img>`/`<a>`/
 HTML bruto) e o cartão de confirmação como texto literal (o mesmo payload de
-injeção do achado de segurança, fixado como teste de regressão) — **51
-ficheiros `*.test.ts`/`*.test.tsx` no total, 430 testes**. Confirmado a
-passar de facto em 11/09/2026 (`npx vitest run`), junto com
-`npx tsc --noEmit`, `npx eslint .` e `npm run build`, os quatro sem erros —
-mas corre `npm test` para o número atual em vez de confiar num valor escrito
-neste documento, que fica desatualizado a cada novo teste.
+injeção do achado de segurança, fixado como teste de regressão). Desde o
+Milestone 6, cobre também as 19 tools novas (contas, dívidas, metas,
+recorrências, investimentos) — cada uma com teste próprio de schema,
+ownership e execução — e um teste de integração
+(`tools/m6-integration.test.ts`) que confirma, através do Executor real
+(não mockado), que todas as tools de escrita novas continuam a exigir
+confirmação antes de tocar a base de dados — **71 ficheiros
+`*.test.ts`/`*.test.tsx` no total, 533 testes**. Confirmado a passar de
+facto em 11/09/2026 (`npx vitest run`), junto com `npx tsc --noEmit`,
+`npx eslint .` e `npm run build`, os quatro sem erros — mas corre
+`npm test` para o número atual em vez de confiar num valor escrito neste
+documento, que fica desatualizado a cada novo teste.
 
 ## 8. Onde a arquitetura ainda não é a "final"
 
@@ -237,18 +254,22 @@ neste documento, que fica desatualizado a cada novo teste.
 - **Migração do protótipo** — só o mapeamento/desenho existe
   (`docs/architecture/MIGRATION.md`); o script executável de migração dos
   dados de `localStorage` ainda não foi escrito.
-- **IA (Konta AI)** — Milestones 1–5c implementados: AI Gateway
+- **IA (Konta AI)** — Milestones 1–6 implementados: AI Gateway
   (`src/lib/ai/gateway.ts`), Context Builder (`src/lib/ai/context/`), Tool
   Registry + Permission/Risk Layer + Executor + Confirmation Store
   (`src/lib/ai/tools/`), o orquestrador de chat + página `/assistant`
   (`src/lib/ai/chat/`), input multimodal (imagens/PDF/TXT/CSV, Milestone 5a),
   propostas/confirmação agrupada de várias transações extraídas de um
-  attachment (`propose_transactions`, Milestone 5b), e voz (Milestone 5c —
+  attachment (`propose_transactions`, Milestone 5b), voz (Milestone 5c —
   gravação no browser, transcrição via Groq Whisper large-v3-turbo,
-  `src/lib/ai/transcription/`) — ver
+  `src/lib/ai/transcription/`), e cobertura completa das restantes
+  entidades financeiras — contas, dívidas, metas, recorrências, investimentos
+  (Milestone 6, 19 tools novas, Registry passa de 8 para 27 — ver
+  `docs/architecture/OVERVIEW.md`, secção "Konta AI — Cobertura Completa",
+  para a matriz e as decisões de arquitetura) — ver
   `docs/architecture/OVERVIEW.md`, secções "Konta AI" e "Konta AI Chat", para
   o detalhe completo de cada peça e o que cada uma ainda não faz (memória
-  persistente, `get_categories`, streaming). `AiActionLog` persistente
+  persistente, streaming). `AiActionLog` persistente
   (registo de auditoria de ações da IA) ainda não existe. Requer
   `ANTHROPIC_API_KEY` e `SPEECH_TO_TEXT_API_KEY` (ver `.env.example`);
   `render.yaml` já declara as duas variáveis para o deploy de produção
@@ -287,9 +308,10 @@ migrações SQL em `prisma/manual-sql/` (por ordem numérica), `npm test`,
 
 ## 10. Próximo passo recomendado
 
-Konta AI já tem uma primeira experiência real (Milestones 1–5c: chat +
-tools com confirmação, input multimodal, propostas/confirmação agrupada e
-voz) — deixou de ser o próximo passo em aberto. `docs/KONTA_BETA_GATE.md`
+Konta AI já tem uma primeira experiência real (Milestones 1–6: chat + tools
+com confirmação, input multimodal, propostas/confirmação agrupada, voz, e
+cobertura completa de contas/dívidas/metas/recorrências/investimentos) —
+deixou de ser o próximo passo em aberto. `docs/KONTA_BETA_GATE.md`
 (29/08/2026) classifica o projeto como **NOT BETA READY**, mas apenas por uma
 checklist de infraestrutura de produção (HTTPS/TLS real, `docker build`
 confirmado num ambiente com Docker Hub, cron de backup agendado, segredos de
@@ -300,10 +322,10 @@ Frentes em aberto, sem uma depender da outra:
    `docs/KONTA_BETA_GATE.md`, secção "Ainda bloqueia Beta", executáveis num
    VPS real seguindo `docs/architecture/DEPLOYMENT.md` e
    `docs/architecture/BACKUP.md`.
-2. **Evoluir o Konta AI** — `AiActionLog` persistente, tool `get_categories`,
-   memória entre sessões, encadear mais de uma ação por turno, ou decidir
-   como/quando ativar `aiEnabled` para os utilizadores existentes da Beta
-   (hoje só um admin o faz manualmente, um de cada vez, em `/admin`).
+2. **Evoluir o Konta AI** — `AiActionLog` persistente, memória entre
+   sessões, streaming de resposta, ou decidir como/quando ativar `aiEnabled`
+   para os utilizadores existentes da Beta (hoje só um admin o faz
+   manualmente, um de cada vez, em `/admin`).
 3. **Migração do protótipo** — o mapeamento está em
    `docs/architecture/MIGRATION.md`; o script executável ainda não foi
    escrito.

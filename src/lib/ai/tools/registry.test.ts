@@ -1,19 +1,41 @@
 import { describe, expect, it } from "vitest";
 import { getTool, listTools } from "./registry";
 
-const EXPECTED_TOOL_NAMES = [
-  "get_accounts",
-  "get_transactions",
-  "create_transaction",
-  "update_transaction",
-  "delete_transaction",
-  "get_debts",
-  "get_goals",
-  "propose_transactions",
-];
+const EXPECTED_TOOL_RISK: Record<string, "LOW" | "HIGH"> = {
+  // Milestone 3-5b
+  get_accounts: "LOW",
+  get_transactions: "LOW",
+  create_transaction: "HIGH",
+  update_transaction: "HIGH",
+  delete_transaction: "HIGH",
+  get_debts: "LOW",
+  get_goals: "LOW",
+  propose_transactions: "LOW",
+  // Milestone 6 — cobertura completa (ver docs/architecture/OVERVIEW.md)
+  get_categories: "LOW",
+  get_recurring_transactions: "LOW",
+  get_investments: "LOW",
+  create_account: "HIGH",
+  update_account: "HIGH",
+  set_account_archived: "HIGH",
+  delete_account: "HIGH",
+  create_debt: "HIGH",
+  update_debt: "HIGH",
+  pay_debt_installment: "HIGH",
+  mark_debt_defaulted: "HIGH",
+  create_goal: "HIGH",
+  update_goal: "HIGH",
+  update_goal_status: "HIGH",
+  create_recurring_transaction: "HIGH",
+  set_recurring_transaction_active: "HIGH",
+  create_investment_detail: "HIGH",
+  update_investment_detail: "HIGH",
+  add_investment_valuation: "HIGH",
+};
+const EXPECTED_TOOL_NAMES = Object.keys(EXPECTED_TOOL_RISK);
 
 describe("Tool Registry", () => {
-  it("regista exatamente as 8 tools (V1 + propose_transactions do Milestone 5b) — nenhuma a mais, nenhuma a menos", () => {
+  it("regista exatamente as tools esperadas (Milestone 3-6) — nenhuma a mais, nenhuma a menos", () => {
     const names = listTools()
       .map((t) => t.name)
       .sort();
@@ -32,7 +54,7 @@ describe("Tool Registry", () => {
   });
 
   it("getTool devolve undefined para uma tool inexistente — nunca lança, nunca inventa uma tool", () => {
-    expect(getTool("delete_account")).toBeUndefined();
+    expect(getTool("reset_database")).toBeUndefined();
     expect(getTool("")).toBeUndefined();
     expect(getTool("GET_ACCOUNTS")).toBeUndefined(); // sensível a maiúsculas — não faz correspondência aproximada
   });
@@ -45,16 +67,7 @@ describe("Tool Registry", () => {
 
   it("os risk tiers correspondem exatamente à política V1 do design (leituras LOW, escritas HIGH)", () => {
     const riskByName = Object.fromEntries(listTools().map((t) => [t.name, t.riskTier]));
-    expect(riskByName).toEqual({
-      get_accounts: "LOW",
-      get_transactions: "LOW",
-      get_debts: "LOW",
-      get_goals: "LOW",
-      propose_transactions: "LOW",
-      create_transaction: "HIGH",
-      update_transaction: "HIGH",
-      delete_transaction: "HIGH",
-    });
+    expect(riskByName).toEqual(EXPECTED_TOOL_RISK);
   });
 
   it("listTools() não é a referência interna mutável (uma cópia — alterar o resultado não afeta o Registry)", () => {
@@ -63,7 +76,13 @@ describe("Tool Registry", () => {
     expect(listTools()).toHaveLength(EXPECTED_TOOL_NAMES.length);
   });
 
-  it("nenhuma tool exposta no Registry tem risk CRITICAL (nenhuma tool desta V1 deve sequer existir nesse nível)", () => {
+  // [Milestone 6 — auditoria de segurança] Nenhuma operação encontrada exige
+  // CRITICAL: as duas ações irreversíveis novas (mark_debt_defaulted,
+  // update_goal_status) já têm um guard equivalente no próprio SQL (só
+  // ACTIVE pode transitar) e delete_account só aceita uma conta genuinamente
+  // vazia (AccountNotEmptyError) — nenhuma tem menos proteção do que a UI
+  // manual já tinha. Ver M6 Final Report, secção Security.
+  it("nenhuma tool exposta no Registry tem risk CRITICAL (nenhuma operação auditada exigiu esse nível)", () => {
     expect(listTools().some((t) => t.riskTier === "CRITICAL")).toBe(false);
   });
 });

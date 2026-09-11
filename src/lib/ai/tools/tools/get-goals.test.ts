@@ -33,19 +33,24 @@ describe("get_goals tool", () => {
     expect(getGoalsTool.paramsSchema.safeParse({ userId: "outro" }).success).toBe(false);
   });
 
-  it("devolve um DTO sem id da meta nem linkedAccountId/userId (reutiliza buildGoalSummaries do Milestone 2)", async () => {
+  // [Milestone 6] Ao contrário de AiGoalSummary (Context Builder, só texto de
+  // prompt), este DTO agora expõe `id`/`linkedAccountId` de propósito — é a
+  // única forma do modelo poder referenciar esta meta em update_goal/
+  // update_goal_status, e contribuir/retirar via create_transaction
+  // (accountId=linkedAccountId, goalId=id). `userId` continua nunca exposto.
+  it("devolve um DTO com id da meta e linkedAccountId (para as tools de escrita), mas nunca userId", async () => {
     findUserByIdMock.mockResolvedValue({ timezone: "Atlantic/Cape_Verde" });
-    listGoalsMock.mockResolvedValue([GOAL]);
-    listAccountsMock.mockResolvedValue([]);
+    listGoalsMock.mockResolvedValue([{ ...GOAL, linkedAccountId: "acc-1" }]);
+    listAccountsMock.mockResolvedValue([{ id: "acc-1", userId: "user-1", name: "Poupança", type: "SAVINGS", currency: "CVE", initialBalanceMinor: 0n, isArchived: false, color: null }]);
     listAllTransactionsForBalancesMock.mockResolvedValue([]);
 
     const { getGoalsTool } = await import("./get-goals");
     const [goal] = await getGoalsTool.execute("user-1", {});
 
-    expect(goal.name).toBe("Computador");
+    expect(goal.id).toBe("goal-1");
+    expect(goal.linkedAccountId).toBe("acc-1");
+    expect(goal.linkedAccountName).toBe("Poupança");
     const serialized = JSON.stringify(goal);
-    expect(serialized).not.toContain("\"id\"");
-    expect(serialized).not.toContain("linkedAccountId");
     expect(serialized).not.toContain("userId");
   });
 

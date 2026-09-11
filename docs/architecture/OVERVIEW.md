@@ -130,9 +130,9 @@ Prepara o troço `Claude → Tool Registry → Permission/Risk Layer → Tool Ex
 
 **Confirmation Store** (`confirmation-store.ts`, Milestone 4) — corrige a limitação identificada no relatório do Milestone 3 (um boolean `confirmed` não amarrava a confirmação aos parâmetros exatos). `createConfirmation()` guarda, num `Map` em memória (mesmo padrão de `src/lib/rate-limit.ts` — nunca persistido, nunca sobrevive a um restart), um token opaco de 256 bits ligado a: utilizador, os `toolCalls` exatos (nunca reconstruídos a partir de um novo pedido do cliente), expiração de 5 minutos, e estado `pending`/`consumed`/`cancelled` (uso único). `consumeConfirmation()`/`cancelConfirmation()` verificam ownership (token de outro utilizador devolve o mesmo "not_found" genérico — anti-enumeração) antes de aceitar. `executeConfirmedTool()` (`executor.ts`) executa uma tool já confirmada, revalidando o schema e recusando sempre CRITICAL como defesa em profundidade.
 
-**7 tools da V1**: `get_accounts`, `get_transactions`, `get_debts`, `get_goals` (LOW); `create_transaction`, `update_transaction`, `delete_transaction` (HIGH). `delete_transaction` reutiliza exatamente `deleteTransaction()` (eliminação física, ownership-scoped) — Transaction não tem arquivamento, ao contrário de Account, e esta tool não inventa um.
+**7 tools da V1** (Milestone 3): `get_accounts`, `get_transactions`, `get_debts`, `get_goals` (LOW); `create_transaction`, `update_transaction`, `delete_transaction` (HIGH). `delete_transaction` reutiliza exatamente `deleteTransaction()` (eliminação física, ownership-scoped) — Transaction não tem arquivamento, ao contrário de Account, e esta tool não inventa um. Desde o Milestone 6, o Registry tem 27 tools no total — ver secção "Konta AI — Cobertura Completa" abaixo para a lista e a matriz de capacidades.
 
-**Ainda não construído** (documentado, não escondido): `AiActionLog` persistente; tool `get_categories` (torna `categoryId`/`goalId` em `create_transaction` pouco úteis para o modelo até existir uma forma de descobrir ids válidos); mais do que uma ação a exigir confirmação no mesmo turno (a conversa termina com um erro claro em vez de encadear).
+**Ainda não construído** (documentado, não escondido): `AiActionLog` persistente; mais do que uma ação a exigir confirmação no mesmo turno já funciona desde o Milestone 5b (confirmação agrupada) — o que falta é memória persistente entre sessões e streaming de resposta.
 
 ## Konta AI Chat — primeira experiência real (`src/lib/ai/chat`, `/assistant`, Milestone 4)
 
@@ -206,9 +206,40 @@ arquitetura de IA, de escrita, ou de confirmação.
   Layer ou Confirmation Store — a transcrição entra no chat pelo mesmo
   campo `message` de sempre.
 
-**Ainda não construído**: `get_categories`, memória persistente entre
-sessões, resposta em voz (fora de âmbito por desenho — ver Milestone 5c,
-"Voice Input", nunca "Voice Assistant").
+**Ainda não construído**: memória persistente entre sessões, resposta em voz
+(fora de âmbito por desenho — ver Milestone 5c, "Voice Input", nunca "Voice
+Assistant").
+
+## Konta AI — Cobertura Completa (Milestone 6)
+
+Objetivo: se o utilizador consegue fazer uma operação financeira pela UI, o
+Konta AI consegue fazer a mesma operação pela conversa — sempre pela MESMA
+pilha (`Claude → Tool Registry → Permission Layer → função de domínio já
+usada pela UI → Financial Engine → DB`), nunca uma segunda lógica financeira,
+de permissões ou de confirmação. Nenhuma tool desta milestone introduziu SQL
+novo — todas chamam uma função já existente em `src/lib/db/*.ts`, a mesma
+que a rota HTTP equivalente já chamava.
+
+**19 tools novas** (Registry passa de 8 para 27 — ver `registry.ts`):
+
+| Domínio | LOW (leitura) | HIGH (escrita) |
+|---|---|---|
+| Contas | (já existia: `get_accounts`) | `create_account`, `update_account`, `set_account_archived`, `delete_account` |
+| Dívidas | `get_debts` (agora com `id` da dívida e de cada parcela — antes só alimentava texto do prompt) | `create_debt`, `update_debt`, `pay_debt_installment`, `mark_debt_defaulted` |
+| Metas | `get_goals` (agora com `id` e `linkedAccountId`) | `create_goal`, `update_goal`, `update_goal_status` |
+| Recorrências | `get_recurring_transactions` (novo) | `create_recurring_transaction`, `set_recurring_transaction_active` |
+| Investimentos | `get_investments` (novo) | `create_investment_detail`, `update_investment_detail`, `add_investment_valuation` |
+| Categorias | `get_categories` (novo) | — (criar categoria já acontece transparentemente dentro de `create_transaction`/`create_recurring_transaction` via `resolveCategoryByName`; uma tool própria seria redundante) |
+
+**Decisões de arquitetura desta milestone:**
+
+- **DTOs com `id` para as tools de escrita** (`shared.ts`: `AiToolDebt`, `AiToolGoal`, `AiToolRecurringTransaction`, `AiToolInvestment`, `AiToolCategory`) — diferente dos DTOs do Context Builder (`AiDebtSummary`/`AiGoalSummary`, que nunca expõem `id` porque só alimentam texto do system prompt). `get_debts`/`get_goals` passaram a usar os novos DTOs; o Context Builder e o texto do system prompt (`context-presentation.ts`) não foram tocados. Mesmos cálculos do Financial Engine em ambos os casos (`getDebtRemaining`, `getGoalProgress`, `calculateGoalProjection`, `computeInvestmentPerformance`) — nunca reimplementados.
+- **Contribuir/retirar de uma meta nunca é uma tool própria** — é sempre `create_transaction` (já existente) contra `linkedAccountId` da meta, com `goalId` preenchido. `create_transaction` já suportava `goalId` desde o Milestone 3; só faltava `get_goals` expor o `linkedAccountId` para o modelo poder montar a chamada.
+- **`mark_debt_defaulted` ≠ "marcar como paga"** — marca INCUMPRIMENTO (irreversível); uma dívida fica paga sozinha via `pay_debt_installment` quando a última parcela é paga. Documentado explicitamente na descrição da tool e em `personality.ts` para o Claude nunca confundir os dois.
+- **Sem tool de eliminar dívida, meta ou recorrência** — porque a própria aplicação não suporta essa operação (nenhuma rota `DELETE` existe para nenhuma das três). Recorrência só pausa (`set_recurring_transaction_active`); dívida/meta não têm nenhum mecanismo de remoção, só de encerramento de estado (`mark_debt_defaulted`/`update_goal_status`).
+- **Nenhuma tool é CRITICAL** — as duas ações irreversíveis novas (`mark_debt_defaulted`, `update_goal_status`) já têm o mesmo guard que a rota HTTP (só transições a partir de `ACTIVE`); `delete_account` só aceita uma conta genuinamente vazia (`AccountNotEmptyError`). Nenhuma tem menos proteção do que a UI manual já tinha.
+- **Sem alterações ao Context Builder** — as novas tools são descobertas por chamada explícita (`get_categories`/`get_recurring_transactions`/`get_investments`), nunca despejadas no `light context` por omissão, para não aumentar o custo por mensagem.
+- **Gap conhecido, documentado, não escondido**: não existe cálculo de "quanto preciso guardar por mês" para uma meta no Financial Engine — só projeção de data de conclusão ao ritmo atual (`calculateGoalProjection`). O Konta AI nunca inventa esse número; se perguntado, responde com o que existe (progresso, projeção) e diz que não tem essa métrica.
 
 ## Design System (`src/components/ui` + componentes de domínio)
 
