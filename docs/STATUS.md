@@ -1,4 +1,4 @@
-# Konta — Estado atual do projeto (atualizado 07/09/2026)
+# Konta — Estado atual do projeto (atualizado 11/09/2026)
 
 Este documento é um retrato honesto do que existe hoje no repositório, com
 referências a ficheiros reais — não uma descrição de intenções. Escrito
@@ -12,7 +12,16 @@ Builder, Tool Registry/Permission Layer, orquestrador de chat e a página
 uso real: conversa do chat a sobreviver a navegação, categorização por nome
 nas tools de escrita, e acesso ao Konta AI a tornar-se opt-in por
 utilizador (ativado por um admin em `/admin`, desativado por omissão para
-quem se regista de agora em diante) — ver `git log` para o histórico exato.
+quem se regista de agora em diante). As secções 1, 4, 5, 7 e 8 foram
+atualizadas de novo em 11/09/2026 para refletir o Milestone 5c (voz —
+`POST /api/ai/transcription`, Groq Whisper large-v3-turbo) e um trabalho de
+UX sobre as respostas do assistente e o composer (Markdown seguro nas
+respostas do Claude, textarea com auto-resize, "Enter envia/Shift+Enter
+nova linha") — incluindo uma correção de segurança encontrada e corrigida
+durante essa mesma passagem: o cartão de confirmação de ações HIGH nunca
+interpreta Markdown (texto literal sempre), porque description/categoria
+são texto livre que pode vir de um attachment ou de uma transcrição de voz
+— ver `git log` para o histórico exato (commits `0b14f9f` e `3c77909`).
 
 ## 1. O que é o Konta hoje
 
@@ -25,9 +34,13 @@ uma app mobile (React Native/Expo) possa consumir exatamente a mesma lógica
 mais tarde, sem reescrever nada — e, desde o Milestone 4, um assistente de
 IA (Claude, via `@anthropic-ai/sdk`) capaz de responder sobre os dados
 financeiros do utilizador e propor ações (criar/editar/apagar transação),
-sempre com confirmação explícita para qualquer escrita. Ver
-`docs/architecture/OVERVIEW.md`, secções "Konta AI" e "Konta AI Chat", para
-o desenho completo.
+sempre com confirmação explícita para qualquer escrita. Desde o Milestone
+5c, o utilizador também pode falar em vez de escrever (gravação por
+microfone, transcrita via Groq Whisper e colocada no composer para revisão
+— nunca enviada sozinha), e as respostas do assistente são renderizadas em
+Markdown seguro (títulos, listas, tabelas, negrito — nunca HTML/links/
+imagens vindos do texto da IA). Ver `docs/architecture/OVERVIEW.md`,
+secções "Konta AI" e "Konta AI Chat", para o desenho completo.
 
 ## 2. Modelo de dados (`prisma/schema.prisma`, 398 linhas)
 
@@ -93,6 +106,11 @@ poder ser reutilizado por Web, futuro Mobile, relatórios e (mais tarde) IA.
   registado recebe uma lista vazia de contas, mesmo havendo dados de outro.
 - `POST /api/ai/chat` — três ações (`message`/`confirm`/`cancel`), sessão
   obrigatória, `userId` nunca do corpo; ver secção "Konta AI" abaixo.
+- `POST /api/ai/transcription` (Milestone 5c) — sessão + `isAiEnabled` +
+  rate limit próprio, valida o áudio pela assinatura binária real (nunca
+  pelo MIME declarado), transcreve via Groq (`SPEECH_TO_TEXT_API_KEY`) e
+  devolve só o texto; áudio nunca é guardado em disco nem associado a uma
+  conversa.
 
 ## 5. Páginas (estado real, não aspiracional)
 
@@ -126,7 +144,20 @@ poder ser reutilizado por Web, futuro Mobile, relatórios e (mais tarde) IA.
   agora em `AssistantProvider` (montado em `src/app/(app)/layout.tsx`, nunca
   desmontado ao navegar dentro da app) em vez de dentro da própria página,
   por isso sobrevive a trocar de página — continua 100% em memória, sem
-  persistência no servidor, perdida ao dar refresh ou sair para `/login`
+  persistência no servidor, perdida ao dar refresh ou sair para `/login`.
+  As respostas do Claude renderizam em Markdown (`AiMarkdown`,
+  `src/components/ai-markdown.tsx` — `react-markdown` sem `rehype-raw`, sem
+  `dangerouslySetInnerHTML`, `a`/`img` excluídos de propósito); o cartão de
+  confirmação de ações HIGH continua **texto literal** (nunca Markdown) —
+  `description`/categoria são texto livre vindo possivelmente de um
+  attachment ou de uma transcrição de voz, e interpretá-los como Markdown
+  permitia injetar um heading/lista real nessa superfície de segurança
+  (achado e corrigido nesta mesma passagem). O composer é uma textarea com
+  auto-resize (mínimo ~44px, máximo ~160px, scroll interno acima disso —
+  Enter envia, Shift+Enter insere linha nova) e tem um botão de microfone
+  (`useAudioRecorder`, Milestone 5c) que grava, transcreve
+  (`POST /api/ai/transcription`) e só coloca o texto no composer para
+  revisão — nunca envia automaticamente.
 
 **Ainda por construir** — nenhuma UI dedicada, mesmo com dados/motor prontos
 onde aplicável:
@@ -136,7 +167,7 @@ onde aplicável:
   falta o job/rota que a executa)
 - Onboarding
 - No Konta AI: memória persistente entre sessões, tool `get_categories`,
-  streaming de resposta, voz, notificações proativas — ver secção "Konta AI"
+  streaming de resposta, notificações proativas — ver secção "Konta AI"
   abaixo e `docs/architecture/OVERVIEW.md` para o detalhe de cada um
 
 ## 6. Bugs — os 5 da auditoria original + 1 encontrado em uso real
@@ -173,16 +204,24 @@ hoje, além do Financial Engine (`money`, `balance`, `cashflow`,
 `audit-regressions`), também `accounts`, `debts`, `goals`,
 `recurring-transactions`, `users`, `admin`, `feedback`, `client` (tratamento
 de erro da pool do Postgres), `pagination`, `rate-limit`, `api-error`, rotas
-de API (`transactions`, `transactions/[id]`, `health`, `ai/chat`), e todo o
-Konta AI (`gateway`, `context/builder`, `context/normalize`,
-`chat/orchestrator`, `chat/context-presentation`, `tools/registry`,
-`tools/permissions`, `tools/executor`, `tools/confirmation-store`,
-`tools/anthropic-adapter`, as 7 tools individuais, e `admin.ts`/`users.ts`
-para o toggle de acesso ao Konta AI) — 39 ficheiros `*.test.ts` no total,
-284 testes. Confirmado a passar de facto em 07/09/2026 (`npx vitest run`),
-junto com `npx tsc --noEmit`, `npx eslint .` e `npm run build`, os quatro
-sem erros — mas corre `npm test` para o número atual em vez de confiar num
-valor escrito neste documento, que fica desatualizado a cada novo teste.
+de API (`transactions`, `transactions/[id]`, `health`, `ai/chat`,
+`ai/transcription`), todo o Konta AI (`gateway`, `context/builder`,
+`context/normalize`, `chat/orchestrator`, `chat/context-presentation`,
+`tools/registry`, `tools/permissions`, `tools/executor`,
+`tools/confirmation-store`, `tools/anthropic-adapter`, as 7 tools
+individuais, `admin.ts`/`users.ts` para o toggle de acesso ao Konta AI), a
+transcrição de voz (`transcription/service`, `transcription/groq-provider`,
+`transcription/validate`), e — desde 11/09/2026 — dois ficheiros `*.test.tsx`
+(`ai-markdown`, `chat-panel`, ambos em jsdom via pragma
+`@vitest-environment`, o resto da suite continua em "node") que cobrem
+especificamente Markdown seguro nas respostas (sem `<script>`/`<img>`/`<a>`/
+HTML bruto) e o cartão de confirmação como texto literal (o mesmo payload de
+injeção do achado de segurança, fixado como teste de regressão) — **51
+ficheiros `*.test.ts`/`*.test.tsx` no total, 430 testes**. Confirmado a
+passar de facto em 11/09/2026 (`npx vitest run`), junto com
+`npx tsc --noEmit`, `npx eslint .` e `npm run build`, os quatro sem erros —
+mas corre `npm test` para o número atual em vez de confiar num valor escrito
+neste documento, que fica desatualizado a cada novo teste.
 
 ## 8. Onde a arquitetura ainda não é a "final"
 
@@ -198,25 +237,46 @@ valor escrito neste documento, que fica desatualizado a cada novo teste.
 - **Migração do protótipo** — só o mapeamento/desenho existe
   (`docs/architecture/MIGRATION.md`); o script executável de migração dos
   dados de `localStorage` ainda não foi escrito.
-- **IA (Konta AI)** — Milestones 1–4 implementados: AI Gateway
+- **IA (Konta AI)** — Milestones 1–5c implementados: AI Gateway
   (`src/lib/ai/gateway.ts`), Context Builder (`src/lib/ai/context/`), Tool
   Registry + Permission/Risk Layer + Executor + Confirmation Store
-  (`src/lib/ai/tools/`), e o orquestrador de chat + página `/assistant`
-  (`src/lib/ai/chat/`) — ver `docs/architecture/OVERVIEW.md`, secções "Konta
-  AI" e "Konta AI Chat", para o detalhe completo de cada peça e o que cada
-  uma ainda não faz (memória persistente, `get_categories`, streaming, mais
-  de uma ação a exigir confirmação no mesmo turno). `AiActionLog`
-  persistente (registo de auditoria de ações da IA) ainda não existe.
-  Requer `ANTHROPIC_API_KEY` (ver `.env.example`); `render.yaml` já declara
-  a variável para o deploy de produção. `create_transaction`/
-  `update_transaction` corrigidas (07/09/2026, bug de uso real) para
-  categorizar por **nome** em texto livre (`resolveCategoryByName`,
-  `src/lib/ai/tools/shared.ts` — reutiliza categoria existente do mesmo
-  `kind` ou cria uma nova) em vez do `categoryId` que nenhuma tool desta V1
-  alguma vez expõe ao modelo, o que fazia toda transação criada pela IA
-  ficar sempre sem categoria. Acesso ao Konta AI é agora opt-in por
-  utilizador (`User.aiEnabled`, `false` por omissão desde
-  `manual-sql/0006`), ativado apenas por um admin em `/admin`.
+  (`src/lib/ai/tools/`), o orquestrador de chat + página `/assistant`
+  (`src/lib/ai/chat/`), input multimodal (imagens/PDF/TXT/CSV, Milestone 5a),
+  propostas/confirmação agrupada de várias transações extraídas de um
+  attachment (`propose_transactions`, Milestone 5b), e voz (Milestone 5c —
+  gravação no browser, transcrição via Groq Whisper large-v3-turbo,
+  `src/lib/ai/transcription/`) — ver
+  `docs/architecture/OVERVIEW.md`, secções "Konta AI" e "Konta AI Chat", para
+  o detalhe completo de cada peça e o que cada uma ainda não faz (memória
+  persistente, `get_categories`, streaming). `AiActionLog` persistente
+  (registo de auditoria de ações da IA) ainda não existe. Requer
+  `ANTHROPIC_API_KEY` e `SPEECH_TO_TEXT_API_KEY` (ver `.env.example`);
+  `render.yaml` já declara as duas variáveis para o deploy de produção
+  (`sync: false` — têm de ser preenchidas manualmente no dashboard do
+  Render). `create_transaction`/`update_transaction` corrigidas (07/09/2026,
+  bug de uso real) para categorizar por **nome** em texto livre
+  (`resolveCategoryByName`, `src/lib/ai/tools/shared.ts` — reutiliza
+  categoria existente do mesmo `kind` ou cria uma nova) em vez do
+  `categoryId` que nenhuma tool desta V1 alguma vez expõe ao modelo, o que
+  fazia toda transação criada pela IA ficar sempre sem categoria. Acesso ao
+  Konta AI é agora opt-in por utilizador (`User.aiEnabled`, `false` por
+  omissão desde `manual-sql/0006`), ativado apenas por um admin em `/admin`.
+  **Apresentação (11/09/2026):** as respostas de texto livre do Claude
+  passaram a renderizar em Markdown (`AiMarkdown`) — mas o cartão de
+  confirmação (`pending.summary`, gerado deterministicamente por
+  `summarize()` de cada tool, nunca pelo Claude) foi deliberadamente mantido
+  como texto literal (`whitespace-pre-line`, sem parser nenhum): um teste
+  desta mesma passagem mostrou que renderizar esse cartão em Markdown
+  permitia a um `description`/categoria de texto livre (vindo de um
+  attachment ou de uma transcrição de voz) injetar um heading/lista real
+  numa superfície de segurança, via quebras de linha literais — corrigido
+  antes do commit, com teste de regressão dedicado
+  (`src/components/chat-panel.test.tsx`). Não é um bypass de autorização
+  (os botões Confirmar/Cancelar e os parâmetros reais guardados no
+  Confirmation Store nunca dependem do texto exibido), mas é a razão pela
+  qual esse cartão específico não segue a mesma renderização das restantes
+  respostas — decisão registada aqui para não ser "corrigida" outra vez sem
+  se saber porquê.
 
 ## 9. Como correr
 
@@ -227,8 +287,9 @@ migrações SQL em `prisma/manual-sql/` (por ordem numérica), `npm test`,
 
 ## 10. Próximo passo recomendado
 
-Konta AI já tem uma primeira experiência real (Milestone 4, chat + tools com
-confirmação) — deixou de ser o próximo passo em aberto. `docs/KONTA_BETA_GATE.md`
+Konta AI já tem uma primeira experiência real (Milestones 1–5c: chat +
+tools com confirmação, input multimodal, propostas/confirmação agrupada e
+voz) — deixou de ser o próximo passo em aberto. `docs/KONTA_BETA_GATE.md`
 (29/08/2026) classifica o projeto como **NOT BETA READY**, mas apenas por uma
 checklist de infraestrutura de produção (HTTPS/TLS real, `docker build`
 confirmado num ambiente com Docker Hub, cron de backup agendado, segredos de
