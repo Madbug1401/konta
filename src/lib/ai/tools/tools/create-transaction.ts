@@ -130,6 +130,14 @@ export const createTransactionTool: AiTool<CreateTransactionParams, AiToolTransa
   // passou em `accountName` (ver comentário no schema) — nunca inventado
   // aqui. A moeda também não é conhecida sem consultar a conta — por isso
   // nunca se inventa um símbolo de moeda.
+  // [Segurança — cartão de confirmação] Este texto é renderizado como texto
+  // LITERAL no cartão de confirmação (ver chat-panel.tsx) — nunca passa por
+  // um parser de Markdown. Por isso nunca uses `**`/`##`/`[]()` aqui: não
+  // teriam efeito nenhum (apareceriam como asteriscos/cardinais literais) e,
+  // mais importante, `params.description` é texto livre (pode vir de um
+  // attachment ou de uma transcrição de voz) — misturar sintaxe Markdown
+  // "de confiança" com texto livre no mesmo template é o que permitia
+  // description quebrar para fora das aspas e injetar estrutura no cartão.
   summarize: (params) => {
     const categoryPhrase = params.category && params.type !== "TRANSFER" ? ` na categoria "${params.category}"` : "";
     const accountPhrase = params.accountName ? ` em "${params.accountName}"` : "";
