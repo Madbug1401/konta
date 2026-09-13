@@ -32,6 +32,8 @@
 import { logError } from "@/lib/logger";
 import { AttachmentError } from "@/lib/ai/attachments";
 import { buildAiContext, type ContextMode } from "@/lib/ai/context";
+import { parseAiVisualization, parseAnalyticsViewAction, type AiVisualization, type AnalyticsViewAction } from "@/lib/analytics";
+import { renderAnalyticsContextForPrompt, type AnalyticsPageContext } from "./analytics-context";
 import {
   AiConfigError,
   AiProviderError,
@@ -115,9 +117,27 @@ interface PendingBlock {
   riskTier: RiskTier;
 }
 
+/**
+ * [Milestone Analytics — secção 24/25 do pedido] Sinais declarativos que uma
+ * tool LOW pode ter devolvido no seu resultado — nunca lidos como
+ * verdadeiros só porque vieram de uma tool nossa: revalidados aqui contra os
+ * mesmos schemas Zod que o frontend usa (`parseAnalyticsViewAction`/
+ * `parseAiVisualization`, src/lib/analytics/{view-action,visualization}.ts)
+ * antes de poderem sair deste ficheiro. Um resultado sem `uiAction`/
+ * `visualization`, ou com uma forma inválida, nunca produz nada aqui —
+ * `undefined`, nunca uma exceção (a conversa continua normalmente).
+ */
+function extractUiSignals(result: unknown): { uiAction?: AnalyticsViewAction; visualization?: AiVisualization } {
+  if (typeof result !== "object" || result === null) return {};
+  const record = result as Record<string, unknown>;
+  const uiAction = parseAnalyticsViewAction(record.uiAction) ?? undefined;
+  const visualization = parseAiVisualization(record.visualization) ?? undefined;
+  return { uiAction, visualization };
+}
+
 type BatchEvaluation =
-  | { kind: "resolved"; results: ChatToolResultBlock[] }
-  | { kind: "confirmation_required"; pending: PendingBlock[]; preResolvedResults: ChatToolResultBlock[] };
+  | { kind: "resolved"; results: ChatToolResultBlock[]; uiAction?: AnalyticsViewAction; visualization?: AiVisualization }
+  | { kind: "confirmation_required"; pending: PendingBlock[]; preResolvedResults: ChatToolResultBlock[]; uiAction?: AnalyticsViewAction };
 
 /**
  * [Milestone 5b] Avalia TODOS os tool_use de um turno — nunca para no
@@ -129,6 +149,8 @@ type BatchEvaluation =
 async function evaluateToolUseBlocks(userId: string, blocks: ChatToolUseBlock[]): Promise<BatchEvaluation> {
   const resolvedResults: ChatToolResultBlock[] = [];
   const pending: PendingBlock[] = [];
+  let uiAction: AnalyticsViewAction | undefined;
+  let visualization: AiVisualization | undefined;
 
   for (const block of blocks) {
     const evaluation = await executeTool(block.name, userId, block.input);
@@ -136,11 +158,18 @@ async function evaluateToolUseBlocks(userId: string, blocks: ChatToolUseBlock[])
       pending.push({ toolUseId: block.id, toolName: block.name, params: evaluation.params, summary: evaluation.summary, riskTier: evaluation.riskTier });
       continue;
     }
+    if (evaluation.status === "executed") {
+      const signals = extractUiSignals(evaluation.result);
+      // Último sinal do turno "ganha" — na prática nunca há mais do que um
+      // pedido de mudança de vista por mensagem do utilizador.
+      uiAction = signals.uiAction ?? uiAction;
+      visualization = signals.visualization ?? visualization;
+    }
     resolvedResults.push(toToolResultBlock(block.id, evaluation));
   }
 
-  if (pending.length === 0) return { kind: "resolved", results: resolvedResults };
-  return { kind: "confirmation_required", pending, preResolvedResults: resolvedResults };
+  if (pending.length === 0) return { kind: "resolved", results: resolvedResults, uiAction, visualization };
+  return { kind: "confirmation_required", pending, preResolvedResults: resolvedResults, uiAction };
 }
 
 /** Resume o texto de confirmação de um grupo — uma linha simples para 1 ação (igual ao comportamento anterior), lista numerada para várias. */
@@ -166,6 +195,13 @@ async function runLoop({ userId, system, messages, roundsUsed }: RunLoopParams):
   const tools = getAnthropicToolDefinitions();
   let rounds = roundsUsed;
   let currentMessages = messages;
+  // [Milestone Analytics] Sobrevive a várias rondas de tool-calling DENTRO do
+  // mesmo turno (ex: o Claude chama get_categories e depois set_analytics_view)
+  // — sempre anexado ao outcome final devolvido, seja "final" ou
+  // "confirmation_required" (ver secção 24 do pedido: a vista pode mudar
+  // mesmo que outra ação do mesmo turno fique pendente de confirmação).
+  let accumulatedUiAction: AnalyticsViewAction | undefined;
+  let accumulatedVisualization: AiVisualization | undefined;
 
   for (;;) {
     if (rounds >= MAX_TOOL_ROUNDS) {
@@ -193,13 +229,20 @@ async function runLoop({ userId, system, messages, roundsUsed }: RunLoopParams):
         .map((b) => b.text)
         .join("\n")
         .trim();
-      return { type: "final", reply: text.length > 0 ? text : "Não tenho uma resposta para isso agora." };
+      return {
+        type: "final",
+        reply: text.length > 0 ? text : "Não tenho uma resposta para isso agora.",
+        uiAction: accumulatedUiAction,
+        visualization: accumulatedVisualization,
+      };
     }
 
     rounds += 1;
     const nextMessages: ChatMessage[] = [...currentMessages, { role: "assistant", content: turn.content }];
 
     const evaluation = await evaluateToolUseBlocks(userId, toolUseBlocks);
+    accumulatedUiAction = evaluation.uiAction ?? accumulatedUiAction;
+    if (evaluation.kind === "resolved") accumulatedVisualization = evaluation.visualization ?? accumulatedVisualization;
 
     if (evaluation.kind === "confirmation_required") {
       const toolCalls: PendingToolCall[] = evaluation.pending.map((p) => ({
@@ -221,6 +264,7 @@ async function runLoop({ userId, system, messages, roundsUsed }: RunLoopParams):
         confirmationToken: confirmation.token,
         summary,
         riskTier: highestRiskTier(evaluation.pending),
+        uiAction: accumulatedUiAction,
       };
     }
 
@@ -234,6 +278,8 @@ export interface SendMessageInput {
   /** [Milestone 5a — Multimodal] Ids já resolvidos por POST /api/ai/attachments — nunca bytes/attachments em bruto neste input. */
   attachmentIds?: string[];
   history?: ChatHistoryTurn[];
+  /** [Milestone Analytics — "Ask Konta"] Só presente quando a mensagem parte da página de Análises — ver analytics-context.ts. Nunca dados financeiros, só rótulos já formatados. */
+  analyticsContext?: AnalyticsPageContext;
 }
 
 /**
@@ -266,6 +312,9 @@ export async function sendMessage(input: SendMessageInput): Promise<NonCancelled
   } catch (error) {
     logError("ai.chat.context", error, { userId: input.userId });
     return { type: "error", message: "Não foi possível carregar os teus dados financeiros agora. Tenta novamente." };
+  }
+  if (input.analyticsContext) {
+    system = `${system}\n\n${renderAnalyticsContextForPrompt(input.analyticsContext)}`;
   }
 
   let content: string | ChatUserBlock[];

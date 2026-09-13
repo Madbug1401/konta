@@ -16,6 +16,7 @@
 import { FileText, Image as ImageIcon, Loader2, Mic, Paperclip, Send, Sparkles, Square, X } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from "react";
 import { AiMarkdown } from "@/components/ai-markdown";
+import { AiVisualizationView } from "@/components/ai-visualization";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -180,6 +181,10 @@ export function ChatPanel() {
                 </div>
               )}
               {turn.content && (turn.role === "assistant" ? <AiMarkdown text={turn.content} /> : <span>{turn.content}</span>)}
+              {/* [Milestone Analytics] Visualização declarativa opcional — já
+                  validada em assistant-provider.tsx antes de chegar aqui;
+                  nunca HTML/JS vindo da IA (ver ai-visualization.tsx). */}
+              {turn.visualization && <AiVisualizationView visualization={turn.visualization} />}
             </div>
           ))
         )}

@@ -241,6 +241,123 @@ que a rota HTTP equivalente já chamava.
 - **Sem alterações ao Context Builder** — as novas tools são descobertas por chamada explícita (`get_categories`/`get_recurring_transactions`/`get_investments`), nunca despejadas no `light context` por omissão, para não aumentar o custo por mensagem.
 - **Gap conhecido, documentado, não escondido**: não existe cálculo de "quanto preciso guardar por mês" para uma meta no Financial Engine — só projeção de data de conclusão ao ritmo atual (`calculateGoalProjection`). O Konta AI nunca inventa esse número; se perguntado, responde com o que existe (progresso, projeção) e diz que não tem essa métrica.
 
+## Konta Analytics — compreensão financeira profunda (`src/lib/analytics`, `/analytics`, Milestone Analytics)
+
+Objetivo: transformar o Konta de "aplicação que mostra dinheiro" em
+"aplicação que ajuda a compreender o comportamento financeiro" — sem criar
+uma segunda autoridade financeira. Arquitetura de camadas, sempre na mesma
+direção:
+
+```
+DATABASE → FINANCIAL ENGINE → ANALYTICS → AI TOOLS → CLAUDE → USER
+                                   ↕
+                            PÁGINA /analytics
+```
+
+A página `/analytics` e a Konta AI consomem exatamente a mesma camada
+(`src/lib/analytics/*.ts`, funções puras) — nunca duas implementações da
+lógica financeira. Nenhum ficheiro faz I/O exceto `dataset.ts`
+(`collectAnalyticsDataset(userId)`, ownership-scoped, reutiliza
+`listAccounts`/`listAllTransactionsForBalances`/`listCategories`/`listDebts`/
+`listGoals`/`listRecurringTransactions`/investimentos — já existentes, nunca
+uma query nova). Todos os outros ficheiros (`overview`, `cashflow`,
+`categories`, `debts`, `goals`, `recurring`, `investments`, `trends`,
+`insights`, `simulations`, `periods`, `compare`, `filters`) recebem esse
+dataset já carregado e só calculam, reutilizando sempre
+`getIncomeTotal`/`getExpenseTotal`/`getCashflow`/`getCategoryBreakdown`/
+`getAccountBalance`/`getDebtRemaining`/`getGoalProgress`/
+`calculateGoalProjection`/`computeInvestmentPerformance` do Financial
+Engine — nenhuma fórmula financeira nova nesta camada.
+
+**Períodos** (`periods.ts`): 7 presets (`this_month`/`last_month`/
+`last_30d`/`last_90d`/`this_year`/`last_year`/`last_12_months`) + `custom`
+(validado — nunca aceita `from`/`to` vazios ou mal formados, achado de
+auditoria corrigido antes do commit). Comparação (`previous_period`/
+`previous_year`/`none`) é "inteligente": um mês de calendário completo
+compara sempre com o mês de calendário anterior inteiro (ex: Setembro vs
+Agosto, o exemplo do pedido), nunca "mesma duração em dias" quando isso
+daria um intervalo que não é o mês anterior; um intervalo arbitrário
+(últimos 30/90 dias) usa mesma duração, imediatamente antes. Nunca uma
+percentagem de variação quando o período anterior é zero — só a direção.
+
+**Simulações** (`simulations.ts`) — `reduce_category`/`adjust_expenses`/
+`increase_goal_contribution` — são puramente analíticas: nunca escrevem na
+base de dados, devolvem sempre REAL e SIMULADO lado a lado. Servidas por
+`POST /api/analytics/simulate` (formulário "E se…?" na página) e pela tool
+`run_financial_simulation` (Konta AI) — a mesma função por baixo.
+
+**10 tools novas** (Registry passa de 27 para 38, todas `LOW`,
+READ-ONLY): `get_analytics_overview`, `get_cashflow_analysis`,
+`get_category_analysis` (tabela ou drill-down de uma categoria, resolvida
+por nome via `resolveCategoryName` — exact match → partial match único →
+ambíguo pede esclarecimento, nunca escolhe sozinho), `get_debt_analysis`,
+`get_goal_analysis`, `get_recurring_analysis`, `get_investment_analysis`
+(nunca sugere compra/venda — o Konta não suporta isso), `get_financial_trends`,
+`get_financial_insights` (insights sempre determinísticos, nunca gerados
+pelo Claude — `insights.ts` decide o quê e quando, com limiares explícitos,
+ex: 15% de variação de categoria), `run_financial_simulation`. Note:
+`get_debt_analysis`/`get_goal_analysis` são analíticos (agregados por
+período) — não confundir com `get_debts`/`get_goals` (Milestone 6), que
+devolvem ids para uma escrita subsequente.
+
+**`set_analytics_view` (LOW) — a Konta AI muda a página, nunca a manipula
+diretamente** (secção 25 do pedido): resolve nome de categoria/conta em
+texto livre contra dados reais (nunca aceita um id do modelo) e devolve um
+`AnalyticsViewAction` — um objeto simples, validado por
+`AnalyticsViewActionSchema` (Zod, `.strict()`, isomórfico:
+`src/lib/analytics/view-action.ts`) em DOIS sítios independentes: dentro da
+própria tool (servidor) e outra vez no cliente
+(`assistant-provider.tsx::applyOutcome`, antes de expor
+`pendingUiAction`) — nunca confiado só por "vir do servidor". A aplicação
+(`AnalyticsUiActionBridge`, client component sem saída visual) é quem
+decide aplicar, sempre por `router.push` com query params — nunca `eval`,
+`innerHTML`, `localStorage` direto, ou qualquer execução de código vinda da
+IA.
+
+**Visualizações declarativas** (`visualization.ts`, `AiVisualizationSchema`)
+— `metric`/`comparison`/`table`/`line`/`bar`/`area`/`donut`, também
+`.strict()`, tamanho limitado (máx. 60 pontos/50 linhas), valores numéricos
+sempre finitos. `get_analytics_overview`/`get_cashflow_analysis`/
+`get_category_analysis` anexam uma visualização ao seu resultado; o
+orquestrador extrai-a (`orchestrator.ts::extractUiSignals`, revalidando
+sempre contra o schema) e o `ChatPanel` desenha-a via `<AiVisualizationView>`
+(`src/components/ai-visualization.tsx`, Recharts) — a IA nunca gera
+HTML/SVG/JS, só a estrutura de dados; o componente decide sempre como
+desenhar.
+
+**Contexto "Ask Konta"** (`chat/analytics-context.ts`) — quando uma
+mensagem parte do campo "Pergunte à Konta" da própria página de Análises,
+um pequeno DTO (`AnalyticsPageContext`: período/comparação/vista/filtro já
+formatados, nunca ids nem dados financeiros em bruto) é anexado ao system
+prompt dessa chamada — o utilizador nunca repete o período/filtro já
+visível no ecrã. Nunca substitui a obrigação da Konta AI de chamar uma tool
+de analytics para números reais.
+
+**Página `/analytics`** — Server Component, filtros geridos por query
+string (`?period=last_30d&comparison=previous_year&categoryId=...`,
+partilhável/marcável, funciona sem JavaScript, mesmo padrão de
+`/transactions`), com: resumo executivo, fluxo de caixa (gráfico +
+comparação), categorias (tabela + drill-down por clique, "Voltar à visão
+geral"), maiores despesas, dívidas, metas, recorrências, investimentos (só
+quando existem), tendências (6 meses, direção crescente/decrescente/
+estável — nunca causalidade inventada), insights da Konta AI, e o painel
+"E se…?". `AnalyticsUiActionBridge` liga a conversa à URL da página.
+
+**Segurança** — ownership sempre via `collectAnalyticsDataset(userId)`
+(userId da sessão, nunca de parâmetros); todos os schemas `.strict()`
+(campo desconhecido nunca passa); `run_financial_simulation` e
+`set_analytics_view` nunca chamam nenhuma função de escrita (verificado por
+teste, incluindo uma leitura do próprio ficheiro-fonte); nenhuma tool desta
+área é `HIGH`/`CRITICAL` (não têm efeito financeiro real); Permission
+Layer, Confirmation Store e Financial Engine não foram alterados.
+
+**Gap conhecido, documentado, não escondido**: sem tablet/mobile como
+layouts visualmente distintos do desktop (usa os mesmos breakpoints
+Tailwind responsivos já usados no resto do Konta, mesma decisão de
+arquitetura da secção "Estratégia responsive" abaixo); sem sugestões
+proativas em botões ("Quer que eu compare...? [Sim] [Não]") — deferido,
+documentado no relatório do milestone.
+
 ## Design System (`src/components/ui` + componentes de domínio)
 
 Implementados nesta fase: `Button`, `Card`, `Input`, `Badge`, `EmptyState`,

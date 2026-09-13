@@ -101,6 +101,86 @@ describe("sendMessage", () => {
     expect(lastMessage).toEqual({ role: "user", content: [{ type: "tool_result", toolUseId: "toolu_1", content: JSON.stringify({ accounts: [] }), isError: undefined }] });
   });
 
+  it("Milestone Analytics — set_analytics_view (LOW): o uiAction válido do resultado é extraído e anexado ao outcome final", async () => {
+    setDefaults();
+    sendChatTurnMock
+      .mockResolvedValueOnce({
+        stopReason: "tool_use",
+        content: [{ type: "tool_use", id: "toolu_1", name: "set_analytics_view", input: { periodPreset: "last_30d" } }],
+      })
+      .mockResolvedValueOnce({ stopReason: "end_turn", content: [{ type: "text", text: "Feito." }] });
+    executeToolMock.mockResolvedValue({
+      status: "executed",
+      toolName: "set_analytics_view",
+      riskTier: "LOW",
+      result: { uiAction: { period: { preset: "last_30d" } } },
+    });
+    const { sendMessage } = await import("./orchestrator");
+
+    const result = await sendMessage({ userId: "user-1", message: "Mostra os últimos 30 dias" });
+
+    expect(result).toEqual({ type: "final", reply: "Feito.", uiAction: { period: { preset: "last_30d" } } });
+  });
+
+  it("Milestone Analytics — um uiAction INVÁLIDO no resultado de uma tool nunca é propagado (revalidado contra o schema, nunca confiado cegamente)", async () => {
+    setDefaults();
+    sendChatTurnMock
+      .mockResolvedValueOnce({
+        stopReason: "tool_use",
+        content: [{ type: "tool_use", id: "toolu_1", name: "set_analytics_view", input: {} }],
+      })
+      .mockResolvedValueOnce({ stopReason: "end_turn", content: [{ type: "text", text: "Ok." }] });
+    // Forma inválida (campo desconhecido) — nunca deveria acontecer na prática
+    // (a própria tool já valida), mas o orquestrador defende-se mesmo assim.
+    executeToolMock.mockResolvedValue({ status: "executed", toolName: "set_analytics_view", riskTier: "LOW", result: { uiAction: { hackField: true } } });
+    const { sendMessage } = await import("./orchestrator");
+
+    const result = await sendMessage({ userId: "user-1", message: "x" });
+
+    expect(result).toEqual({ type: "final", reply: "Ok." });
+    expect((result as { uiAction?: unknown }).uiAction).toBeUndefined();
+  });
+
+  it("Milestone Analytics — uma visualização válida (ex: get_cashflow_analysis) é extraída e anexada ao outcome final", async () => {
+    setDefaults();
+    const visualization = { type: "bar", title: "Cash flow", data: [{ label: "Set", value: 100 }] };
+    sendChatTurnMock
+      .mockResolvedValueOnce({
+        stopReason: "tool_use",
+        content: [{ type: "tool_use", id: "toolu_1", name: "get_cashflow_analysis", input: {} }],
+      })
+      .mockResolvedValueOnce({ stopReason: "end_turn", content: [{ type: "text", text: "Aqui está." }] });
+    executeToolMock.mockResolvedValue({ status: "executed", toolName: "get_cashflow_analysis", riskTier: "LOW", result: { buckets: [], visualization } });
+    const { sendMessage } = await import("./orchestrator");
+
+    const result = await sendMessage({ userId: "user-1", message: "Mostra o cash flow" });
+
+    expect(result).toEqual({ type: "final", reply: "Aqui está.", visualization });
+  });
+
+  it("Milestone Analytics — um uiAction de set_analytics_view sobrevive mesmo quando o MESMO turno também pausa noutra tool HIGH para confirmação", async () => {
+    setDefaults();
+    sendChatTurnMock.mockResolvedValueOnce({
+      stopReason: "tool_use",
+      content: [
+        { type: "tool_use", id: "toolu_view", name: "set_analytics_view", input: { periodPreset: "last_90d" } },
+        { type: "tool_use", id: "toolu_write", name: "create_transaction", input: { amountMinor: 500 } },
+      ],
+    });
+    executeToolMock.mockImplementation(async (name: string) => {
+      if (name === "set_analytics_view") {
+        return { status: "executed", toolName: name, riskTier: "LOW", result: { uiAction: { period: { preset: "last_90d" } } } };
+      }
+      return { status: "confirmation_required", toolName: name, riskTier: "HIGH", summary: "Registar uma despesa de 500.", params: {} };
+    });
+    createConfirmationMock.mockReturnValue({ token: "tok_1" });
+    const { sendMessage } = await import("./orchestrator");
+
+    const result = await sendMessage({ userId: "user-1", message: "Mostra os últimos 90 dias e regista uma despesa de 500" });
+
+    expect(result).toMatchObject({ type: "confirmation_required", uiAction: { period: { preset: "last_90d" } } });
+  });
+
   it("HIGH: pausa e devolve confirmation_required com um token, sem chamar o Claude outra vez", async () => {
     setDefaults();
     sendChatTurnMock.mockResolvedValueOnce({

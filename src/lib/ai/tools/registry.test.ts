@@ -31,6 +31,20 @@ const EXPECTED_TOOL_RISK: Record<string, "LOW" | "HIGH"> = {
   create_investment_detail: "HIGH",
   update_investment_detail: "HIGH",
   add_investment_valuation: "HIGH",
+  // Milestone Analytics — cobertura de análise financeira (ver
+  // docs/architecture/OVERVIEW.md, secção "Konta Analytics"). Todas LOW,
+  // READ-ONLY: nunca escrevem, nunca exigem confirmação.
+  get_analytics_overview: "LOW",
+  get_cashflow_analysis: "LOW",
+  get_category_analysis: "LOW",
+  get_debt_analysis: "LOW",
+  get_goal_analysis: "LOW",
+  get_recurring_analysis: "LOW",
+  get_investment_analysis: "LOW",
+  get_financial_trends: "LOW",
+  get_financial_insights: "LOW",
+  run_financial_simulation: "LOW",
+  set_analytics_view: "LOW",
 };
 const EXPECTED_TOOL_NAMES = Object.keys(EXPECTED_TOOL_RISK);
 

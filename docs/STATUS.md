@@ -1,4 +1,4 @@
-# Konta — Estado atual do projeto (atualizado 11/09/2026)
+# Konta — Estado atual do projeto (atualizado 13/09/2026)
 
 Este documento é um retrato honesto do que existe hoje no repositório, com
 referências a ficheiros reais — não uma descrição de intenções. Escrito
@@ -26,7 +26,17 @@ Milestone 6 — cobertura completa: o Konta AI passou de 8 para 27 tools,
 ganhando escrita/leitura de contas, dívidas, metas, recorrências e
 investimentos (antes só transações) — ver `git log` para o histórico exato
 e `docs/architecture/OVERVIEW.md`, secção "Konta AI — Cobertura Completa",
-para a matriz completa de capacidades e as decisões de arquitetura.
+para a matriz completa de capacidades e as decisões de arquitetura. As
+secções 1, 4, 5, 7 e 8 foram atualizadas de novo em 13/09/2026 para o
+Milestone Analytics: uma nova página `/analytics` (resumo, fluxo de caixa,
+categorias com drill-down, dívidas, metas, recorrências, investimentos,
+tendências, insights, simulações "E se…?") sobre uma nova camada
+`src/lib/analytics/`, e mais 10 tools LOW/read-only para a Konta AI
+consultar exatamente a mesma camada — incluindo a capacidade nova da IA
+sugerir mudanças à própria página (`set_analytics_view`, sempre validado,
+nunca execução de código) e devolver gráficos declarativos (nunca
+HTML/SVG/JS) — ver `docs/architecture/OVERVIEW.md`, secção "Konta
+Analytics", para o desenho completo.
 
 ## 1. O que é o Konta hoje
 
@@ -42,7 +52,12 @@ financeiros do utilizador e propor ações. Desde o Milestone 6, essas ações
 cobrem praticamente tudo o que a UI já permite — contas, transações,
 dívidas, metas, recorrências e investimentos, criar/editar e não só
 consultar — sempre com confirmação explícita para qualquer escrita, sempre
-pela mesma pilha (Financial Engine, Permission Layer, Confirmation Store)
+pela mesma pilha (Financial Engine, Permission Layer, Confirmation Store).
+Desde o Milestone Analytics, o Konta também tem uma página `/analytics` de
+análise financeira profunda (tendências, insights, simulações), e a Konta
+AI consulta essa MESMA camada de análise — pode explicar porque as
+despesas mudaram, comparar períodos, e até sugerir mudanças à própria
+página (nunca inventa números; nunca executa código)
 que a interface manual já usava, nunca uma segunda lógica financeira. Desde
 o Milestone 5c, o utilizador também pode falar em vez de escrever (gravação
 por microfone, transcrita via Groq Whisper e colocada no composer para
@@ -121,6 +136,10 @@ poder ser reutilizado por Web, futuro Mobile, relatórios e (mais tarde) IA.
   pelo MIME declarado), transcreve via Groq (`SPEECH_TO_TEXT_API_KEY`) e
   devolve só o texto; áudio nunca é guardado em disco nem associado a uma
   conversa.
+- `POST /api/analytics/simulate` (Milestone Analytics) — sessão +
+  `isAiEnabled` + rate limit próprio, corre `runFinancialSimulation`
+  (nunca escreve nada) para o painel "E se…?" da página `/analytics`; a
+  mesma função é usada pela tool `run_financial_simulation` da Konta AI.
 
 ## 5. Páginas (estado real, não aspiracional)
 
@@ -169,6 +188,18 @@ poder ser reutilizado por Web, futuro Mobile, relatórios e (mais tarde) IA.
   (`useAudioRecorder`, Milestone 5c) que grava, transcreve
   (`POST /api/ai/transcription`) e só coloca o texto no composer para
   revisão — nunca envia automaticamente.
+- `/analytics` (Milestone Analytics) — resumo executivo, fluxo de caixa
+  (gráfico), categorias (tabela + drill-down por clique, "Voltar à visão
+  geral"), maiores despesas, dívidas, metas, recorrências, investimentos
+  (só quando existem), tendências (6 meses) e insights, tudo filtrável por
+  período/comparação via query string (`?period=last_30d&comparison=...`,
+  funciona sem JavaScript, mesmo padrão de `/transactions`); um painel
+  "E se…?" simula (nunca executa) reduzir uma categoria de despesa; um
+  campo "Pergunte à Konta" envia a pergunta pelo mesmo `AssistantProvider`
+  de sempre, com o período/filtro já visível anexado ao contexto — a Konta
+  AI pode responder e até sugerir mudar o período/categoria da própria
+  página (`set_analytics_view`, aplicado por navegação normal, nunca
+  execução de código).
 
 **Ainda por construir** — nenhuma UI dedicada, mesmo com dados/motor prontos
 onde aplicável:
@@ -233,9 +264,19 @@ recorrências, investimentos) — cada uma com teste próprio de schema,
 ownership e execução — e um teste de integração
 (`tools/m6-integration.test.ts`) que confirma, através do Executor real
 (não mockado), que todas as tools de escrita novas continuam a exigir
-confirmação antes de tocar a base de dados — **71 ficheiros
-`*.test.ts`/`*.test.tsx` no total, 533 testes**. Confirmado a passar de
-facto em 11/09/2026 (`npx vitest run`), junto com `npx tsc --noEmit`,
+confirmação antes de tocar a base de dados. Desde o Milestone Analytics,
+cobre também toda a camada `src/lib/analytics/` (períodos — incluindo o
+achado de auditoria "período personalizado vazio nunca deve passar em
+silêncio", comparação, cashflow, categorias, dívidas, metas, recorrências,
+investimentos, tendências, insights, simulações), as 10 tools de analytics
+novas, o schema de `AnalyticsViewAction`/`AiVisualization` (rejeita
+qualquer campo desconhecido, qualquer tipo de visualização fora da lista
+fechada, payloads gigantes, valores não-finitos), a extração de sinais no
+orquestrador (`uiAction`/`visualization`, sempre revalidados, nunca
+propagados se inválidos), o `AssistantProvider` (revalida outra vez no
+cliente) e o componente `<AiVisualizationView>` — **90 ficheiros
+`*.test.ts`/`*.test.tsx` no total, 727 testes**. Confirmado a passar de
+facto em 13/09/2026 (`npx vitest run`), junto com `npx tsc --noEmit`,
 `npx eslint .` e `npm run build`, os quatro sem erros — mas corre
 `npm test` para o número atual em vez de confiar num valor escrito neste
 documento, que fica desatualizado a cada novo teste.
@@ -254,7 +295,7 @@ documento, que fica desatualizado a cada novo teste.
 - **Migração do protótipo** — só o mapeamento/desenho existe
   (`docs/architecture/MIGRATION.md`); o script executável de migração dos
   dados de `localStorage` ainda não foi escrito.
-- **IA (Konta AI)** — Milestones 1–6 implementados: AI Gateway
+- **IA (Konta AI)** — Milestones 1–6 e Analytics implementados: AI Gateway
   (`src/lib/ai/gateway.ts`), Context Builder (`src/lib/ai/context/`), Tool
   Registry + Permission/Risk Layer + Executor + Confirmation Store
   (`src/lib/ai/tools/`), o orquestrador de chat + página `/assistant`
@@ -266,7 +307,15 @@ documento, que fica desatualizado a cada novo teste.
   entidades financeiras — contas, dívidas, metas, recorrências, investimentos
   (Milestone 6, 19 tools novas, Registry passa de 8 para 27 — ver
   `docs/architecture/OVERVIEW.md`, secção "Konta AI — Cobertura Completa",
-  para a matriz e as decisões de arquitetura) — ver
+  para a matriz e as decisões de arquitetura), e uma camada de análise
+  financeira profunda (`src/lib/analytics/`, página `/analytics`, mais 10
+  tools LOW/read-only — Registry passa de 27 para 38 — incluindo
+  `set_analytics_view`, que deixa a Konta AI sugerir mudanças de
+  período/filtro à própria página através de uma ação declarativa validada
+  em dois sítios, nunca execução de código, e visualizações declarativas
+  (`AiVisualizationSchema`) desenhadas por um componente próprio, nunca
+  HTML/JS gerado pela IA — ver `docs/architecture/OVERVIEW.md`, secção
+  "Konta Analytics", para o desenho completo) — ver
   `docs/architecture/OVERVIEW.md`, secções "Konta AI" e "Konta AI Chat", para
   o detalhe completo de cada peça e o que cada uma ainda não faz (memória
   persistente, streaming). `AiActionLog` persistente
@@ -308,10 +357,11 @@ migrações SQL em `prisma/manual-sql/` (por ordem numérica), `npm test`,
 
 ## 10. Próximo passo recomendado
 
-Konta AI já tem uma primeira experiência real (Milestones 1–6: chat + tools
-com confirmação, input multimodal, propostas/confirmação agrupada, voz, e
-cobertura completa de contas/dívidas/metas/recorrências/investimentos) —
-deixou de ser o próximo passo em aberto. `docs/KONTA_BETA_GATE.md`
+Konta AI já tem uma primeira experiência real (Milestones 1–6 + Analytics:
+chat + tools com confirmação, input multimodal, propostas/confirmação
+agrupada, voz, cobertura completa de contas/dívidas/metas/recorrências/
+investimentos, e uma camada de análise financeira profunda com página
+dedicada) — deixou de ser o próximo passo em aberto. `docs/KONTA_BETA_GATE.md`
 (29/08/2026) classifica o projeto como **NOT BETA READY**, mas apenas por uma
 checklist de infraestrutura de produção (HTTPS/TLS real, `docker build`
 confirmado num ambiente com Docker Hub, cron de backup agendado, segredos de

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withErrorHandling } from "@/lib/api-error";
 import { MAX_ATTACHMENTS_PER_MESSAGE } from "@/lib/ai/attachments";
+import { AnalyticsPageContextSchema } from "@/lib/ai/chat/analytics-context";
 import { AiConfigError, AiProviderError } from "@/lib/ai/gateway";
 import { cancelPendingAction, confirmPendingAction, sendMessage } from "@/lib/ai/chat";
 import { getSessionUser } from "@/lib/auth/session";
@@ -33,6 +34,11 @@ const SendMessageSchema = z.object({
     .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().trim().min(1).max(4000) }))
     .max(20)
     .optional(),
+  // [Milestone Analytics — "Ask Konta"] Só presente quando a mensagem parte
+  // da página de Análises — DTO explícito e pequeno (nunca dados
+  // financeiros, só rótulos já formatados), ver
+  // src/lib/ai/chat/analytics-context.ts.
+  analyticsContext: AnalyticsPageContextSchema.optional(),
 });
 const ConfirmActionSchema = z.object({ action: z.literal("confirm"), confirmationToken: z.string().min(1).max(200) });
 const CancelActionSchema = z.object({ action: z.literal("cancel"), confirmationToken: z.string().min(1).max(200) });
@@ -101,10 +107,11 @@ export const POST = withErrorHandling("api.ai.chat.post", async (request: Reques
             message: parsed.data.message,
             attachmentIds: parsed.data.attachmentIds,
             history: parsed.data.history,
+            analyticsContext: parsed.data.analyticsContext,
           });
 
     if (outcome.type === "final") {
-      return NextResponse.json({ status: "final", reply: outcome.reply });
+      return NextResponse.json({ status: "final", reply: outcome.reply, uiAction: outcome.uiAction, visualization: outcome.visualization });
     }
     if (outcome.type === "confirmation_required") {
       return NextResponse.json({
@@ -112,6 +119,7 @@ export const POST = withErrorHandling("api.ai.chat.post", async (request: Reques
         confirmationToken: outcome.confirmationToken,
         summary: outcome.summary,
         riskTier: outcome.riskTier,
+        uiAction: outcome.uiAction,
       });
     }
     // outcome.type === "error" — nunca chega aqui a partir de "cancel" (tratado acima).

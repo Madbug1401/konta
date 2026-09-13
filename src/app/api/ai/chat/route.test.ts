@@ -319,6 +319,84 @@ describe("POST /api/ai/chat", () => {
     });
   });
 
+  describe("Milestone Analytics — analyticsContext / uiAction / visualization", () => {
+    it("analyticsContext válido é repassado a sendMessage", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      sendMessageMock.mockResolvedValue({ type: "final", reply: "ok" });
+      const { POST } = await import("./route");
+
+      const analyticsContext = { periodLabel: "Setembro de 2026", comparisonLabel: null, view: "overview" };
+      await POST(postRequest({ action: "message", message: "Como estão as minhas finanças?", analyticsContext }));
+
+      expect(sendMessageMock).toHaveBeenCalledWith(expect.objectContaining({ analyticsContext }));
+    });
+
+    it("um analyticsContext com 'view' fora da lista fechada é rejeitado com 400 — nunca chega a sendMessage", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      const { POST } = await import("./route");
+
+      const response = await POST(
+        postRequest({ action: "message", message: "x", analyticsContext: { periodLabel: "x", comparisonLabel: null, view: "admin-panel" } }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(sendMessageMock).not.toHaveBeenCalled();
+    });
+
+    it("um campo desconhecido em analyticsContext é rejeitado (.strict()) — nunca aceita dados extra", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      const { POST } = await import("./route");
+
+      const response = await POST(
+        postRequest({
+          action: "message",
+          message: "x",
+          analyticsContext: { periodLabel: "x", comparisonLabel: null, view: "overview", script: "alert(1)" },
+        }),
+      );
+
+      expect(response.status).toBe(400);
+    });
+
+    it("uiAction/visualization do outcome 'final' aparecem na resposta JSON", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      const uiAction = { period: { preset: "last_30d" } };
+      const visualization = { type: "metric", title: "Despesas", value: "5000 CVE" };
+      sendMessageMock.mockResolvedValue({ type: "final", reply: "ok", uiAction, visualization });
+      const { POST } = await import("./route");
+
+      const response = await POST(postRequest({ action: "message", message: "x" }));
+      const body = await response.json();
+
+      expect(body.uiAction).toEqual(uiAction);
+      expect(body.visualization).toEqual(visualization);
+    });
+
+    it("sem uiAction/visualization no outcome: a resposta JSON não inclui esses campos (nunca 'null' onde deveria ser ausente)", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      sendMessageMock.mockResolvedValue({ type: "final", reply: "ok" });
+      const { POST } = await import("./route");
+
+      const response = await POST(postRequest({ action: "message", message: "x" }));
+      const body = await response.json();
+
+      expect("uiAction" in body).toBe(false);
+      expect("visualization" in body).toBe(false);
+    });
+
+    it("uiAction do outcome 'confirmation_required' também aparece na resposta", async () => {
+      getSessionUserMock.mockResolvedValue(SESSION);
+      const uiAction = { view: "categories" };
+      sendMessageMock.mockResolvedValue({ type: "confirmation_required", confirmationToken: "tok", summary: "Registar...", riskTier: "HIGH", uiAction });
+      const { POST } = await import("./route");
+
+      const response = await POST(postRequest({ action: "message", message: "x" }));
+      const body = await response.json();
+
+      expect(body.uiAction).toEqual(uiAction);
+    });
+  });
+
   describe("privacidade dos erros", () => {
     it("nunca regista/expõe o texto da mensagem do utilizador numa resposta de erro", async () => {
       getSessionUserMock.mockResolvedValue(SESSION);

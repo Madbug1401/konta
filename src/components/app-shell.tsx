@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, List, Wallet, Landmark, Target, Repeat, Plus, LogOut, HelpCircle, BarChart3, Sparkles } from "lucide-react";
+import { LayoutDashboard, List, Wallet, Landmark, Target, Repeat, Plus, LogOut, HelpCircle, BarChart3, Sparkles, PieChart } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -28,6 +28,12 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Resumo", icon: LayoutDashboard },
   { href: "/assistant", label: "Konta AI", icon: Sparkles },
+  // [Milestone Analytics] Logo a seguir ao Konta AI — as duas experiências
+  // trabalham sobre a mesma camada de analytics (ver
+  // docs/architecture/OVERVIEW.md, secção "Konta Analytics"), por isso
+  // ficam lado a lado na navegação, não escondidas atrás de "Ajuda"/
+  // "Estatísticas" (essas são utilitárias, ver comentário mais abaixo).
+  { href: "/analytics", label: "Análises", icon: PieChart },
   { href: "/transactions", label: "Transações", icon: List },
   { href: "/accounts", label: "Contas", icon: Wallet },
   { href: "/debts", label: "Dívidas", icon: Landmark },

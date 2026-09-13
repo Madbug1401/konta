@@ -29,6 +29,14 @@
 import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import { useToast } from "@/components/toast-provider";
 import type { AiAttachmentKind } from "@/lib/ai/attachments";
+// [Isolamento cliente/servidor — Milestone Analytics] Importa diretamente de
+// `analytics/view-action`/`analytics/visualization` (só zod/tipos puros) —
+// NUNCA do barrel `@/lib/analytics`, que também reexporta `dataset.ts`
+// (I/O real via `@/lib/db/*`, que usa `pg`) — mesmo cuidado já aplicado a
+// `use-audio-recorder.ts` para a Attachment Store.
+import { parseAnalyticsViewAction, type AnalyticsViewAction } from "@/lib/analytics/view-action";
+import { parseAiVisualization, type AiVisualization } from "@/lib/analytics/visualization";
+import type { AnalyticsPageContext } from "@/lib/ai/chat/analytics-context";
 
 export interface ChatTurn {
   role: "user" | "assistant";
@@ -36,6 +44,11 @@ export interface ChatTurn {
   // [Milestone 5a — Multimodal] Só para exibição — nunca reenviado ao
   // servidor (o histórico continua só texto, ver postChat abaixo).
   attachments?: { filename: string; kind: AiAttachmentKind }[];
+  // [Milestone Analytics] Visualização declarativa opcional anexada a uma
+  // resposta do assistente — já revalidada por `parseAiVisualization` antes
+  // de entrar aqui (nunca confiada só por ter vindo do servidor). Renderizada
+  // por <AiVisualization>, nunca HTML/JS vindo da IA.
+  visualization?: AiVisualization;
 }
 
 export interface PendingConfirmation {
@@ -59,6 +72,11 @@ export interface PendingAttachment {
   error?: string;
 }
 
+export interface SendChatOptions {
+  /** [Milestone Analytics — "Ask Konta"] Contexto da página de Análises, para o utilizador nunca ter de repetir o período/filtro já visível. */
+  analyticsContext?: AnalyticsPageContext;
+}
+
 interface AssistantContextValue {
   turns: ChatTurn[];
   pending: PendingConfirmation | null;
@@ -67,9 +85,16 @@ interface AssistantContextValue {
   pendingAttachments: PendingAttachment[];
   addAttachments: (files: File[]) => void;
   removeAttachment: (localId: string) => void;
-  sendChat: (message: string) => Promise<void>;
+  sendChat: (message: string, options?: SendChatOptions) => Promise<void>;
   confirmPending: () => Promise<void>;
   cancelPending: () => Promise<void>;
+  // [Milestone Analytics — secção 24/25 do pedido] Ação declarativa que a
+  // Konta AI pediu para mudar a página de Análises — já revalidada contra
+  // AnalyticsViewActionSchema (nunca confiada só por vir do servidor). A
+  // página de Análises consome isto e chama `consumePendingUiAction()`
+  // depois de a aplicar, para nunca a reaplicar numa navegação seguinte.
+  pendingUiAction: AnalyticsViewAction | null;
+  consumePendingUiAction: () => void;
 }
 
 const AssistantContext = createContext<AssistantContextValue | null>(null);
@@ -114,6 +139,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [pendingUiAction, setPendingUiAction] = useState<AnalyticsViewAction | null>(null);
   // [Correção — remover durante upload] `removeAttachment` só apaga o item
   // da lista visível; sem isto, um upload em curso que termina DEPOIS de o
   // utilizador o remover voltaria a inserir o resultado na lista sozinho.
@@ -139,6 +165,14 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   // é agora o único sítio que decide o que fazer com uma resposta do
   // servidor, usado tanto para mensagens novas como para confirmações.
   function applyOutcome(data: Record<string, unknown>) {
+    // [Milestone Analytics] Revalidado aqui, no cliente, mesmo já validado
+    // pelo orquestrador — nunca confiar cegamente só porque "veio do
+    // servidor" (secção 25 do pedido). Um valor ausente/inválido nunca
+    // lança, só fica `null` e a página de Análises simplesmente não recebe
+    // nenhuma mudança de vista.
+    const uiAction = parseAnalyticsViewAction(data.uiAction);
+    if (uiAction) setPendingUiAction(uiAction);
+
     if (data.status === "confirmation_required") {
       setPending({
         confirmationToken: String(data.confirmationToken),
@@ -149,7 +183,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
     if (data.status === "final") {
       setPending(null);
-      setTurns((current) => [...current, { role: "assistant", content: String(data.reply) }]);
+      const visualization = parseAiVisualization(data.visualization) ?? undefined;
+      setTurns((current) => [...current, { role: "assistant", content: String(data.reply), visualization }]);
     }
   }
 
@@ -195,7 +230,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setPendingAttachments((current) => current.filter((a) => a.localId !== localId));
   }
 
-  async function sendChat(message: string) {
+  async function sendChat(message: string, options?: SendChatOptions) {
     const trimmed = message.trim();
     if (inFlightRef.current) return;
     if (pendingAttachments.some((a) => a.status === "uploading")) return; // botão de enviar deve estar desativado neste estado
@@ -222,6 +257,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         message: trimmed,
         attachmentIds: uploaded.length > 0 ? uploaded.map((a) => a.attachmentId) : undefined,
         history,
+        analyticsContext: options?.analyticsContext,
       });
       if (!ok) {
         const message = typeof data.error === "string" ? data.error : "Não foi possível falar com o assistente. Tenta novamente.";
@@ -275,9 +311,26 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  function consumePendingUiAction() {
+    setPendingUiAction(null);
+  }
+
   return (
     <AssistantContext.Provider
-      value={{ turns, pending, sending, error, pendingAttachments, addAttachments, removeAttachment, sendChat, confirmPending, cancelPending }}
+      value={{
+        turns,
+        pending,
+        sending,
+        error,
+        pendingAttachments,
+        addAttachments,
+        removeAttachment,
+        sendChat,
+        confirmPending,
+        cancelPending,
+        pendingUiAction,
+        consumePendingUiAction,
+      }}
     >
       {children}
     </AssistantContext.Provider>

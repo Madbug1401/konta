@@ -41,6 +41,23 @@ import { setRecurringTransactionActiveTool } from "./tools/set-recurring-transac
 import { createInvestmentDetailTool } from "./tools/create-investment-detail";
 import { updateInvestmentDetailTool } from "./tools/update-investment-detail";
 import { addInvestmentValuationTool } from "./tools/add-investment-valuation";
+// [Milestone Analytics — Konta Analytics] Todas LOW, READ-ONLY (ver
+// docs/architecture/OVERVIEW.md, secção "Konta Analytics") — nunca uma
+// segunda autoridade financeira: cada uma reutiliza collectAnalyticsDataset
+// + uma função pura de src/lib/analytics/*.ts, que por sua vez reutiliza o
+// Financial Engine. `set_analytics_view` é a única exceção conceptual —
+// não analisa dados, só propõe uma mudança de UI (ver o próprio ficheiro).
+import { getAnalyticsOverviewTool } from "./tools/get-analytics-overview";
+import { getCashflowAnalysisTool } from "./tools/get-cashflow-analysis";
+import { getCategoryAnalysisTool } from "./tools/get-category-analysis";
+import { getDebtAnalysisTool } from "./tools/get-debt-analysis";
+import { getGoalAnalysisTool } from "./tools/get-goal-analysis";
+import { getRecurringAnalysisTool } from "./tools/get-recurring-analysis";
+import { getInvestmentAnalysisTool } from "./tools/get-investment-analysis";
+import { getFinancialTrendsTool } from "./tools/get-financial-trends";
+import { getFinancialInsightsTool } from "./tools/get-financial-insights";
+import { runFinancialSimulationTool } from "./tools/run-financial-simulation";
+import { setAnalyticsViewTool } from "./tools/set-analytics-view";
 
 const TOOLS: AiTool<unknown, unknown>[] = [
   defineTool(getAccountsTool),
@@ -73,6 +90,18 @@ const TOOLS: AiTool<unknown, unknown>[] = [
   defineTool(createInvestmentDetailTool),
   defineTool(updateInvestmentDetailTool),
   defineTool(addInvestmentValuationTool),
+  // [Milestone Analytics]
+  defineTool(getAnalyticsOverviewTool),
+  defineTool(getCashflowAnalysisTool),
+  defineTool(getCategoryAnalysisTool),
+  defineTool(getDebtAnalysisTool),
+  defineTool(getGoalAnalysisTool),
+  defineTool(getRecurringAnalysisTool),
+  defineTool(getInvestmentAnalysisTool),
+  defineTool(getFinancialTrendsTool),
+  defineTool(getFinancialInsightsTool),
+  defineTool(runFinancialSimulationTool),
+  defineTool(setAnalyticsViewTool),
 ];
 
 const TOOLS_BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]));
