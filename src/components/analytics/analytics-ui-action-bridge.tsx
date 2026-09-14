@@ -50,9 +50,18 @@ export function AnalyticsUiActionBridge() {
 
     if (targetView) {
       // Só depois da navegação — dá tempo ao React de voltar a renderizar a
-      // secção antes de tentar fazer scroll até ela.
+      // secção antes de tentar fazer scroll até ela. O `id` da secção nunca
+      // muda com os filtros (só o conteúdo lá dentro), por isso o elemento
+      // já existe no DOM mesmo antes do novo RSC payload chegar.
       requestAnimationFrame(() => {
-        document.getElementById(`analytics-section-${targetView}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const section = document.getElementById(`analytics-section-${targetView}`);
+        section?.scrollIntoView({ behavior: "smooth", block: "start" });
+        // [Secção 28 do pedido — "a Konta AI monta a página"] Um pulso breve
+        // (ver .konta-ai-focus, globals.css) para o utilizador ver
+        // claramente ONDE a IA o levou — desaparece sozinho, nunca fica
+        // permanente a chamar atenção.
+        section?.classList.add("konta-ai-focus");
+        setTimeout(() => section?.classList.remove("konta-ai-focus"), 2400);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só reage a pendingUiAction; router/searchParams são sempre lidos "ao vivo" no momento do efeito, nunca precisam de disparar de novo sozinhos.

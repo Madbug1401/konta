@@ -115,3 +115,22 @@ textarea {
     font-size: 16px;
   }
 }
+
+/* [Konta Analytics — a Konta AI "monta a página"] Destaque visual breve
+ * quando a Konta AI muda a secção em foco da página de Análises
+ * (`set_analytics_view` → `AnalyticsUiActionBridge`) — nunca uma cor fixa
+ * (usa `--color-primary`, já correta em ambos os temas), só um pulso que
+ * desvanece sozinho, para o utilizador ver claramente ONDE a IA o levou
+ * sem precisar de continuar a chamar atenção depois disso. */
+@keyframes konta-ai-focus-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-primary) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--color-primary) 0%, transparent);
+  }
+}
+.konta-ai-focus {
+  animation: konta-ai-focus-pulse 1.1s ease-out 2;
+  border-radius: 0.75rem;
+}

@@ -39,6 +39,13 @@ export function DashboardCategoryChart({ items, currency }: { items: CategorySpe
             cursor={{ fill: "var(--color-surface-hover)" }}
             contentStyle={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }}
             labelStyle={{ color: "var(--color-foreground)" }}
+            // [Correção — texto ilegível no tema escuro] Sem `itemStyle`, o
+            // Recharts usa uma cor por omissão (preto) para o valor de cada
+            // item do tooltip — nunca a tema — ficando invisível sobre o
+            // fundo escuro de `--color-surface` no modo noturno.
+            // `labelStyle` só cobria o nome da categoria (a "label"), nunca
+            // o valor em si.
+            itemStyle={{ color: "var(--color-foreground)" }}
             formatter={(value) => [`${Number(value).toLocaleString("pt-CV")} ${currency}`, "Despesa"]}
           />
           <Bar dataKey="amount" radius={[0, 6, 6, 0]}>
