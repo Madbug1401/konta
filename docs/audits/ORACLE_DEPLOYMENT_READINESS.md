@@ -1,7 +1,7 @@
 # KONTA — PREPARAÇÃO PARA DEPLOY NA ORACLE CLOUD ($0)
 
 **Data**: 29/08/2026
-**Ponto de partida**: `docs/KONTA_BETA_GATE.md` (hardening de código concluído,
+**Ponto de partida**: `docs/audits/KONTA_BETA_GATE.md` (hardening de código concluído,
 infraestrutura real por fazer). Esta tarefa prepara especificamente essa
 infraestrutura para a Oracle Cloud Always Free, sem alterar a aplicação.
 **Convenção usada em todo este documento**: cada afirmação está marcada

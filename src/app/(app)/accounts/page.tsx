@@ -1,5 +1,5 @@
-import { AccountCard } from "@/components/account-card";
-import { AccountForm } from "@/components/account-form";
+import { AccountCard } from "@/components/accounts/account-card";
+import { AccountForm } from "@/components/accounts/account-form";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getSessionUser } from "@/lib/auth/session";
 import { listAccounts } from "@/lib/db/accounts";

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { CategoryQuickCreate, type CreatedCategory } from "@/components/category-quick-create";
+import { CategoryQuickCreate, type CreatedCategory } from "@/components/transactions/category-quick-create";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

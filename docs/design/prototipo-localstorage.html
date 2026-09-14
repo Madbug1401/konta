@@ -1,0 +1,2034 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gestor Financeiro Profissional</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet" />
+  <style>
+    body {
+      background: #1c1f2a;
+      color: #e8ecef;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .container {
+      max-width: 1400px;
+    }
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #ffd247;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    .card-analytics {
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      color: #ffffff;
+      min-height: 140px;
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+    .card-analytics:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+    }
+    .card-analytics--income { background: linear-gradient(120deg, #187e5b 75%, #1ea97c 100%); }
+    .card-analytics--debt { background: linear-gradient(120deg, #7e192a 75%, #e44a4a 100%); }
+    .card-analytics--essential { background: linear-gradient(120deg, #b99007 75%, #fcb900 100%); color: #fff; }
+    .card-analytics--leisure { background: linear-gradient(120deg, #14657e 75%, #09a6c4 100%); }
+    .card-analytics--savings { background: linear-gradient(120deg, #483d8b 75%, #6a5acd 100%); }
+    .card-analytics--investment { background: linear-gradient(120deg, #ff4500 75%, #ff8c00 100%); }
+    .card-analytics--emergency { background: linear-gradient(120deg, #6b238e 75%, #9932cc 100%); }
+    .card-analytics--balance { background: #232635; color: #ffd247; }
+    .card-analytics--others { background: linear-gradient(120deg, #5a5a5a 75%, #8a8a8a 100%); }
+    .card-analytics--fixed { background: linear-gradient(120deg, #2a5d8e 75%, #4a7db8 100%); }
+    .indicator-value {
+      font-size: 1.75rem;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .indicator-label {
+      font-size: 0.95rem;
+      font-weight: 500;
+      opacity: 0.85;
+    }
+    .card-analytics--investment .indicator-growth {
+      font-size: 0.9rem;
+      font-weight: 500;
+      opacity: 0.9;
+      margin-top: 5px;
+    }
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #ffd247;
+      margin-bottom: 1rem;
+    }
+    .progress-bar { background-color: #1ea97c; }
+    .alert-low {
+      border: 2px solid #e44a4a;
+      animation: pulse 1.5s infinite;
+    }
+    .alert-overdue {
+      border: 2px solid #ff8c00 !important;
+      animation: pulse-orange 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.7; }
+      100% { opacity: 1; }
+    }
+    @keyframes pulse-orange {
+      0% { opacity: 1; }
+      50% { opacity: 0.7; border-color: #ff4500; }
+      100% { opacity: 1; }
+    }
+    .card-new-event, .card-analytics.p-4, .chart-container, #calendar {
+      background: #232635 !important;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+    #upcomingTableContainer .table {
+      background: transparent !important;
+    }
+    .upcoming-row.bg-income td { background: linear-gradient(90deg, #1ea97c 60%, #187e5b 100%) !important; color: #fff !important; }
+    .upcoming-row.bg-debt td { background: linear-gradient(90deg, #e44a4a 60%, #7e192a 100%) !important; color: #fff !important; }
+    .upcoming-row.bg-essential td { background: linear-gradient(90deg, #fcb900 60%, #b99007 100%) !important; color: #fff !important; }
+    .upcoming-row.bg-leisure td { background: linear-gradient(90deg, #09a6c4 60%, #14657e 100%) !important; color: #ffffff !important; }
+    .upcoming-row.bg-savings td { background: linear-gradient(90deg, #6a5acd 60%, #483d8b 100%) !important; color: #fff !important; }
+    .upcoming-row.bg-investment td { background: linear-gradient(90deg, #ff8c00 60%, #ff4500 100%) !important; color: #fff !important; }
+    .upcoming-row.bg-emergency td { background: linear-gradient(90deg, #9932cc 60%, #6b238e 100%) !important; color: #fff !important; }
+    .upcoming-row.bg-paid td { background: linear-gradient(90deg, #28a745 60%, #218838 100%) !important; color: #fff !important; }
+    .upcoming-row.bg-others td { background: linear-gradient(90deg, #8a8a8a 60%, #5a5a5a 100%) !important; color: #fff !important; }
+    .upcoming-row.bg-fixed td { background: linear-gradient(90deg, #4a7db8 60%, #2a5d8e 100%) !important; color: #fff !important; }
+    .upcoming-row td { border-radius: 8px !important; }
+    .upcoming-row.urgent td {
+      border: 2px solid #e44a4a !important;
+      animation: pulse 1.5s infinite;
+    }
+    .fc {
+      background: #232635 !important;
+    }
+    .fc-toolbar-title, .fc-col-header-cell-cushion { color: #ffd247 !important; }
+    .fc-col-header-cell, .fc-day { background: #232635 !important; }
+    .fc-daygrid-event { color: #fff !important; border-radius: 6px !important; }
+    .fc .fc-daygrid-day.fc-day-today {
+      background: rgba(255, 210, 71, 0.15) !important;
+      border: 2px solid #ffd247 !important;
+      border-radius: 6px !important;
+    }
+    .fc .fc-daygrid-day-number {
+      color: #ffd247 !important;
+      font-weight: 500;
+    }
+    .table th, .table td { border-color: #2c3e50 !important; }
+    .btn-success {
+      background: #1ea97c;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .btn-success:hover { background: #15795a; }
+    .btn-paid {
+      background: #28a745;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      padding: 0.25rem 0.5rem;
+      transition: background 0.2s;
+    }
+    .btn-paid:hover { background: #218838; }
+    .btn-remove-single, .btn-remove-all {
+      border-radius: 8px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .btn-remove-single {
+      background: #e44a4a;
+      border: none;
+    }
+    .btn-remove-single:hover { background: #c0392b; }
+    .btn-remove-all {
+      background: #ff8c00;
+      border: none;
+    }
+    .btn-remove-all:hover { background: #e07b00; }
+    .form-control, .form-select {
+      background: #2c3e50;
+      color: #e8ecef;
+      border: 1px solid #34495e;
+      border-radius: 6px;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: #1ea97c;
+      background: #34495e;
+      color: #fff;
+      box-shadow: 0 0 0 0.2rem rgba(30, 169, 124, 0.25);
+    }
+    .form-control::placeholder {
+      color: #95a5a6 !important;
+    }
+    .form-check-label, .input-group-text { color: #e8ecef; }
+    .input-group-text {
+      background: #2c3e50;
+      border: 1px solid #34495e;
+    }
+    .upcoming-badge {
+      font-size: 0.8rem;
+      background: rgba(255, 210, 71, 0.2);
+      color: #ffd247;
+      border-radius: 6px;
+      padding: 0.2rem 0.5rem;
+    }
+    .graph-tabs {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      margin-bottom: 1rem;
+    }
+    .graph-tab-btn {
+      border: none;
+      border-radius: 8px;
+      padding: 0.5rem 1.5rem;
+      background: #2c3e50;
+      color: #ffd247;
+      font-weight: 600;
+      transition: background 0.2s, color 0.2s;
+    }
+    .graph-tab-btn.active, .graph-tab-btn:hover {
+      background: #1ea97c;
+      color: #fff;
+    }
+    #chartViewMode {
+      max-width: 150px;
+      background: #2c3e50;
+      color: #e8ecef;
+    }
+    .btn-export {
+      background: #6a5acd;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .btn-export:hover { background: #483d8b; }
+    .btn-remove-x {
+      background: rgba(255, 210, 71, 0.2);
+      color: #ffd247;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    .btn-remove-x:hover {
+      background: #e44a4a;
+      color: #fff;
+    }
+    .modal-content {
+      background: #232635 !important;
+      color: #e8ecef;
+      border: none;
+      border-radius: 12px;
+    }
+    .modal-header {
+      border-bottom: 1px solid #2c3e50;
+    }
+    .modal-title {
+      color: #ffd247;
+      font-weight: 600;
+    }
+    .modal-body {
+      padding: 1.5rem;
+    }
+    .income-period-grid, .debt-period-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: 1.5rem;
+      padding: 1rem;
+    }
+    .income-period-item, .debt-period-item {
+      text-align: center;
+      font-size: 0.9rem;
+    }
+    .income-period-value, .debt-period-value {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #1ea97c;
+    }
+    .debt-period-value { color: #e44a4a; }
+    .event-details {
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+    .event-details span {
+      color: #ffd247;
+      font-weight: 500;
+    }
+    #balanceDetailsModal .modal-content {
+      background: #232635 !important;
+    }
+    #balanceDetailsModal .modal-body .table {
+      background: transparent !important;
+      color: #e8ecef !important;
+    }
+    #balanceDetailsModal .modal-body .table th,
+    #balanceDetailsModal .modal-body .table td {
+      border-color: #34495e !important;
+    }
+    #balanceDetailsModal .modal-body .table thead th {
+      background: #2c3e50 !important;
+      color: #ffd247 !important;
+    }
+    #balanceDetailsModal .modal-body .table tbody tr {
+      background: #232635 !important;
+    }
+    #balanceDetailsModal .modal-body .table-hover tbody tr:hover {
+      background: #2c3e50 !important;
+    }
+    .table-dark-row {
+      background-color: #232635 !important;
+      color: #e8ecef !important;
+    }
+    .table-dark-row td {
+      border-color: #34495e !important;
+      background-color: #232635 !important;
+      color: #e8ecef !important;
+    }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+    }
+    @media (max-width: 991px) {
+      .card-analytics { min-height: 120px; }
+      .indicator-value { font-size: 1.5rem; }
+      .indicator-label { font-size: 0.85rem; }
+      .section-title { font-size: 1.25rem; }
+      .income-period-value, .debt-period-value { font-size: 1.25rem; }
+    }
+    @media (max-width: 768px) {
+      .graph-tabs {
+        overflow-x: auto;
+        white-space: nowrap;
+        justify-content: flex-start;
+      }
+      .graph-tab-btn {
+        min-width: 90px;
+        font-size: 0.9rem;
+        padding: 0.4rem 1rem;
+      }
+      #chartViewMode { width: 100%; margin-top: 0.5rem; }
+      .card-analytics { padding: 0.75rem !important; }
+      h1 { font-size: 2rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container my-5">
+    <h1 class="text-center mb-5">Gestor Financeiro Profissional</h1>
+    <div id="successMessage" class="alert alert-success d-none" role="alert">
+      Ação realizada com sucesso!
+    </div>
+    <div class="row g-4 mb-5">
+      <!-- Linha 1 -->
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="card card-analytics card-analytics--income text-center p-3" data-bs-toggle="modal" data-bs-target="#incomePeriodModal">
+          <div class="indicator-label"><span class="visually-hidden">Ícone de moedas</span><i data-lucide="coins" aria-label="Ícone de moedas"></i> Renda Total</div>
+          <div id="sumIncome" class="indicator-value">0 CVE</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="card card-analytics card-analytics--debt text-center p-3" data-bs-toggle="modal" data-bs-target="#debtPeriodModal">
+          <div class="indicator-label"><span class="visually-hidden">Ícone de nota bancária</span><i data-lucide="banknote" aria-label="Ícone de nota bancária"></i> Dívidas a Pagar</div>
+          <div id="sumDebt" class="indicator-value">0 CVE</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="card card-analytics card-analytics--essential text-center p-3" data-bs-toggle="modal" data-bs-target="#essentialModal">
+          <div class="indicator-label"><span class="visually-hidden">Ícone de sacola de compras</span><i data-lucide="shopping-bag" aria-label="Ícone de sacola de compras"></i> Essenciais</div>
+          <div id="sumEssential" class="indicator-value">0 CVE</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="card card-analytics card-analytics--leisure text-center p-3" data-bs-toggle="modal" data-bs-target="#leisureModal">
+          <div class="indicator-label"><span class="visually-hidden">Ícone de controle de jogo</span><i data-lucide="gamepad" aria-label="Ícone de controle de jogo"></i> Lazer</div>
+          <div id="sumLeisure" class="indicator-value">0 CVE</div>
+        </div>
+      </div>
+      <!-- Linha 2 -->
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="card card-analytics card-analytics--savings text-center p-3" data-bs-toggle="modal" data-bs-target="#savingsModal">
+          <div class="indicator-label"><span class="visually-hidden">Ícone de cofrinho</span><i data-lucide="piggy-bank" aria-label="Ícone de cofrinho"></i> Poupança</div>
+          <div id="sumSavings" class="indicator-value">0 CVE</div>
+          <div class="progress mt-2" style="height: 6px;">
+            <div id="savingsProgress" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="card card-analytics card-analytics--investment text-center p-3" data-bs-toggle="modal" data-bs-target="#investmentModal">
+          <div class="indicator-label"><span class="visually-hidden">Ícone de tendência de alta</span><i data-lucide="trending-up" aria-label="Ícone de tendência de alta"></i> Investimentos</div>
+          <div id="sumInvestment" class="indicator-value">0 CVE</div>
+          <div id="investmentGrowthRate" class="indicator-growth">Taxa de Crescimento: 0%</div>
+          <div id="investmentProgressText" class="indicator-label">Progresso: 0%</div>
+          <div class="progress mt-2" style="height: 6px;">
+            <div id="investmentProgress" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="card card-analytics card-analytics--others text-center p-3" data-bs-toggle="modal" data-bs-target="#othersModal">
+          <div class="indicator-label"><span class="visually-hidden">Ícone de cifrão circular</span><i data-lucide="circle-dollar-sign" aria-label="Ícone de cifrão circular"></i> Outros</div>
+          <div id="sumOthers" class="indicator-value">0 CVE</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="card card-analytics card-analytics--fixed text-center p-3" data-bs-toggle="modal" data-bs-target="#fixedModal">
+          <div class="indicator-label"><span class="visually-hidden">Ícone de marco</span><i data-lucide="landmark" aria-label="Ícone de marco"></i> Despesas Fixas</div>
+          <div id="sumFixed" class="indicator-value">0 CVE</div>
+        </div>
+      </div>
+      <!-- Linha 3 -->
+      <div class="col-12 col-md-6 col-lg-6">
+        <div class="card card-analytics card-analytics--balance text-center p-3">
+          <div class="indicator-label"><span class="visually-hidden">Ícone de carteira</span><i data-lucide="wallet" aria-label="Ícone de carteira"></i> Saldo Atual</div>
+          <div id="balance" class="indicator-value" style="font-size: 2rem;">0 CVE</div>
+        </div>
+      </div>
+      <div class="col-12 col-md-6 col-lg-6">
+        <div class="card card-analytics card-analytics--emergency text-center p-3" data-bs-toggle="modal" data-bs-target="#emergencyModal">
+          <div class="indicator-label"><span class="visually-hidden">Ícone de escudo</span><i data-lucide="shield" aria-label="Ícone de escudo"></i> Cofre Emergência</div>
+          <div id="sumEmergency" class="indicator-value" style="font-size: 2rem;">0 CVE</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Renda por Período (Atualizado) -->
+    <div class="modal fade" id="incomePeriodModal" tabindex="-1" aria-labelledby="incomePeriodModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="incomePeriodModalLabel">Renda</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <p>Total Atual: <span id="incomeTotal">0 CVE</span></p>
+              <p>Progresso da Meta: <span id="incomeProgress">0%</span></p>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Valor</th>
+                  </tr>
+                </thead>
+                <tbody id="incomeDetailsTable"></tbody>
+              </table>
+            </div>
+            <canvas id="incomeGrowthChart" class="mt-4"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Dívidas por Período -->
+    <div class="modal fade" id="debtPeriodModal" tabindex="-1" aria-labelledby="debtPeriodModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="debtPeriodModalLabel">Dívidas a Pagar por Período</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="debt-period-grid">
+              <div class="debt-period-item">
+                <div class="indicator-label">Total Futuro</div>
+                <div id="totalDebtModal" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Mensal</div>
+                <div id="debtMonthly" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Trimestral</div>
+                <div id="debtQuarterly" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Anual</div>
+                <div id="debtYearly" class="debt-period-value">0 CVE</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Essenciais -->
+    <div class="modal fade" id="essentialModal" tabindex="-1" aria-labelledby="essentialModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="essentialModalLabel">Despesas Essenciais</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="debt-period-grid">
+              <div class="debt-period-item">
+                <div class="indicator-label">Total Futuro</div>
+                <div id="totalEssentialModal" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Mensal</div>
+                <div id="essentialMonthly" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Trimestral</div>
+                <div id="essentialQuarterly" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Anual</div>
+                <div id="essentialYearly" class="debt-period-value">0 CVE</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Lazer -->
+    <div class="modal fade" id="leisureModal" tabindex="-1" aria-labelledby="leisureModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="leisureModalLabel">Despesas de Lazer</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="debt-period-grid">
+              <div class="debt-period-item">
+                <div class="indicator-label">Total Futuro</div>
+                <div id="totalLeisureModal" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Mensal</div>
+                <div id="leisureMonthly" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Trimestral</div>
+                <div id="leisureQuarterly" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Anual</div>
+                <div id="leisureYearly" class="debt-period-value">0 CVE</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Outros -->
+    <div class="modal fade" id="othersModal" tabindex="-1" aria-labelledby="othersModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="othersModalLabel">Outros Gastos</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="debt-period-grid">
+              <div class="debt-period-item">
+                <div class="indicator-label">Total Futuro</div>
+                <div id="totalOthersModal" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Mensal</div>
+                <div id="othersMonthly" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Trimestral</div>
+                <div id="othersQuarterly" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Anual</div>
+                <div id="othersYearly" class="debt-period-value">0 CVE</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Despesas Fixas -->
+    <div class="modal fade" id="fixedModal" tabindex="-1" aria-labelledby="fixedModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="fixedModalLabel">Despesas Fixas</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="debt-period-grid">
+              <div class="debt-period-item">
+                <div class="indicator-label">Total Futuro</div>
+                <div id="totalFixedModal" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Mensal</div>
+                <div id="fixedMonthly" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Trimestral</div>
+                <div id="fixedQuarterly" class="debt-period-value">0 CVE</div>
+              </div>
+              <div class="debt-period-item">
+                <div class="indicator-label">Anual</div>
+                <div id="fixedYearly" class="debt-period-value">0 CVE</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Poupança -->
+    <div class="modal fade" id="savingsModal" tabindex="-1" aria-labelledby="savingsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="savingsModalLabel">Poupança</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex flex-column align-items-center">
+              <div class="mb-3">
+                <div class="indicator-label">Total Acumulado</div>
+                <div id="totalSavingsModal" class="indicator-value">0 CVE</div>
+              </div>
+              <div class="mb-3">
+                <div class="indicator-label">Meta</div>
+                <div id="savingsTargetModal" class="indicator-value">0 CVE</div>
+              </div>
+              <div class="mb-3 w-100">
+                <div class="progress" style="height: 20px;">
+                  <div id="savingsProgressBarModal" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <div id="savingsProgressModal" class="text-center mt-2">0%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Investimentos -->
+    <div class="modal fade" id="investmentModal" tabindex="-1" aria-labelledby="investmentModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="investmentModalLabel">Investimentos</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Valor</th>
+                    <th>Tipo de Investimento</th>
+                    <th>Taxa de Juros</th>
+                    <th>Data de Vencimento</th>
+                  </tr>
+                </thead>
+                <tbody id="investmentDetailsTable"></tbody>
+              </table>
+              <canvas id="investmentGrowthChart" class="mt-4"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Cofre de Emergência -->
+    <div class="modal fade" id="emergencyModal" tabindex="-1" aria-labelledby="emergencyModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="emergencyModalLabel">Cofre de Emergência</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex flex-column align-items-center">
+              <div class="mb-3">
+                <div class="indicator-label">Total Acumulado</div>
+                <div id="totalEmergencyModal" class="indicator-value">0 CVE</div>
+              </div>
+              <div class="mb-3">
+                <div class="indicator-label">Saldo Mínimo Recomendado</div>
+                <div id="emergencyMinModal" class="indicator-value">0 CVE</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Detalhes do Evento -->
+    <div class="modal fade" id="eventDetailsModal" tabindex="-1" aria-labelledby="eventDetailsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="eventDetailsModalLabel">Detalhes do Evento</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="event-details">
+              <p><strong>Data:</strong> <span id="detailEventDate"></span></p>
+              <p><strong>Descrição:</strong> <span id="detailEventTitle"></span></p>
+              <p><strong>Valor:</strong> <span id="detailEventAmount"></span> CVE</p>
+              <p><strong>Tipo:</strong> <span id="detailEventType"></span></p>
+              <p><strong>Status:</strong> <span id="detailEventStatus"></span></p>
+            </div>
+            <button class="btn btn-success w-100" onclick="openEditFromDetails()" aria-label="Editar evento">Editar Evento</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Detalhes do Saldo -->
+    <div class="modal fade" id="balanceDetailsModal" tabindex="-1" aria-labelledby="balanceDetailsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="balanceDetailsModalLabel">Detalhes do Saldo Atual</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Valor</th>
+                    <th>Tipo</th>
+                  </tr>
+                </thead>
+                <tbody id="balanceDetailsTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Confirmação de Remoção -->
+    <div class="modal fade" id="deleteEventModal" tabindex="-1" aria-labelledby="deleteEventModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="deleteEventModalLabel">Confirmar Remoção de Evento</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="event-details">
+              Você está prestes a remover o evento:<br>
+              <span id="deleteEventTitle"></span> em <span id="deleteEventDate"></span> (<span id="deleteEventAmount"></span> CVE)
+            </div>
+            <p>Escolha uma opção:</p>
+            <button class="btn btn-remove-single w-100 mb-2" onclick="removeSingleEvent()" aria-label="Remover apenas este evento">Remover apenas este evento</button>
+            <button class="btn btn-remove-all w-100" onclick="removeAllOccurrences()" aria-label="Remover todas as ocorrências">Remover todas as ocorrências</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal para Edição de Evento -->
+    <div class="modal fade" id="editEventModal" tabindex="-1" aria-labelledby="editEventModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="editEventModalLabel">Editar Evento</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="editEventIndex" />
+            <div class="mb-3">
+              <label for="editEventDate" class="form-label">Data</label>
+              <input type="date" id="editEventDate" class="form-control" aria-label="Data do evento" />
+            </div>
+            <div class="mb-3">
+              <label for="editEventTitle" class="form-label">Descrição</label>
+              <input type="text" id="editEventTitle" class="form-control" placeholder="Descrição" aria-label="Descrição do evento" />
+            </div>
+            <div class="mb-3">
+              <label for="editEventAmount" class="form-label">Valor Total (CVE)</label>
+              <input type="number" id="editEventAmount" class="form-control" placeholder="Valor Total (CVE)" aria-label="Valor total em CVE" />
+            </div>
+            <div class="mb-3">
+              <label for="editEventType" class="form-label">Tipo</label>
+              <select id="editEventType" class="form-select" aria-label="Tipo de evento">
+                <option value="income">Renda</option>
+                <option value="debt">Dívida</option>
+                <option value="essential">Despesa Essencial</option>
+                <option value="leisure">Lazer</option>
+                <option value="savings">Poupança</option>
+                <option value="investment">Investimento</option>
+                <option value="emergency">Cofre Emergência</option>
+                <option value="others">Outros</option>
+                <option value="fixed">Despesas Fixas</option>
+              </select>
+            </div>
+            <button id="saveEditedEvent" class="btn btn-success w-100" aria-label="Salvar alterações">Salvar Alterações</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <div class="col-lg-4">
+        <div class="card card-new-event p-4 mb-4">
+          <div class="section-title">Adicionar Novo Evento</div>
+          <input type="date" id="eventDate" class="form-control mb-3" aria-label="Data do evento" />
+          <input type="text" id="eventTitle" class="form-control mb-3" placeholder="Descrição" aria-label="Descrição do evento" />
+          <input type="number" id="event-amount" class="form-control mb-3" placeholder="Valor Total (CVE)" aria-label="Valor total em CVE" />
+          <select id="eventType" class="form-select mb-3" aria-label="Tipo de evento">
+            <option value="income">Renda</option>
+            <option value="debt">Dívida</option>
+            <option value="essential">Despesa Essencial</option>
+            <option value="leisure">Lazer</option>
+            <option value="savings">Poupança</option>
+            <option value="investment">Investimento</option>
+            <option value="emergency">Cofre Emergência</option>
+            <option value="others">Outros</option>
+            <option value="fixed">Despesas Fixas</option>
+          </select>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="recurrenceCheck" aria-label="Repetir evento" />
+            <label class="form-check-label" for="recurrenceCheck">Repetir evento?</label>
+          </div>
+          <div id="recurrenceOptions" class="d-none mb-3">
+            <div class="input-group mb-3">
+              <span class="input-group-text">Frequência</span>
+              <select id="frequency" class="form-select" aria-label="Frequência de repetição">
+                <option value="daily">Diário</option>
+                <option value="weekly">Semanal</option>
+                <option value="monthly" selected>Mensal</option>
+                <option value="yearly">Anual</option>
+              </select>
+            </div>
+            <div class="input-group mb-3">
+              <span class="input-group-text">Ocorrências</span>
+              <input type="number" id="occurrences" class="form-control" min="2" value="2" aria-label="Número de ocorrências" />
+            </div>
+            <div id="debtInstallments" class="d-none">
+              <div class="input-group mb-3">
+                <span class="input-group-text">Valor por parcela</span>
+                <input type="number" id="installmentValue" class="form-control" placeholder="Valor da parcela (CVE)" aria-label="Valor por parcela em CVE" />
+              </div>
+            </div>
+          </div>
+          <div id="savingsGoal" class="d-none mb-3">
+            <div class="input-group mb-3">
+              <span class="input-group-text">Meta de Poupança</span>
+              <input type="number" id="savingsTarget" class="form-control" placeholder="Valor da meta (CVE)" aria-label="Meta de poupança em CVE" />
+            </div>
+            <div class="input-group mb-3">
+              <span class="input-group-text">Prazo (meses)</span>
+              <input type="number" id="savingsMonths" class="form-control" min="1" placeholder="Meses" aria-label="Prazo em meses" />
+            </div>
+          </div>
+          <div id="investmentGoal" class="d-none mb-3">
+            <div class="input-group mb-3">
+              <span class="input-group-text">Meta de Investimento</span>
+              <input type="number" id="investmentTarget" class="form-control" placeholder="Valor da meta (CVE)" aria-label="Meta de investimento em CVE" />
+            </div>
+            <div class="input-group mb-3">
+              <span class="input-group-text">Tipo de Investimento</span>
+              <input type="text" id="investmentType" class="form-control" placeholder="Ex: Ações, Títulos" aria-label="Tipo de investimento" />
+            </div>
+            <div class="input-group mb-3">
+              <span class="input-group-text">Taxa de Juros (%)</span>
+              <input type="number" id="interestRate" class="form-control" placeholder="Taxa de juros anual" aria-label="Taxa de juros em percentual" />
+            </div>
+            <div class="input-group mb-3">
+              <span class="input-group-text">Data de Vencimento</span>
+              <input type="date" id="maturityDate" class="form-control" aria-label="Data de vencimento do investimento" />
+            </div>
+          </div>
+          <div id="emergencyMin" class="d-none mb-3">
+            <div class="input-group mb-3">
+              <span class="input-group-text">Saldo Mínimo</span>
+              <input type="number" id="emergencyMinValue" class="form-control" placeholder="Valor mínimo (CVE)" aria-label="Saldo mínimo em CVE" />
+            </div>
+          </div>
+          <div id="errorMessage" class="text-danger mb-3 d-none"></div>
+          <button id="saveEvent" class="btn btn-success w-100" aria-label="Adicionar novo evento">Adicionar Evento</button>
+        </div>
+        <div class="card card-analytics p-4">
+          <div class="section-title mb-3">Próximos Eventos</div>
+          <select id="eventFilter" class="form-select mb-3" aria-label="Filtrar eventos por tipo">
+            <option value="all">Todos</option>
+            <option value="income">Renda</option>
+            <option value="debt">Dívida</option>
+            <option value="essential">Essencial</option>
+            <option value="leisure">Lazer</option>
+            <option value="savings">Poupança</option>
+            <option value="investment">Investimento</option>
+            <option value="emergency">Cofre Emergência</option>
+            <option value="others">Outros</option>
+            <option value="fixed">Despesas Fixas</option>
+          </select>
+          <button id="exportCSV" class="btn btn-export w-100 mb-3" aria-label="Exportar para CSV">Exportar para CSV</button>
+          <div id="upcomingTableContainer" class="table-responsive">
+            <div id="loadingSpinner" class="text-center d-none">
+              <div class="spinner-border text-light" role="status">
+                <span class="visually-hidden">Carregando...</span>
+              </div>
+            </div>
+            <table class="table table-sm table-hover mb-0">
+              <tbody id="upcomingTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-8">
+        <div class="card card-analytics p-4">
+          <div class="section-title">Calendário & Análise Financeira</div>
+          <div id="calendar" class="mb-4"></div>
+          <div class="graph-tabs mb-3">
+            <button class="graph-tab-btn active" data-graph="distributionChart" aria-label="Mostrar gráfico de distribuição">Distribuição</button>
+            <button class="graph-tab-btn" data-graph="incomeChart" aria-label="Mostrar gráfico de entradas e saídas">Entradas/Saídas</button>
+            <button class="graph-tab-btn" data-graph="debtScheduleChart" aria-label="Mostrar gráfico de agendamento de dívidas">Agendamento Dívida</button>
+            <button class="graph-tab-btn" data-graph="investmentChart" aria-label="Mostrar gráfico de crescimento de investimentos">Crescimento Investimentos</button>
+            <button class="graph-tab-btn" data-graph="monthlySummaryChart" aria-label="Mostrar gráfico de resumo mensal">Resumo Mensal</button>
+            <select id="chartViewMode" class="form-select form-select-sm" aria-label="Modo de visualização do gráfico">
+              <option value="monthly" selected>Mensal</option>
+              <option value="weekly">Semanal</option>
+              <option value="daily">Diário</option>
+              <option value="yearly">Anual</option>
+            </select>
+          </div>
+          <div class="row">
+            <div class="col-12 chart-container" id="distributionChartWrap">
+              <canvas id="distributionChart"></canvas>
+            </div>
+            <div class="col-12 chart-container d-none" id="incomeChartWrap">
+              <canvas id="incomeChart"></canvas>
+            </div>
+            <div class="col-12 chart-container d-none" id="debtScheduleChartWrap">
+              <canvas id="debtScheduleChart"></canvas>
+            </div>
+            <div class="col-12 chart-container d-none" id="investmentChartWrap">
+              <canvas id="investmentChart"></canvas>
+            </div>
+            <div class="col-12 chart-container d-none" id="monthlySummaryChartWrap">
+              <canvas id="monthlySummaryChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.441.0/dist/umd/lucide.min.js"></script>
+  <script>
+    lucide.createIcons();
+    const STORAGE_KEY = 'financeEvents';
+    const SETTINGS_KEY = 'financeSettings';
+    let events = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    events = events.map((e, i) => ({ ...e, id: e.id || `event_${i}_${Date.now()}` }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+    let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    settings.savingsTarget = settings.savingsTarget || 0;
+    settings.savingsMonths = settings.savingsMonths || 0;
+    settings.investmentTarget = settings.investmentTarget || 0;
+    settings.emergencyMin = settings.emergencyMin || 5000;
+    settings.incomeTarget = settings.incomeTarget || 0; // Adicionado para meta de renda
+    let selectedEventId = null;
+    let calendar;
+
+    function getColor(type, status) {
+      if (type === 'debt' && status === 'paid') return '#28a745';
+      return {
+        income: '#1ea97c',
+        debt: '#e44a4a',
+        essential: '#fcb900',
+        leisure: '#09a6c4',
+        savings: '#6a5acd',
+        investment: '#ff8c00',
+        emergency: '#9932cc',
+        others: '#8a8a8a',
+        fixed: '#4a7db8'
+      }[type] || '#6c757d';
+    }
+
+    function getBgClass(type, status) {
+      if (type === 'debt' && status === 'paid') return 'bg-paid';
+      return {
+        income: 'bg-income',
+        debt: 'bg-debt',
+        essential: 'bg-essential',
+        leisure: 'bg-leisure',
+        savings: 'bg-savings',
+        investment: 'bg-investment',
+        emergency: 'bg-emergency',
+        others: 'bg-others',
+        fixed: 'bg-fixed'
+      }[type] || '';
+    }
+
+    function getBadgeLabel(type) {
+      return {
+        income: 'Renda',
+        debt: 'Dívida',
+        essential: 'Essencial',
+        leisure: 'Lazer',
+        savings: 'Poupança',
+        investment: 'Investimento',
+        emergency: 'Cofre',
+        others: 'Outros',
+        fixed: 'Fixas'
+      }[type] || 'Outro';
+    }
+
+    let incomeChartInstance, distributionChartInstance, debtChartInstance, investmentChartInstance, monthlySummaryChartInstance;
+
+    function updateElement(id, value) {
+      const element = document.getElementById(id);
+      if (element) {
+        element.innerText = value;
+      } else {
+        console.error(`Elemento com ID "${id}" não encontrado`);
+      }
+    }
+
+    function showSuccessMessage(message) {
+      const successMessage = document.getElementById('successMessage');
+      successMessage.textContent = message;
+      successMessage.classList.remove('d-none');
+      setTimeout(() => successMessage.classList.add('d-none'), 3000);
+    }
+
+    function calculateBalance() {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const incomeSoFar = events.filter(e => e.type === 'income' && e.date <= todayStr).reduce((a, b) => a + b.amount, 0);
+      const expensesSoFar = events.filter(e => ['debt', 'essential', 'leisure', 'savings', 'investment', 'emergency', 'others', 'fixed'].includes(e.type) && e.date <= todayStr && (!e.status || e.status === 'paid')).reduce((a, b) => a + b.amount, 0);
+      return incomeSoFar - expensesSoFar;
+    }
+
+    function updateIndicatorCards() {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const totalIncome = events.filter(e => e.type === 'income').reduce((a, b) => a + b.amount, 0);
+      const totalFutureDebt = events.filter(e => e.type === 'debt' && e.status === 'pending' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+      const totalFutureEssential = events.filter(e => e.type === 'essential' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+      const totalFutureLeisure = events.filter(e => e.type === 'leisure' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+      const totalSavings = events.filter(e => e.type === 'savings' && e.date <= todayStr).reduce((a, b) => a + b.amount, 0);
+      const totalInvestment = events.filter(e => e.type === 'investment' && e.date <= todayStr).reduce((a, b) => a + b.amount, 0);
+      const totalEmergency = events.filter(e => e.type === 'emergency' && e.date <= todayStr).reduce((a, b) => a + (b.amount > 0 ? b.amount : -b.amount), 0);
+      const totalFutureOthers = events.filter(e => e.type === 'others' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+      const totalFutureFixed = events.filter(e => e.type === 'fixed' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+
+      updateElement('sumIncome', totalIncome.toLocaleString() + ' CVE');
+      updateElement('sumDebt', `-${totalFutureDebt.toLocaleString()} CVE`);
+      updateElement('sumEssential', `-${totalFutureEssential.toLocaleString()} CVE`);
+      updateElement('sumLeisure', `-${totalFutureLeisure.toLocaleString()} CVE`);
+      updateElement('sumSavings', totalSavings.toLocaleString() + ' CVE');
+      updateElement('sumInvestment', totalInvestment.toLocaleString() + ' CVE');
+      updateElement('sumEmergency', totalEmergency.toLocaleString() + ' CVE');
+      updateElement('sumOthers', `-${totalFutureOthers.toLocaleString()} CVE`);
+      updateElement('sumFixed', `-${totalFutureFixed.toLocaleString()} CVE`);
+
+      const savingsProgress = settings.savingsTarget ? Math.min((totalSavings / settings.savingsTarget) * 100, 100) : 0;
+      const savingsProgressElement = document.getElementById('savingsProgress');
+      if (savingsProgressElement) {
+        savingsProgressElement.style.width = `${savingsProgress}%`;
+        savingsProgressElement.setAttribute('aria-valuenow', savingsProgress);
+      }
+
+      const currentYear = new Date().getFullYear();
+      const startOfYearStr = `${currentYear}-01-01`;
+      const investmentStartOfYear = events
+        .filter(e => e.type === 'investment' && e.date < startOfYearStr)
+        .reduce((a, b) => a + b.amount, 0);
+      const investmentToday = totalInvestment;
+      let growthRate = 0;
+      if (investmentStartOfYear > 0) {
+        growthRate = ((investmentToday - investmentStartOfYear) / investmentStartOfYear) * 100;
+      } else if (investmentToday > 0) {
+        growthRate = 100;
+      }
+      updateElement('investmentGrowthRate', `Taxa de Crescimento: ${growthRate.toFixed(2)}%`);
+
+      const investmentProgress = settings.investmentTarget ? Math.min((totalInvestment / settings.investmentTarget) * 100, 100) : 0;
+      const investmentProgressElement = document.getElementById('investmentProgress');
+      if (investmentProgressElement) {
+        investmentProgressElement.style.width = `${investmentProgress}%`;
+        investmentProgressElement.setAttribute('aria-valuenow', investmentProgress);
+      }
+      updateElement('investmentProgressText', `Progresso: ${investmentProgress.toFixed(2)}%`);
+
+      const emergencyCard = document.getElementById('sumEmergency')?.parentElement;
+      if (emergencyCard) {
+        if (totalEmergency < settings.emergencyMin) {
+          emergencyCard.classList.add('alert-low');
+        } else {
+          emergencyCard.classList.remove('alert-low');
+        }
+      }
+    }
+
+    function updateUpcomingEvents() {
+      const loadingSpinner = document.getElementById('loadingSpinner');
+      loadingSpinner.classList.remove('d-none');
+      setTimeout(() => {
+        const today = new Date();
+        const todayStr = today.toISOString().slice(0, 10);
+        const threeDaysFromNow = new Date(today);
+        threeDaysFromNow.setDate(today.getDate() + 3);
+        const threeDaysFromNowStr = threeDaysFromNow.toISOString().slice(0, 10);
+
+        let upcoming = events.filter(e => e.date >= todayStr || (e.type === 'debt' && e.status === 'pending'));
+        const filterType = document.getElementById('eventFilter').value;
+        if (filterType !== 'all') {
+          upcoming = upcoming.filter(e => e.type === filterType);
+        }
+        upcoming = upcoming.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 10);
+        const tbody = document.getElementById('upcomingTable');
+        if (tbody) {
+          tbody.innerHTML = '';
+          upcoming.forEach(e => {
+            const tr = document.createElement('tr');
+            const isUrgent = e.date <= threeDaysFromNowStr && e.date >= todayStr;
+            const isOverdue = e.type === 'debt' && e.status === 'pending' && e.date < todayStr;
+            tr.className = `upcoming-row ${getBgClass(e.type, e.status)} ${isUrgent ? 'urgent' : ''} ${isOverdue ? 'alert-overdue' : ''}`;
+            const payButton = e.type === 'debt' && e.status === 'pending' && e.date <= todayStr ? `<button class='btn btn-sm btn-paid' onclick='markAsPaid("${e.id}"); event.stopPropagation();' aria-label='Marcar como pago'>Pagar</button>` : '';
+            tr.innerHTML = `<td class="py-2 px-3">${e.date}</td>
+              <td class="py-2 px-2">${e.title}<span class="upcoming-badge">${getBadgeLabel(e.type)}${e.status ? ` (${e.status})` : ''}</span></td>
+              <td class="py-2 px-2">${e.amount.toLocaleString()}</td>
+              <td class="py-2 px-2">${payButton}<button class='btn btn-sm btn-outline-light btn-remove-x' onclick='confirmDeleteEvent("${e.id}"); event.stopPropagation();' aria-label='Remover evento'>✕</button></td>`;
+            tr.addEventListener('click', () => openDetailsModal(e.id));
+            tbody.appendChild(tr);
+          });
+        }
+        loadingSpinner.classList.add('d-none');
+      }, 100);
+    }
+
+    function updateUI() {
+      const balance = calculateBalance();
+      updateElement('balance', balance.toLocaleString() + ' CVE');
+      updateIndicatorCards();
+      updateUpcomingEvents();
+      renderDistributionChart();
+      renderIncomeChart(document.getElementById('chartViewMode').value);
+      renderDebtSchedule();
+      renderInvestmentChart();
+      renderMonthlySummaryChart();
+      calendar.getEvents().forEach(event => event.remove());
+      events.forEach(e => {
+        calendar.addEvent({
+          title: `${e.title} (${e.amount.toLocaleString()} CVE${e.status ? ` - ${e.status}` : ''})`,
+          start: e.date,
+          color: getColor(e.type, e.status),
+          extendedProps: { id: e.id }
+        });
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.graph-tab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('.graph-tab-btn').forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          document.getElementById('distributionChartWrap').classList.add('d-none');
+          document.getElementById('incomeChartWrap').classList.add('d-none');
+          document.getElementById('debtScheduleChartWrap').classList.add('d-none');
+          document.getElementById('investmentChartWrap').classList.add('d-none');
+          document.getElementById('monthlySummaryChartWrap').classList.add('d-none');
+          document.getElementById(this.dataset.graph + 'Wrap').classList.remove('d-none');
+        });
+      });
+
+      document.getElementById('chartViewMode').addEventListener('change', function() {
+        renderIncomeChart(this.value);
+        renderMonthlySummaryChart();
+      });
+
+      document.getElementById('recurrenceCheck').addEventListener('change', e => {
+        document.getElementById('recurrenceOptions').classList.toggle('d-none', !e.target.checked);
+      });
+
+      document.getElementById('eventType').addEventListener('change', e => {
+        document.getElementById('debtInstallments').classList.toggle('d-none', e.target.value !== 'debt');
+        document.getElementById('savingsGoal').classList.toggle('d-none', e.target.value !== 'savings');
+        document.getElementById('investmentGoal').classList.toggle('d-none', e.target.value !== 'investment');
+        document.getElementById('emergencyMin').classList.toggle('d-none', e.target.value !== 'emergency');
+      });
+
+      document.getElementById('eventFilter').addEventListener('change', updateUpcomingEvents);
+
+      document.getElementById('saveEvent').addEventListener('click', () => {
+        const dateInput = document.getElementById('eventDate').value;
+        const title = document.getElementById('eventTitle').value.trim();
+        const total = parseFloat(document.getElementById('event-amount').value) || 0;
+        const type = document.getElementById('eventType').value;
+        const errorMessage = document.getElementById('errorMessage');
+
+        if (!dateInput || !title || total <= 0) {
+          errorMessage.textContent = 'Preencha todos os campos corretamente e insira um valor válido.';
+          errorMessage.classList.remove('d-none');
+          return;
+        }
+
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const balance = calculateBalance();
+
+        if (type !== 'income') {
+          const isRec = document.getElementById('recurrenceCheck').checked;
+          let amountToCheck = total;
+          if (type === 'debt' && isRec) {
+            const installment = parseFloat(document.getElementById('installmentValue').value) || 0;
+            const occ = parseInt(document.getElementById('occurrences').value) || 1;
+            if (installment * occ !== total) {
+              errorMessage.textContent = 'O valor total das parcelas deve ser igual ao valor da dívida.';
+              errorMessage.classList.remove('d-none');
+              return;
+            }
+            amountToCheck = installment;
+          }
+          if (amountToCheck > balance) {
+            errorMessage.textContent = `Saldo insuficiente para cobrir ${type === 'debt' && isRec ? 'a primeira parcela' : 'o valor'} (necessário: ${amountToCheck.toLocaleString()} CVE).`;
+            errorMessage.classList.remove('d-none');
+            return;
+          }
+        }
+
+        errorMessage.classList.add('d-none');
+
+        const event = { id: `event_${events.length}_${Date.now()}`, date: dateInput, title, amount: total, type, status: type === 'debt' ? 'pending' : undefined };
+
+        if (type === 'savings') {
+          settings.savingsTarget = parseFloat(document.getElementById('savingsTarget').value) || settings.savingsTarget;
+          settings.savingsMonths = parseInt(document.getElementById('savingsMonths').value) || settings.savingsMonths;
+        } else if (type === 'investment') {
+          settings.investmentTarget = parseFloat(document.getElementById('investmentTarget').value) || settings.investmentTarget;
+          const investmentType = document.getElementById('investmentType').value;
+          const interestRate = parseFloat(document.getElementById('interestRate').value) || 0;
+          const maturityDate = document.getElementById('maturityDate').value;
+          event.investmentType = investmentType;
+          event.interestRate = interestRate;
+          event.maturityDate = maturityDate;
+        } else if (type === 'emergency') {
+          settings.emergencyMin = parseFloat(document.getElementById('emergencyMinValue').value) || settings.emergencyMin;
+        } else if (type === 'income') {
+          settings.incomeTarget = settings.incomeTarget || 0; // Pode ser ajustado conforme necessidade
+        }
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+
+        const isRec = document.getElementById('recurrenceCheck').checked;
+        const freq = document.getElementById('frequency').value;
+        const occ = parseInt(document.getElementById('occurrences').value) || 1;
+        const baseDate = new Date(dateInput);
+
+        if (!isRec) {
+          events.push(event);
+        } else {
+          if (type === 'debt') {
+            const installment = parseFloat(document.getElementById('installmentValue').value);
+            for (let i = 0; i < occ; i++) {
+              let eventDate = calculateRecurrenceDate(baseDate, freq, i);
+              events.push({ id: `event_${events.length}_${Date.now()}`, date: eventDate, title: `${title} Parcela ${i+1}`, amount: installment, type, status: 'pending' });
+            }
+          } else {
+            for (let i = 0; i < occ; i++) {
+              let eventDate = calculateRecurrenceDate(baseDate, freq, i);
+              events.push({ ...event, id: `event_${events.length}_${Date.now()}`, date: eventDate });
+            }
+          }
+        }
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+        updateUI();
+        showSuccessMessage('Evento adicionado com sucesso!');
+      });
+
+      document.getElementById('exportCSV').addEventListener('click', () => {
+        let csv = 'Data,Descrição,Valor,Tipo,Status\n';
+        events.forEach(e => {
+          csv += `${e.date},${e.title.replace(/,/g, '')},${e.amount},${getBadgeLabel(e.type)},${e.status || 'N/A'}\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'finance_events.csv';
+        link.click();
+      });
+
+      document.querySelector('.card-analytics--balance').addEventListener('click', () => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const balanceEvents = events.filter(e => e.date <= todayStr && (e.type === 'income' || (['debt', 'essential', 'leisure', 'savings', 'investment', 'emergency', 'others', 'fixed'].includes(e.type) && (!e.status || e.status === 'paid'))));
+        const tbody = document.getElementById('balanceDetailsTable');
+        tbody.innerHTML = '';
+        balanceEvents.forEach(e => {
+          const tr = document.createElement('tr');
+          tr.classList.add('table-dark-row');
+          tr.innerHTML = `<td>${e.date}</td><td>${e.title}</td><td>${e.amount.toLocaleString()} CVE</td><td>${getBadgeLabel(e.type)}</td>`;
+          tbody.appendChild(tr);
+        });
+        const balanceModal = new bootstrap.Modal(document.getElementById('balanceDetailsModal'));
+        balanceModal.show();
+      });
+
+      calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+        initialView: 'dayGridMonth',
+        height: 550,
+        events: events.map(e => ({
+          title: `${e.title} (${e.amount.toLocaleString()} CVE${e.status ? ` - ${e.status}` : ''})`,
+          start: e.date,
+          color: getColor(e.type, e.status),
+          extendedProps: { id: e.id }
+        })),
+        headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek' },
+        dayCellContent: function(info) {
+          return { html: `<span class="fc-daygrid-day-number">${info.dayNumberText}</span>` };
+        },
+        dateClick: function(info) {
+          document.getElementById('eventDate').value = info.dateStr;
+        },
+        eventClick: function(info) {
+          const eventId = info.event.extendedProps.id;
+          openDetailsModal(eventId);
+        },
+        editable: true,
+        eventDrop: function(info) {
+          const eventId = info.event.extendedProps.id;
+          const eventIndex = events.findIndex(e => e.id === eventId);
+          events[eventIndex].date = info.event.startStr;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+          updateUI();
+          showSuccessMessage('Evento movido com sucesso!');
+        }
+      });
+      calendar.render();
+
+      document.getElementById('saveEditedEvent').addEventListener('click', () => {
+        const index = parseInt(document.getElementById('editEventIndex').value);
+        const date = document.getElementById('editEventDate').value;
+        const title = document.getElementById('editEventTitle').value.trim();
+        const amount = parseFloat(document.getElementById('editEventAmount').value) || 0;
+        const type = document.getElementById('editEventType').value;
+
+        if (!date || !title || amount <= 0) {
+          alert('Preencha todos os campos corretamente.');
+          return;
+        }
+
+        events[index] = { ...events[index], date, title, amount, type };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+        bootstrap.Modal.getInstance(document.getElementById('editEventModal')).hide();
+        updateUI();
+        showSuccessMessage('Evento editado com sucesso!');
+      });
+
+      document.getElementById('incomePeriodModal').addEventListener('shown.bs.modal', () => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const incomeEvents = events.filter(e => e.type === 'income' && e.date <= todayStr);
+        const tbody = document.getElementById('incomeDetailsTable');
+        tbody.innerHTML = '';
+        incomeEvents.forEach(e => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${e.date}</td><td>${e.title}</td><td>${e.amount.toLocaleString()} CVE</td>`;
+          tbody.appendChild(tr);
+        });
+        const totalIncome = incomeEvents.reduce((a, b) => a + b.amount, 0);
+        updateElement('incomeTotal', totalIncome.toLocaleString() + ' CVE');
+        const progress = settings.incomeTarget ? Math.min((totalIncome / settings.incomeTarget) * 100, 100) : 0;
+        updateElement('incomeProgress', progress.toFixed(2) + '%');
+
+        let cumulative = 0;
+        const data = incomeEvents.sort((a, b) => a.date.localeCompare(b.date)).map(e => {
+          cumulative += e.amount;
+          return { date: e.date, value: cumulative };
+        });
+        const ctx = document.getElementById('incomeGrowthChart').getContext('2d');
+        if (window.incomeGrowthChartInstance) window.incomeGrowthChartInstance.destroy();
+        window.incomeGrowthChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: data.map(d => d.date),
+            datasets: [{
+              label: 'Renda Acumulada',
+              data: data.map(d => d.value),
+              borderColor: '#28a745',
+              backgroundColor: 'rgba(40, 167, 69, 0.2)',
+              fill: true
+            }]
+          },
+          options: {
+            plugins: { legend: { labels: { color: '#e8ecef' } } },
+            scales: { x: { ticks: { color: '#e8ecef' } }, y: { beginAtZero: true, ticks: { color: '#e8ecef' } } }
+          }
+        });
+      });
+
+      document.getElementById('debtPeriodModal').addEventListener('shown.bs.modal', () => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const totalFutureDebt = events.filter(e => e.type === 'debt' && e.status === 'pending' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+        const { monthlyDebt, quarterlyDebt, yearlyDebt } = calculateDebtByPeriod();
+        updateElement('totalDebtModal', `-${totalFutureDebt.toLocaleString()} CVE`);
+        updateElement('debtMonthly', `-${monthlyDebt.toLocaleString()} CVE`);
+        updateElement('debtQuarterly', `-${quarterlyDebt.toLocaleString()} CVE`);
+        updateElement('debtYearly', `-${yearlyDebt.toLocaleString()} CVE`);
+      });
+
+      document.getElementById('essentialModal').addEventListener('shown.bs.modal', () => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const totalFutureEssential = events.filter(e => e.type === 'essential' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+        const { monthlyEssential, quarterlyEssential, yearlyEssential } = calculateEssentialByPeriod();
+        updateElement('totalEssentialModal', `-${totalFutureEssential.toLocaleString()} CVE`);
+        updateElement('essentialMonthly', `-${monthlyEssential.toLocaleString()} CVE`);
+        updateElement('essentialQuarterly', `-${quarterlyEssential.toLocaleString()} CVE`);
+        updateElement('essentialYearly', `-${yearlyEssential.toLocaleString()} CVE`);
+      });
+
+      document.getElementById('leisureModal').addEventListener('shown.bs.modal', () => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const totalFutureLeisure = events.filter(e => e.type === 'leisure' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+        const { monthlyLeisure, quarterlyLeisure, yearlyLeisure } = calculateLeisureByPeriod();
+        updateElement('totalLeisureModal', `-${totalFutureLeisure.toLocaleString()} CVE`);
+        updateElement('leisureMonthly', `-${monthlyLeisure.toLocaleString()} CVE`);
+        updateElement('leisureQuarterly', `-${quarterlyLeisure.toLocaleString()} CVE`);
+        updateElement('leisureYearly', `-${yearlyLeisure.toLocaleString()} CVE`);
+      });
+
+      document.getElementById('othersModal').addEventListener('shown.bs.modal', () => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const totalFutureOthers = events.filter(e => e.type === 'others' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+        const { monthlyOthers, quarterlyOthers, yearlyOthers } = calculateOthersByPeriod();
+        updateElement('totalOthersModal', `-${totalFutureOthers.toLocaleString()} CVE`);
+        updateElement('othersMonthly', `-${monthlyOthers.toLocaleString()} CVE`);
+        updateElement('othersQuarterly', `-${quarterlyOthers.toLocaleString()} CVE`);
+        updateElement('othersYearly', `-${yearlyOthers.toLocaleString()} CVE`);
+      });
+
+      document.getElementById('fixedModal').addEventListener('shown.bs.modal', () => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const totalFutureFixed = events.filter(e => e.type === 'fixed' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+        const { monthlyFixed, quarterlyFixed, yearlyFixed } = calculateFixedByPeriod();
+        updateElement('totalFixedModal', `-${totalFutureFixed.toLocaleString()} CVE`);
+        updateElement('fixedMonthly', `-${monthlyFixed.toLocaleString()} CVE`);
+        updateElement('fixedQuarterly', `-${quarterlyFixed.toLocaleString()} CVE`);
+        updateElement('fixedYearly', `-${yearlyFixed.toLocaleString()} CVE`);
+      });
+
+      document.getElementById('savingsModal').addEventListener('shown.bs.modal', () => {
+        const totalSavings = events.filter(e => e.type === 'savings' && e.date <= new Date().toISOString().slice(0, 10)).reduce((a, b) => a + b.amount, 0);
+        updateElement('totalSavingsModal', totalSavings.toLocaleString() + ' CVE');
+        updateElement('savingsTargetModal', settings.savingsTarget.toLocaleString() + ' CVE');
+        const savingsProgress = settings.savingsTarget ? Math.min((totalSavings / settings.savingsTarget) * 100, 100) : 0;
+        const savingsProgressBarModal = document.getElementById('savingsProgressBarModal');
+        if (savingsProgressBarModal) {
+          savingsProgressBarModal.style.width = `${savingsProgress}%`;
+          savingsProgressBarModal.setAttribute('aria-valuenow', savingsProgress);
+        }
+        updateElement('savingsProgressModal', savingsProgress.toFixed(2) + '%');
+      });
+
+      document.getElementById('investmentModal').addEventListener('shown.bs.modal', () => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const tbody = document.getElementById('investmentDetailsTable');
+        tbody.innerHTML = '';
+        events.filter(e => e.type === 'investment' && e.date <= todayStr).forEach(e => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${e.date}</td><td>${e.title}</td><td>${e.amount.toLocaleString()} CVE</td><td>${e.investmentType || 'N/A'}</td><td>${e.interestRate ? e.interestRate.toFixed(2) + '%' : 'N/A'}</td><td>${e.maturityDate || 'N/A'}</td>`;
+          tbody.appendChild(tr);
+        });
+
+        const investmentEvents = events.filter(e => e.type === 'investment').sort((a, b) => a.date.localeCompare(b.date));
+        let cumulative = 0;
+        const data = investmentEvents.map(e => {
+          cumulative += e.amount;
+          return { date: e.date, value: cumulative };
+        });
+        const ctx = document.getElementById('investmentGrowthChart').getContext('2d');
+        new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: data.map(d => d.date),
+            datasets: [{
+              label: 'Valor Acumulado',
+              data: data.map(d => d.value),
+              borderColor: '#ff8c00',
+              backgroundColor: 'rgba(255, 140, 0, 0.2)',
+              fill: true
+            }]
+          },
+          options: {
+            plugins: {
+              legend: { labels: { color: "#e8ecef" } }
+            },
+            scales: {
+              x: { ticks: { color: "#e8ecef" } },
+              y: { beginAtZero: true, ticks: { color: "#e8ecef" } }
+            }
+          }
+        });
+      });
+
+      document.getElementById('emergencyModal').addEventListener('shown.bs.modal', () => {
+        const totalEmergency = events.filter(e => e.type === 'emergency' && e.date <= new Date().toISOString().slice(0, 10)).reduce((a, b) => a + (b.amount > 0 ? b.amount : -b.amount), 0);
+        updateElement('totalEmergencyModal', totalEmergency.toLocaleString() + ' CVE');
+        updateElement('emergencyMinModal', settings.emergencyMin.toLocaleString() + ' CVE');
+      });
+
+      updateUI();
+    });
+
+    function calculateRecurrenceDate(baseDate, freq, i) {
+      if (!baseDate || isNaN(baseDate.getTime())) {
+        console.error('Data base inválida');
+        return null;
+      }
+      let eventDate;
+      if (freq === 'monthly') {
+        let year = baseDate.getFullYear();
+        let month = baseDate.getMonth() + i;
+        eventDate = new Date(year, month, baseDate.getDate());
+        if (eventDate.getMonth() !== (month % 12)) {
+          eventDate.setDate(0);
+        }
+      } else {
+        let curr = new Date(baseDate);
+        if (freq === 'daily') curr.setDate(curr.getDate() + i);
+        else if (freq === 'weekly') curr.setDate(curr.getDate() + i * 7);
+        else if (freq === 'yearly') curr.setFullYear(curr.getFullYear() + i);
+        eventDate = curr;
+      }
+      return eventDate.toISOString().slice(0, 10);
+    }
+
+    function calculateIncomeByPeriod() {
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+
+      const dailyIncome = events
+        .filter(e => e.type === 'income' && e.date === todayStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+      const startOfWeekStr = startOfWeek.toISOString().slice(0, 10);
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      const endOfWeekStr = endOfWeek.toISOString().slice(0, 10);
+      const weeklyIncome = events
+        .filter(e => e.type === 'income' && e.date >= startOfWeekStr && e.date <= endOfWeekStr && e.date <= todayStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const startOfMonthStr = startOfMonth.toISOString().slice(0, 10);
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+      const monthlyIncome = events
+        .filter(e => e.type === 'income' && e.date >= startOfMonthStr && e.date <= endOfMonthStr && e.date <= todayStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfYear = new Date(today.getFullYear(), 0, 1);
+      const startOfYearStr = startOfYear.toISOString().slice(0, 10);
+      const yearlyIncome = events
+        .filter(e => e.type === 'income' && e.date >= startOfYearStr && e.date <= todayStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      return { dailyIncome, weeklyIncome, monthlyIncome, yearlyIncome };
+    }
+
+    function calculateDebtByPeriod() {
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const startOfMonthStr = startOfMonth.toISOString().slice(0, 10);
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+      const monthlyDebt = events
+        .filter(e => e.type === 'debt' && e.status === 'pending' && e.date >= todayStr && e.date <= endOfMonthStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfQuarter = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
+      const startOfQuarterStr = startOfQuarter.toISOString().slice(0, 10);
+      const endOfQuarter = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3 + 3, 0);
+      const endOfQuarterStr = endOfQuarter.toISOString().slice(0, 10);
+      const quarterlyDebt = events
+        .filter(e => e.type === 'debt' && e.status === 'pending' && e.date >= todayStr && e.date <= endOfQuarterStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfYear = new Date(today.getFullYear(), 0, 1);
+      const startOfYearStr = startOfYear.toISOString().slice(0, 10);
+      const endOfYear = new Date(today.getFullYear(), 11, 31);
+      const endOfYearStr = endOfYear.toISOString().slice(0, 10);
+      const yearlyDebt = events
+        .filter(e => e.type === 'debt' && e.status === 'pending' && e.date >= todayStr && e.date <= endOfYearStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      return { monthlyDebt, quarterlyDebt, yearlyDebt };
+    }
+
+    function calculateEssentialByPeriod() {
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const startOfMonthStr = startOfMonth.toISOString().slice(0, 10);
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+      const monthlyEssential = events
+        .filter(e => e.type === 'essential' && e.date >= todayStr && e.date <= endOfMonthStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfQuarter = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
+      const startOfQuarterStr = startOfQuarter.toISOString().slice(0, 10);
+      const endOfQuarter = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3 + 3, 0);
+      const endOfQuarterStr = endOfQuarter.toISOString().slice(0, 10);
+      const quarterlyEssential = events
+        .filter(e => e.type === 'essential' && e.date >= todayStr && e.date <= endOfQuarterStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfYear = new Date(today.getFullYear(), 0, 1);
+      const startOfYearStr = startOfYear.toISOString().slice(0, 10);
+      const endOfYear = new Date(today.getFullYear(), 11, 31);
+      const endOfYearStr = endOfYear.toISOString().slice(0, 10);
+      const yearlyEssential = events
+        .filter(e => e.type === 'essential' && e.date >= todayStr && e.date <= endOfYearStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      return { monthlyEssential, quarterlyEssential, yearlyEssential };
+    }
+
+    function calculateLeisureByPeriod() {
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const startOfMonthStr = startOfMonth.toISOString().slice(0, 10);
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+      const monthlyLeisure = events
+        .filter(e => e.type === 'leisure' && e.date >= todayStr && e.date <= endOfMonthStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfQuarter = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
+      const startOfQuarterStr = startOfQuarter.toISOString().slice(0, 10);
+      const endOfQuarter = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3 + 3, 0);
+      const endOfQuarterStr = endOfQuarter.toISOString().slice(0, 10);
+      const quarterlyLeisure = events
+        .filter(e => e.type === 'leisure' && e.date >= todayStr && e.date <= endOfQuarterStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfYear = new Date(today.getFullYear(), 0, 1);
+      const startOfYearStr = startOfYear.toISOString().slice(0, 10);
+      const endOfYear = new Date(today.getFullYear(), 11, 31);
+      const endOfYearStr = endOfYear.toISOString().slice(0, 10);
+      const yearlyLeisure = events
+        .filter(e => e.type === 'leisure' && e.date >= todayStr && e.date <= endOfYearStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      return { monthlyLeisure, quarterlyLeisure, yearlyLeisure };
+    }
+
+    function calculateOthersByPeriod() {
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const startOfMonthStr = startOfMonth.toISOString().slice(0, 10);
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+      const monthlyOthers = events
+        .filter(e => e.type === 'others' && e.date >= todayStr && e.date <= endOfMonthStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfQuarter = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
+      const startOfQuarterStr = startOfQuarter.toISOString().slice(0, 10);
+      const endOfQuarter = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3 + 3, 0);
+      const endOfQuarterStr = endOfQuarter.toISOString().slice(0, 10);
+      const quarterlyOthers = events
+        .filter(e => e.type === 'others' && e.date >= todayStr && e.date <= endOfQuarterStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfYear = new Date(today.getFullYear(), 0, 1);
+      const startOfYearStr = startOfYear.toISOString().slice(0, 10);
+      const endOfYear = new Date(today.getFullYear(), 11, 31);
+      const endOfYearStr = endOfYear.toISOString().slice(0, 10);
+      const yearlyOthers = events
+        .filter(e => e.type === 'others' && e.date >= todayStr && e.date <= endOfYearStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      return { monthlyOthers, quarterlyOthers, yearlyOthers };
+    }
+
+    function calculateFixedByPeriod() {
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const startOfMonthStr = startOfMonth.toISOString().slice(0, 10);
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const endOfMonthStr = endOfMonth.toISOString().slice(0, 10);
+      const monthlyFixed = events
+        .filter(e => e.type === 'fixed' && e.date >= todayStr && e.date <= endOfMonthStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfQuarter = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
+      const startOfQuarterStr = startOfQuarter.toISOString().slice(0, 10);
+      const endOfQuarter = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3 + 3, 0);
+      const endOfQuarterStr = endOfQuarter.toISOString().slice(0, 10);
+      const quarterlyFixed = events
+        .filter(e => e.type === 'fixed' && e.date >= todayStr && e.date <= endOfQuarterStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      const startOfYear = new Date(today.getFullYear(), 0, 1);
+      const startOfYearStr = startOfYear.toISOString().slice(0, 10);
+      const endOfYear = new Date(today.getFullYear(), 11, 31);
+      const endOfYearStr = endOfYear.toISOString().slice(0, 10);
+      const yearlyFixed = events
+        .filter(e => e.type === 'fixed' && e.date >= todayStr && e.date <= endOfYearStr)
+        .reduce((a, b) => a + b.amount, 0);
+
+      return { monthlyFixed, quarterlyFixed, yearlyFixed };
+    }
+
+    window.confirmDeleteEvent = function(id) {
+      selectedEventId = id;
+      const event = events.find(e => e.id === id);
+      if (!event) return;
+      document.getElementById('deleteEventTitle').innerText = event.title;
+      document.getElementById('deleteEventDate').innerText = event.date;
+      document.getElementById('deleteEventAmount').innerText = event.amount.toLocaleString();
+      const modal = new bootstrap.Modal(document.getElementById('deleteEventModal'));
+      modal.show();
+    }
+
+    window.removeSingleEvent = function() {
+      events = events.filter(e => e.id !== selectedEventId);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+      bootstrap.Modal.getInstance(document.getElementById('deleteEventModal')).hide();
+      updateUI();
+      showSuccessMessage('Evento removido com sucesso!');
+    }
+
+    window.removeAllOccurrences = function() {
+      const event = events.find(e => e.id === selectedEventId);
+      if (!event) return;
+      const baseTitle = event.type === 'debt' ? event.title.replace(/ Parcela \d+$/, '') : event.title;
+      events = events.filter(e => {
+        if (e.type !== event.type) return true;
+        const eBaseTitle = e.type === 'debt' ? e.title.replace(/ Parcela \d+$/, '') : e.title;
+        return eBaseTitle !== baseTitle || (event.type === 'debt' && e.amount !== event.amount);
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+      bootstrap.Modal.getInstance(document.getElementById('deleteEventModal')).hide();
+      updateUI();
+      showSuccessMessage('Todas as ocorrências removidas com sucesso!');
+    }
+
+    window.markAsPaid = function(id) {
+      const eventIndex = events.findIndex(e => e.id === id);
+      if (eventIndex !== -1) {
+        events[eventIndex].status = 'paid';
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+        updateUI();
+        showSuccessMessage('Dívida marcada como paga com sucesso!');
+      }
+    }
+
+    window.openDetailsModal = function(id) {
+      const event = events.find(e => e.id === id);
+      if (!event) return;
+      document.getElementById('detailEventDate').innerText = event.date;
+      document.getElementById('detailEventTitle').innerText = event.title;
+      document.getElementById('detailEventAmount').innerText = event.amount.toLocaleString();
+      document.getElementById('detailEventType').innerText = getBadgeLabel(event.type);
+      document.getElementById('detailEventStatus').innerText = event.status || 'N/A';
+      selectedEventId = id;
+      const detailsModal = new bootstrap.Modal(document.getElementById('eventDetailsModal'));
+      detailsModal.show();
+    }
+
+    window.openEditFromDetails = function() {
+      const event = events.find(e => e.id === selectedEventId);
+      if (!event) return;
+      const eventIndex = events.indexOf(event);
+      document.getElementById('editEventIndex').value = eventIndex;
+      document.getElementById('editEventDate').value = event.date;
+      document.getElementById('editEventTitle').value = event.title;
+      document.getElementById('editEventAmount').value = event.amount;
+      document.getElementById('editEventType').value = event.type;
+      bootstrap.Modal.getInstance(document.getElementById('eventDetailsModal')).hide();
+      const editModal = new bootstrap.Modal(document.getElementById('editEventModal'));
+      editModal.show();
+    }
+
+    function renderDistributionChart() {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const income = events.filter(e => e.type === 'income').reduce((a, b) => a + b.amount, 0);
+      const debt = events.filter(e => e.type === 'debt' && e.status === 'pending' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+      const essential = events.filter(e => e.type === 'essential' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+      const leisure = events.filter(e => e.type === 'leisure' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+      const savings = events.filter(e => e.type === 'savings' && e.date <= todayStr).reduce((a, b) => a + b.amount, 0);
+      const investment = events.filter(e => e.type === 'investment' && e.date <= todayStr).reduce((a, b) => a + b.amount, 0);
+      const emergency = events.filter(e => e.type === 'emergency' && e.date <= todayStr).reduce((a, b) => a + (b.amount > 0 ? b.amount : -b.amount), 0);
+      const others = events.filter(e => e.type === 'others' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+      const fixed = events.filter(e => e.type === 'fixed' && e.date >= todayStr).reduce((a, b) => a + b.amount, 0);
+
+      if (distributionChartInstance) distributionChartInstance.destroy();
+      distributionChartInstance = new Chart(document.getElementById('distributionChart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Renda', 'Dívida', 'Essencial', 'Lazer', 'Poupança', 'Investimento', 'Cofre', 'Outros', 'Fixas'],
+          datasets: [{
+            data: [income, debt, essential, leisure, savings, investment, emergency, others, fixed],
+            backgroundColor: ['#1ea97c', '#e44a4a', '#fcb900', '#09a6c4', '#6a5acd', '#ff8c00', '#9932cc', '#8a8a8a', '#4a7db8']
+          }]
+        },
+        options: {
+          plugins: {
+            legend: { labels: { color: "#e8ecef" } }
+          }
+        }
+      });
+    }
+
+    function renderIncomeChart(mode) {
+      let groupFormat, groupLabel;
+      if (mode === "daily") {
+        groupFormat = d => d.toISOString().slice(0, 10);
+        groupLabel = "Dia";
+      } else if (mode === "weekly") {
+        groupFormat = d => {
+          const year = d.getFullYear();
+          const week = Math.ceil((((d - new Date(year, 0, 1)) / 86400000) + new Date(year, 0, 1).getDay() + 1) / 7);
+          return `${year}-W${week}`;
+        };
+        groupLabel = "Semana";
+      } else if (mode === "monthly") {
+        groupFormat = d => `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+        groupLabel = "Mês";
+      } else {
+        groupFormat = d => d.getFullYear().toString();
+        groupLabel = "Ano";
+      }
+      let grouped = {};
+      events.forEach(e => {
+        let date = new Date(e.date);
+        let key = groupFormat(date);
+        if (!grouped[key]) grouped[key] = { income: 0, debt: 0, essential: 0, leisure: 0, savings: 0, investment: 0, emergency: 0, others: 0, fixed: 0 };
+        if (e.date <= new Date().toISOString().slice(0, 10) && (!e.status || e.status === 'paid')) {
+          grouped[key][e.type] += e.amount;
+        }
+      });
+      const labels = Object.keys(grouped).sort();
+      const renda = labels.map(l => grouped[l].income);
+      const divida = labels.map(l => grouped[l].debt);
+      const essencial = labels.map(l => grouped[l].essential);
+      const lazer = labels.map(l => grouped[l].leisure);
+      const poupanca = labels.map(l => grouped[l].savings);
+      const investimento = labels.map(l => grouped[l].investment);
+      const cofre = labels.map(l => grouped[l].emergency);
+      const outros = labels.map(l => grouped[l].others);
+      const fixas = labels.map(l => grouped[l].fixed);
+
+      if (incomeChartInstance) incomeChartInstance.destroy();
+      incomeChartInstance = new Chart(document.getElementById('incomeChart'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Renda', data: renda, backgroundColor: '#1ea97c' },
+            { label: 'Dívida', data: divida, backgroundColor: '#e44a4a' },
+            { label: 'Essencial', data: essencial, backgroundColor: '#fcb900' },
+            { label: 'Lazer', data: lazer, backgroundColor: '#09a6c4' },
+            { label: 'Poupança', data: poupanca, backgroundColor: '#6a5acd' },
+            { label: 'Investimento', data: investimento, backgroundColor: '#ff8c00' },
+            { label: 'Cofre', data: cofre, backgroundColor: '#9932cc' },
+            { label: 'Outros', data: outros, backgroundColor: '#8a8a8a' },
+            { label: 'Fixas', data: fixas, backgroundColor: '#4a7db8' }
+          ]
+        },
+        options: {
+          plugins: {
+            legend: { labels: { color: "#e8ecef" } },
+            tooltip: { mode: 'index', intersect: false }
+          },
+          responsive: true,
+          scales: {
+            x: { stacked: true, ticks: { color: "#e8ecef" } },
+            y: { stacked: true, beginAtZero: true, ticks: { color: "#e8ecef" } }
+          }
+        }
+      });
+    }
+
+    function renderDebtSchedule() {
+  if (debtChartInstance) debtChartInstance.destroy();
+  const debtEvents = events.filter(e => e.type === 'debt');
+  const dataMapPending = {};
+  const dataMapPaid = {};
+  debtEvents.forEach(e => {
+    const map = e.status === 'paid' ? dataMapPaid : dataMapPending;
+    map[e.date] = (map[e.date] || 0) + e.amount;
+  });
+  const allDates = [...new Set([...Object.keys(dataMapPending), ...Object.keys(dataMapPaid)])].sort();
+  const pendingAmounts = allDates.map(date => dataMapPending[date] || 0);
+  const paidAmounts = allDates.map(date => dataMapPaid[date] || 0);
+
+  debtChartInstance = new Chart(document.getElementById('debtScheduleChart'), {
+    type: 'bar',
+    data: {
+      labels: allDates,
+      datasets: [
+        {
+          label: 'Dívidas Pendentes',
+          data: pendingAmounts,
+          backgroundColor: '#e44a4a'
+        },
+        {
+          label: 'Dívidas Pagas',
+          data: paidAmounts,
+          backgroundColor: '#28a745'
+        }
+      ]
+    },
+    options: {
+      plugins: {
+        legend: { labels: { color: "#e8ecef" } }
+      },
+      scales: {
+        x: { ticks: { color: "#e8ecef" } },
+        y: { beginAtZero: true, ticks: { color: "#e8ecef" } }
+      }
+    }
+  });
+}
+
+function renderInvestmentChart() {
+  if (investmentChartInstance) investmentChartInstance.destroy();
+  const investmentEvents = events.filter(e => e.type === 'investment').sort((a, b) => a.date.localeCompare(b.date));
+  let cumulative = 0;
+  const investmentData = investmentEvents.map(e => {
+    cumulative += e.amount;
+    return { date: e.date, value: cumulative };
+  });
+
+  investmentChartInstance = new Chart(document.getElementById('investmentChart'), {
+    type: 'line',
+    data: {
+      labels: investmentData.map(d => d.date),
+      datasets: [{
+        label: 'Investimento Acumulado',
+        data: investmentData.map(d => d.value),
+        borderColor: '#ff8c00',
+        backgroundColor: 'rgba(255, 140, 0, 0.2)',
+        fill: true
+      }]
+    },
+    options: {
+      plugins: { legend: { labels: { color: "#e8ecef" } } },
+      scales: { x: { ticks: { color: "#e8ecef" } }, y: { beginAtZero: true, ticks: { color: "#e8ecef" } } }
+    }
+  });
+}
+
+function renderMonthlySummaryChart(mode = document.getElementById('chartViewMode').value) {
+  if (monthlySummaryChartInstance) monthlySummaryChartInstance.destroy();
+
+  let groupFormat, labels;
+  if (mode === "daily") {
+    const today = new Date();
+    labels = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return d.toISOString().slice(0, 10);
+    }).reverse();
+    groupFormat = d => d;
+  } else if (mode === "weekly") {
+    const today = new Date();
+    labels = Array.from({ length: 12 }, (_, i) => {
+      const start = new Date(today);
+      start.setDate(start.getDate() - start.getDay() - 7 * i);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      return `${start.toISOString().slice(0, 10)} to ${end.toISOString().slice(0, 10)}`;
+    }).reverse();
+    groupFormat = d => {
+      const date = new Date(d);
+      const start = new Date(date);
+      start.setDate(start.getDate() - start.getDay());
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      return `${start.toISOString().slice(0, 10)} to ${end.toISOString().slice(0, 10)}`;
+    };
+  } else if (mode === "monthly") {
+    const currentYear = new Date().getFullYear();
+    labels = Array.from({ length: 12 }, (_, i) => `${currentYear}-${(i + 1).toString().padStart(2, '0')}`);
+    groupFormat = d => d.slice(0, 7);
+  } else {
+    const years = [...new Set(events.map(e => new Date(e.date).getFullYear()))].sort();
+    labels = years.map(y => y.toString());
+    groupFormat = d => new Date(d).getFullYear().toString();
+  }
+
+  const groupedData = {};
+  events.forEach(e => {
+    const key = groupFormat(e.date);
+    if (!groupedData[key]) groupedData[key] = { income: 0, expenses: 0 };
+    if (e.type === 'income') {
+      groupedData[key].income += e.amount;
+    } else if (['debt', 'essential', 'leisure', 'others', 'fixed'].includes(e.type) && (!e.status || e.status === 'paid')) {
+      groupedData[key].expenses += e.amount;
+    }
+  });
+
+  const dataLabels = mode === "daily" || mode === "weekly" ? labels : labels.filter(l => groupedData[l]);
+  const incomeData = dataLabels.map(l => groupedData[l]?.income || 0);
+  const expensesData = dataLabels.map(l => groupedData[l]?.expenses || 0);
+
+  monthlySummaryChartInstance = new Chart(document.getElementById('monthlySummaryChart'), {
+    type: 'bar',
+    data: {
+      labels: dataLabels,
+      datasets: [
+        { label: 'Renda', data: incomeData, backgroundColor: '#1ea97c' },
+        { label: 'Despesas', data: expensesData, backgroundColor: '#e44a4a' }
+      ]
+    },
+    options: {
+      plugins: { legend: { labels: { color: "#e8ecef" } } },
+      scales: { x: { ticks: { color: "#e8ecef" } }, y: { beginAtZero: true, ticks: { color: "#e8ecef" } } }
+    }
+  });
+}
+</script>
+</body>
+</html>

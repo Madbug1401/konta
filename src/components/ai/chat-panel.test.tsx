@@ -35,7 +35,7 @@ const recorderState = {
 // os outros testes deste ficheiro deixam-no `null` (sem cartão visível).
 let pendingState: { confirmationToken: string; summary: string; riskTier: string } | null = null;
 
-vi.mock("@/components/assistant-provider", () => ({
+vi.mock("@/components/ai/assistant-provider", () => ({
   useAssistant: () => ({
     turns: [],
     get pending() {
@@ -52,7 +52,7 @@ vi.mock("@/components/assistant-provider", () => ({
   }),
 }));
 
-vi.mock("@/components/use-audio-recorder", () => ({
+vi.mock("@/components/ai/use-audio-recorder", () => ({
   useAudioRecorder: (onTranscribed: (text: string) => void) => {
     onTranscribedCallback = onTranscribed;
     return recorderState;

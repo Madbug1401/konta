@@ -1,8 +1,8 @@
 import type { CSSProperties } from "react";
 import { Landmark, PiggyBank, Pencil, Shield, TrendingUp, Wallet, CreditCard, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
-import { AccountArchiveButton } from "@/components/account-archive-button";
-import { AccountDeleteButton } from "@/components/account-delete-button";
+import { AccountArchiveButton } from "@/components/accounts/account-archive-button";
+import { AccountDeleteButton } from "@/components/accounts/account-delete-button";
 import { Card } from "@/components/ui/card";
 import { MoneyDisplay } from "@/components/money-display";
 import { getAccountColorHex } from "@/lib/account-colors";

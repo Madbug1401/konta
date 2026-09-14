@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { TransactionRowActions } from "@/components/transaction-row-actions";
+import { TransactionRowActions } from "@/components/transactions/transaction-row-actions";
 import { MoneyDisplay } from "@/components/money-display";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";

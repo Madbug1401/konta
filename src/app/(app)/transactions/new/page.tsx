@@ -1,5 +1,5 @@
-import { AccountForm } from "@/components/account-form";
-import { TransactionForm } from "@/components/transaction-form";
+import { AccountForm } from "@/components/accounts/account-form";
+import { TransactionForm } from "@/components/transactions/transaction-form";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getSessionUser } from "@/lib/auth/session";
 import { listAccounts } from "@/lib/db/accounts";

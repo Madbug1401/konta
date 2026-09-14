@@ -14,7 +14,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
-import { useAssistant } from "@/components/assistant-provider";
+import { useAssistant } from "@/components/ai/assistant-provider";
 
 export function AnalyticsUiActionBridge() {
   const { pendingUiAction, consumePendingUiAction } = useAssistant();

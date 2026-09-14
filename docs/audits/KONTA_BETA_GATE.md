@@ -1,7 +1,7 @@
 # KONTA — BETA GATE
 
 **Data**: 29/08/2026
-**Ponto de partida**: `docs/GO_TO_BETA_AUDIT.md` (29/08/2026), veredito original **NOT BETA READY**, com uma lista curta de 6 pontos de risco real (secção 19 desse documento) mais uma lista adicional de 12 prioridades de hardening definida pelo utilizador para esta tarefa.
+**Ponto de partida**: `docs/audits/GO_TO_BETA_AUDIT.md` (29/08/2026), veredito original **NOT BETA READY**, com uma lista curta de 6 pontos de risco real (secção 19 desse documento) mais uma lista adicional de 12 prioridades de hardening definida pelo utilizador para esta tarefa.
 **Método**: cada uma das 12 prioridades foi implementada, testada com um teste automático dedicado quando fazia sentido, e verificada de facto (não só por inspeção de código) — contra um Postgres 16 real e/ou um servidor HTTP real corrido a partir do build de produção, incluindo simulações reais de ataque (ownership de categoria, base de dados indisponível, backup/restore ponta-a-ponta). No final: `npm run build`, `npx tsc --noEmit`, `npx eslint .` e `npx vitest run` — os quatro a passar sem erros, 61 testes.
 
 ---

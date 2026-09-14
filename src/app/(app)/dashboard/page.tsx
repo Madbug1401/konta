@@ -1,9 +1,9 @@
-import { AccountCard } from "@/components/account-card";
-import { AccountForm } from "@/components/account-form";
-import { DashboardCategoryChart } from "@/components/dashboard-category-chart";
-import { FirstStepsCard } from "@/components/first-steps-card";
+import { AccountCard } from "@/components/accounts/account-card";
+import { AccountForm } from "@/components/accounts/account-form";
+import { DashboardCategoryChart } from "@/components/dashboard/dashboard-category-chart";
+import { FirstStepsCard } from "@/components/dashboard/first-steps-card";
 import { MoneyDisplay } from "@/components/money-display";
-import { TransactionItem } from "@/components/transaction-item";
+import { TransactionItem } from "@/components/transactions/transaction-item";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getSessionUser } from "@/lib/auth/session";

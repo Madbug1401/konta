@@ -15,13 +15,13 @@
 
 import { FileText, Image as ImageIcon, Loader2, Mic, Paperclip, Send, Sparkles, Square, X } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from "react";
-import { AiMarkdown } from "@/components/ai-markdown";
-import { AiVisualizationView } from "@/components/ai-visualization";
+import { AiMarkdown } from "@/components/ai/ai-markdown";
+import { AiVisualizationView } from "@/components/ai/ai-visualization";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { useAssistant } from "@/components/assistant-provider";
-import { useAudioRecorder } from "@/components/use-audio-recorder";
+import { useAssistant } from "@/components/ai/assistant-provider";
+import { useAudioRecorder } from "@/components/ai/use-audio-recorder";
 import { useToast } from "@/components/toast-provider";
 import { cn } from "@/lib/utils";
 

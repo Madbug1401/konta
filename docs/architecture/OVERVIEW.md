@@ -67,7 +67,7 @@ só o segundo ponto de entrada.
 | `/api/recurring-transactions/:id` | GET, PATCH | sessão | Detalhe, edição |
 | `/api/feedback` | POST | sessão | Envia feedback do utilizador autenticado |
 | `/api/health` | GET | — | Healthcheck de infraestrutura (processo + ligação à base de dados) |
-| `/api/ai/chat` | POST | sessão | **Milestone 1 — Konta AI.** Mensagem de texto livre → resposta do Claude, sem tools nem contexto financeiro. Ver `src/lib/ai/gateway.ts` e `docs/konta-ai-design.html`. |
+| `/api/ai/chat` | POST | sessão | **Milestone 1 — Konta AI.** Mensagem de texto livre → resposta do Claude, sem tools nem contexto financeiro. Ver `src/lib/ai/gateway.ts` e `docs/design/konta-ai-design.html`. |
 
 Autenticação: cookie `konta_session` (httpOnly) para a Web, ou
 `Authorization: Bearer <token>` para clientes não-browser (mobile) — ver
@@ -92,7 +92,7 @@ regressão explícita dos 5 bugs da auditoria (`audit-regressions.test.ts`).
 
 ## Konta AI (`src/lib/ai`)
 
-Especificação completa em `docs/konta-ai-design.html`. Implementado até agora:
+Especificação completa em `docs/design/konta-ai-design.html`. Implementado até agora:
 
 | Ficheiro/diretório | Responsabilidade | Milestone |
 |---|---|---|
@@ -103,7 +103,7 @@ Especificação completa em `docs/konta-ai-design.html`. Implementado até agora
 
 ### Tool Registry, Permission Layer e Executor (`src/lib/ai/tools`, Milestone 3)
 
-Prepara o troço `Claude → Tool Registry → Permission/Risk Layer → Tool Executor → Financial Engine/Backend → DB` da arquitetura-alvo (`docs/konta-ai-design.html`, secções D/E/F) — sem ainda ligar o Claude a nada disto.
+Prepara o troço `Claude → Tool Registry → Permission/Risk Layer → Tool Executor → Financial Engine/Backend → DB` da arquitetura-alvo (`docs/design/konta-ai-design.html`, secções D/E/F) — sem ainda ligar o Claude a nada disto.
 
 **Tool contract** (`types.ts`) — cada tool em `tools/tools/*.ts` é um objeto `AiTool<TParams, TResult>`:
 

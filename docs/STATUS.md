@@ -361,7 +361,7 @@ Konta AI já tem uma primeira experiência real (Milestones 1–6 + Analytics:
 chat + tools com confirmação, input multimodal, propostas/confirmação
 agrupada, voz, cobertura completa de contas/dívidas/metas/recorrências/
 investimentos, e uma camada de análise financeira profunda com página
-dedicada) — deixou de ser o próximo passo em aberto. `docs/KONTA_BETA_GATE.md`
+dedicada) — deixou de ser o próximo passo em aberto. `docs/audits/KONTA_BETA_GATE.md`
 (29/08/2026) classifica o projeto como **NOT BETA READY**, mas apenas por uma
 checklist de infraestrutura de produção (HTTPS/TLS real, `docker build`
 confirmado num ambiente com Docker Hub, cron de backup agendado, segredos de
@@ -369,7 +369,7 @@ produção novos, ciclo backup→restauro real) — não por dívida de código.
 Frentes em aberto, sem uma depender da outra:
 
 1. **Fechar o Beta Gate de infraestrutura** — os 5 pontos de
-   `docs/KONTA_BETA_GATE.md`, secção "Ainda bloqueia Beta", executáveis num
+   `docs/audits/KONTA_BETA_GATE.md`, secção "Ainda bloqueia Beta", executáveis num
    VPS real seguindo `docs/architecture/DEPLOYMENT.md` e
    `docs/architecture/BACKUP.md`.
 2. **Evoluir o Konta AI** — `AiActionLog` persistente, memória entre

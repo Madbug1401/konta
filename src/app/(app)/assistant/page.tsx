@@ -1,4 +1,4 @@
-import { ChatPanel } from "@/components/chat-panel";
+import { ChatPanel } from "@/components/ai/chat-panel";
 import { getSessionUser } from "@/lib/auth/session";
 import { isAiEnabled } from "@/lib/db/users";
 import { Card } from "@/components/ui/card";

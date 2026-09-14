@@ -11,9 +11,9 @@
 
 import { Loader2, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { AiMarkdown } from "@/components/ai-markdown";
-import { AiVisualizationView } from "@/components/ai-visualization";
-import { useAssistant } from "@/components/assistant-provider";
+import { AiMarkdown } from "@/components/ai/ai-markdown";
+import { AiVisualizationView } from "@/components/ai/ai-visualization";
+import { useAssistant } from "@/components/ai/assistant-provider";
 import type { AnalyticsPageContext } from "@/lib/ai/chat/analytics-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";

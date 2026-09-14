@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { TransactionForm } from "@/components/transaction-form";
+import { TransactionForm } from "@/components/transactions/transaction-form";
 import { getSessionUser } from "@/lib/auth/session";
 import { listAccounts } from "@/lib/db/accounts";
 import { listCategories } from "@/lib/db/categories";

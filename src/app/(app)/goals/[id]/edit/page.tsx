@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { GoalEditForm } from "@/components/goal-edit-form";
+import { GoalEditForm } from "@/components/goals/goal-edit-form";
 import { getSessionUser } from "@/lib/auth/session";
 import { getGoalById } from "@/lib/db/goals";
 

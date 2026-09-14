@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AccountEditForm } from "@/components/account-edit-form";
+import { AccountEditForm } from "@/components/accounts/account-edit-form";
 import { getSessionUser } from "@/lib/auth/session";
 import { getAccountById } from "@/lib/db/accounts";
 import type { AccountColorId } from "@/lib/account-colors";

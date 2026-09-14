@@ -16,7 +16,7 @@ ficheiros reais deste repositório ou por pesquisa em fontes oficiais),
 **TESTADO LOCALMENTE** (corrido de facto neste ambiente de desenvolvimento),
 **DOCUMENTADO** (procedimento escrito e correto, mas sem execução possível
 aqui), ou **NÃO TESTADO — DEPENDE DA ORACLE CLOUD** (só pode ser confirmado
-na VM real). Ver `docs/KONTA_BETA_GATE.md` e `DECISIONS.md` para o
+na VM real). Ver `docs/audits/KONTA_BETA_GATE.md` e `DECISIONS.md` para o
 histórico completo desta distinção.
 
 ---

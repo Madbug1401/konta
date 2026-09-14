@@ -1,6 +1,6 @@
 # Migração do protótipo (localStorage) para o Konta
 
-O protótipo (`index (4).html`) guarda tudo em dois valores do `localStorage`
+O protótipo (`docs/design/prototipo-localstorage.html`) guarda tudo em dois valores do `localStorage`
 do browser:
 
 - `financeEvents` — array de eventos: `{ id, date, title, amount, type,

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-import { InvestmentDetailForm } from "@/components/investment-detail-form";
-import { ValuationForm } from "@/components/valuation-form";
+import { InvestmentDetailForm } from "@/components/investments/investment-detail-form";
+import { ValuationForm } from "@/components/investments/valuation-form";
 import { Card } from "@/components/ui/card";
 import { MoneyDisplay } from "@/components/money-display";
 import { getSessionUser } from "@/lib/auth/session";

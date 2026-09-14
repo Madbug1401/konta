@@ -1,5 +1,5 @@
-import { GoalCard } from "@/components/goal-card";
-import { GoalForm } from "@/components/goal-form";
+import { GoalCard } from "@/components/goals/goal-card";
+import { GoalForm } from "@/components/goals/goal-form";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getSessionUser } from "@/lib/auth/session";
 import { listAccounts } from "@/lib/db/accounts";

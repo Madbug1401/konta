@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { DebtEditForm } from "@/components/debt-edit-form";
+import { DebtEditForm } from "@/components/debts/debt-edit-form";
 import { getSessionUser } from "@/lib/auth/session";
 import { getDebtById } from "@/lib/db/debts";
 

@@ -1,5 +1,5 @@
-import { RecurringTransactionCard } from "@/components/recurring-transaction-card";
-import { RecurringTransactionForm } from "@/components/recurring-transaction-form";
+import { RecurringTransactionCard } from "@/components/recurring/recurring-transaction-card";
+import { RecurringTransactionForm } from "@/components/recurring/recurring-transaction-form";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getSessionUser } from "@/lib/auth/session";
 import { listAccounts } from "@/lib/db/accounts";

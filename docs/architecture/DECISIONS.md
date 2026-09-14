@@ -792,7 +792,7 @@ preservando a app tal como está.
 **Decisão**: **Render (um único Web Service Free, Docker, a correr a
 aplicação Next.js completa tal como já corre hoje) + Neon (Postgres Free)
 — sem usar a Vercel.** Análise completa em
-`docs/ZERO_COST_DEPLOYMENT_AUDIT.md`; resumo do porquê de não seguir o
+`docs/audits/ZERO_COST_DEPLOYMENT_AUDIT.md`; resumo do porquê de não seguir o
 diagrama original (Vercel para o frontend, Render para a API):
 
 1. **Este projeto não é um frontend separado de uma API** — confirmado por

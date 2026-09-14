@@ -1,5 +1,5 @@
-import { DebtCard } from "@/components/debt-card";
-import { DebtForm } from "@/components/debt-form";
+import { DebtCard } from "@/components/debts/debt-card";
+import { DebtForm } from "@/components/debts/debt-form";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getSessionUser } from "@/lib/auth/session";
 import { listAccounts } from "@/lib/db/accounts";

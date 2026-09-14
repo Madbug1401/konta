@@ -2,7 +2,7 @@
 
 Guia passo a passo para colocar o Konta online sem gastar dinheiro, sem
 esperar pela Oracle Cloud, escrito para quem desenvolve em Windows. Ver
-`docs/ZERO_COST_DEPLOYMENT_AUDIT.md` para a análise completa e a
+`docs/audits/ZERO_COST_DEPLOYMENT_AUDIT.md` para a análise completa e a
 justificação de cada decisão — este documento é só o "como".
 
 **Convenção de rigor**: **CONFIRMADO** (verificado nesta tarefa, por

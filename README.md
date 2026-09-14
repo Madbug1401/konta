@@ -81,7 +81,7 @@ arquitetura da app entre eles:
 
 - **Zero-cost (Beta atual)** — Render (Web Service, Docker) + Neon
   (PostgreSQL gerido), sem cartão de crédito, $0/mês. Ver
-  `docs/ZERO_COST_DEPLOYMENT_AUDIT.md` (análise completa) e
+  `docs/audits/ZERO_COST_DEPLOYMENT_AUDIT.md` (análise completa) e
   `docs/operations/RENDER-NEON.md` (passo a passo).
 - **Self-host (futuro)** — Oracle Cloud Always Free (VM Ampere A1 ARM64),
   Docker Compose com Postgres e Caddy próprios. Ver
@@ -104,5 +104,5 @@ Ainda não implementado (por desenho, não por esquecimento — ver
 `docs/architecture/OVERVIEW.md`, "O que fica para o próximo milestone"):
 geração automática de transações recorrentes, script de migração do
 protótipo pronto a correr, adoção final do Prisma Client, e qualquer camada
-de Konta AI (especificação fechada em `docs/konta-ai-design.html`, nenhum
+de Konta AI (especificação fechada em `docs/design/konta-ai-design.html`, nenhum
 código escrito ainda).

@@ -2,7 +2,7 @@
 
 **Data**: 30/08/2026
 **Pedido**: "testa o aplicativo completo e diz-me se já está pronto para libertar a utilizadores".
-**Âmbito**: só o código deste pacote (as 6 fases do plano aprovado). `docs/GO_TO_BETA_AUDIT.md`, `docs/KONTA_BETA_GATE.md` e `docs/ZERO_COST_DEPLOYMENT_AUDIT.md` (todos de 29/08/2026) continuam válidos para tudo o resto — segurança base, hardening, decisão de deployment Render+Neon — e não foram re-auditados aqui.
+**Âmbito**: só o código deste pacote (as 6 fases do plano aprovado). `docs/audits/GO_TO_BETA_AUDIT.md`, `docs/audits/KONTA_BETA_GATE.md` e `docs/audits/ZERO_COST_DEPLOYMENT_AUDIT.md` (todos de 29/08/2026) continuam válidos para tudo o resto — segurança base, hardening, decisão de deployment Render+Neon — e não foram re-auditados aqui.
 **Método**: teste manual ponta-a-ponta contra o `npm run dev` real do utilizador (Postgres real, não mocks) através do browser, mais leitura linha-a-linha das rotas/funções novas. Sempre que um bug real apareceu, foi corrigido, testado (automático quando fazia sentido) e sincronizado para o teu computador — não ficou só registado.
 
 ## Bugs encontrados e corrigidos
@@ -37,4 +37,4 @@ O **Património total** do Dashboard reflete sempre o livro de transações reai
 Duas coisas a não esquecer antes de dizeres "está no ar":
 
 1. **Nada disto foi ainda publicado no Beta em produção.** O deployment Render+Neon que já está a correr é anterior a todo este pacote (Dívidas, Metas, cores, e as seis fases de hoje) — este trabalho existe só nos commits locais/sandbox até fazeres o deploy real (push para o branch que o Render publica).
-2. **Os bloqueios de infraestrutura já identificados em `docs/KONTA_BETA_GATE.md` continuam a aplicar-se** (TLS — resolvido pelo Render, que dá HTTPS gerido —, mas confirma um ciclo real de backup/restauro contra a base de dados Neon de produção, e gera segredos (`AUTH_SECRET`, password da base de dados) novos e nunca os de desenvolvimento). Nenhum destes é um problema de código; são passos mecânicos de arranque que só fazem sentido no servidor real.
+2. **Os bloqueios de infraestrutura já identificados em `docs/audits/KONTA_BETA_GATE.md` continuam a aplicar-se** (TLS — resolvido pelo Render, que dá HTTPS gerido —, mas confirma um ciclo real de backup/restauro contra a base de dados Neon de produção, e gera segredos (`AUTH_SECRET`, password da base de dados) novos e nunca os de desenvolvimento). Nenhum destes é um problema de código; são passos mecânicos de arranque que só fazem sentido no servidor real.

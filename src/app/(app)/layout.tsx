@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { AssistantProvider } from "@/components/assistant-provider";
+import { AssistantProvider } from "@/components/ai/assistant-provider";
 import { isAdminEmail } from "@/lib/auth/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { materializeDueOccurrences } from "@/lib/db/recurring-transactions";
