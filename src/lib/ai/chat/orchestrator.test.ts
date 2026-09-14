@@ -101,6 +101,30 @@ describe("sendMessage", () => {
     expect(lastMessage).toEqual({ role: "user", content: [{ type: "tool_result", toolUseId: "toolu_1", content: JSON.stringify({ accounts: [] }), isError: undefined }] });
   });
 
+  it("[Correção — bug reportado em uso real] resultado de uma tool com campos bigint (ex: as tools de analytics, que devolvem *Minor diretamente) nunca lança ao serializar — bigint vira Number", async () => {
+    setDefaults();
+    sendChatTurnMock
+      .mockResolvedValueOnce({
+        stopReason: "tool_use",
+        content: [{ type: "tool_use", id: "toolu_1", name: "get_category_analysis", input: {} }],
+      })
+      .mockResolvedValueOnce({ stopReason: "end_turn", content: [{ type: "text", text: "Aqui estão as tuas categorias." }] });
+    executeToolMock.mockResolvedValue({
+      status: "executed",
+      toolName: "get_category_analysis",
+      riskTier: "LOW",
+      result: { rows: [{ categoryName: "Renda", currentMinor: 500000n, current: "5.000,00 CVE" }] },
+    });
+    const { sendMessage } = await import("./orchestrator");
+
+    const result = await sendMessage({ userId: "user-1", message: "Por que aumentaram as minhas despesas?" });
+
+    expect(result).toEqual({ type: "final", reply: "Aqui estão as tuas categorias." });
+    const secondCallMessages = sendChatTurnMock.mock.calls[1][0].messages;
+    const lastMessage = secondCallMessages[secondCallMessages.length - 1];
+    expect(lastMessage.content[0].content).toBe(JSON.stringify({ rows: [{ categoryName: "Renda", currentMinor: 500000, current: "5.000,00 CVE" }] }));
+  });
+
   it("Milestone Analytics — set_analytics_view (LOW): o uiAction válido do resultado é extraído e anexado ao outcome final", async () => {
     setDefaults();
     sendChatTurnMock

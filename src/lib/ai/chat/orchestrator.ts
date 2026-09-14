@@ -87,6 +87,23 @@ function historyToMessages(history: ChatHistoryTurn[] | undefined): ChatMessage[
 }
 
 /**
+ * [Correção — bug reportado em uso real, causava 500 em todas as tools de
+ * analytics] `JSON.stringify` nativo não sabe serializar `bigint` — e as
+ * tools de analytics (Milestone Analytics) devolvem os objetos da camada
+ * `src/lib/analytics/*` tal como saem de lá, que ainda trazem os campos
+ * `*Minor` (MinorAmount = bigint) ao lado do valor já formatado (ex:
+ * `currentMinor` e `current`) — só o componente que desenha a página é que,
+ * até agora, fazia sempre `Number(x.algoMinor)` antes de os passar a um
+ * cliente. Aqui é a mesma fronteira de apresentação (o resultado vai para o
+ * modelo, nunca de volta para a base de dados), por isso o mesmo princípio
+ * aplica-se: um `bigint` sobrevivente vira `Number` só nesta serialização —
+ * nunca lançando, nunca escondendo silenciosamente um erro diferente.
+ */
+function replaceBigInt(_key: string, value: unknown): unknown {
+  return typeof value === "bigint" ? Number(value) : value;
+}
+
+/**
  * `evaluation` nunca deve ser "confirmation_required" aqui — quem chama isto
  * (evaluateToolUseBlocks, confirmPendingAction) já tratou esse caso antes de
  * chegar aqui. O `Exclude` obriga o TypeScript a confirmar isso: se algum
@@ -95,7 +112,7 @@ function historyToMessages(history: ChatHistoryTurn[] | undefined): ChatMessage[
  */
 function toToolResultBlock(toolUseId: string, evaluation: Exclude<ToolExecutionResult, { status: "confirmation_required" }>): ChatToolResultBlock {
   if (evaluation.status === "executed") {
-    return { type: "tool_result", toolUseId, content: JSON.stringify(evaluation.result) };
+    return { type: "tool_result", toolUseId, content: JSON.stringify(evaluation.result, replaceBigInt) };
   }
   const message =
     evaluation.status === "not_found"
