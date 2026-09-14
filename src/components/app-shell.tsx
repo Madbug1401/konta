@@ -166,14 +166,17 @@ export function AppShell({
               abaixo do tamanho do seu conteúdo — sem isto o overflow nunca
               chegava a acontecer); o botão "+" fica fixo e sempre visível no
               centro, nunca dentro da área de scroll.
-              [Milestone 4] A segunda metade passou de slice(3,6) para
-              slice(3) — com "Konta AI" a entrar em NAV_ITEMS, esta barra
-              passou a ter 7 itens; um limite fixo em 6 faria o último
-              (Recorrências) desaparecer da navegação móvel em silêncio. O
-              scroll horizontal já existente absorve o item extra sem
-              precisar de redesenhar o layout. */}
+              [Sugestão do utilizador — 4 botões de cada lado] O corte é
+              sempre metade a metade (`Math.ceil(navItems.length / 2)`),
+              nunca um número fixo (3, como antes) — com os 8 itens de hoje
+              (Resumo/Konta AI/Análises/Transações/Contas/Dívidas/Metas/
+              Recorrências) dá exatamente 4+4; se "Konta AI" desaparecer
+              (utilizador sem acesso, 7 itens) continua equilibrado (4+3) em
+              vez de ficar preso a 3 de um lado. O scroll horizontal já
+              existente absorve qualquer item a mais sem precisar de
+              redesenhar o layout. */}
           <div className="flex min-w-0 flex-1 items-center justify-around gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {navItems.slice(0, 3).map((item) => (
+            {navItems.slice(0, Math.ceil(navItems.length / 2)).map((item) => (
               <MobileNavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
             ))}
           </div>
@@ -185,7 +188,7 @@ export function AppShell({
             <Plus className="h-6 w-6" />
           </Link>
           <div className="flex min-w-0 flex-1 items-center justify-around gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {navItems.slice(3).map((item) => (
+            {navItems.slice(Math.ceil(navItems.length / 2)).map((item) => (
               <MobileNavLink key={item.href} {...item} active={pathname.startsWith(item.href)} />
             ))}
           </div>
