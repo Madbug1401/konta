@@ -67,7 +67,7 @@ RDS). Foi rejeitada **para já**, não para sempre, por três razões concretas:
    (hosting da app + hosting da base de dados) é complexidade operacional
    extra sem benefício real a 10–30 utilizadores.
 3. Reaproveita o `docker-compose.yml` já validado localmente pelo utilizador
-   (ver `WINDOWS_SETUP.md`) — o mesmo modelo mental de "sobe com Docker",
+   (ver `docs/operations/WINDOWS_SETUP.md`) — o mesmo modelo mental de "sobe com Docker",
    sem reescrever nada.
 
 **Quando reconsiderar**: se o número de utilizadores crescer muito além da
@@ -177,7 +177,7 @@ iniciada.
 
 **Resolvido na preparação de deploy Oracle Cloud** (estava em aberto na
 versão anterior deste documento): reverse proxy Caddy (serviço `caddy` em
-`docker-compose.prod.yml`, ver `Caddyfile`), que obtém e renova certificados
+`docker-compose.prod.yml`, ver `deploy/Caddyfile`), que obtém e renova certificados
 HTTPS automaticamente. A variável nova `SITE_ADDRESS` (ver
 `.env.production.example`) resolve especificamente o problema de "ainda não
 temos domínio, orçamento é $0": aponta para um hostname gratuito de
@@ -185,13 +185,13 @@ terceiros do tipo `<ip-da-vm-com-hifens>.sslip.io` (ex.
 `203-0-113-10.sslip.io`), que resolve publicamente para o próprio IP da VM
 — suficiente para o Let's Encrypt validar e emitir um certificado real, sem
 comprar nada. Quando um domínio próprio existir, só `SITE_ADDRESS` muda
-(para o domínio); o Caddyfile e o resto do compose ficam exatamente iguais.
+(para o domínio); o deploy/Caddyfile e o resto do compose ficam exatamente iguais.
 Ver `docs/operations/ORACLE-CLOUD.md` para o procedimento completo e
 `DECISIONS.md` para a justificação de escolher Caddy em vez de Nginx.
 
 ## 5. Migrações
 
-Mesma mecânica documentada em `WINDOWS_SETUP.md`, aplicada ao servidor: os
+Mesma mecânica documentada em `docs/operations/WINDOWS_SETUP.md`, aplicada ao servidor: os
 ficheiros em `prisma/manual-sql/*.sql` são a fonte de verdade **enquanto o
 Prisma CLI não puder correr** (ver `DECISIONS.md`). Processo de arranque num
 servidor novo:

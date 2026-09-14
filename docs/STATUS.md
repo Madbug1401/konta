@@ -288,7 +288,7 @@ documento, que fica desatualizado a cada novo teste.
   com SQL manual (`prisma/manual-sql/`) + `pg` diretamente em
   `src/lib/db/*.ts`, com assinaturas idênticas às que o Prisma Client teria.
   Na tua máquina isto pode não ser necessário — `npx prisma generate && npx
-  prisma db push` deve funcionar sem bloqueios (ver `WINDOWS_SETUP.md`).
+  prisma db push` deve funcionar sem bloqueios (ver `docs/operations/WINDOWS_SETUP.md`).
 - **Sem materialização automática de transações recorrentes** — a função que
   calcula "quando é a próxima ocorrência" existe (`recurring.ts`), mas nada
   a transforma ainda numa `Transaction` real na base de dados.
@@ -350,7 +350,7 @@ documento, que fica desatualizado a cada novo teste.
 
 ## 9. Como correr
 
-Ver `WINDOWS_SETUP.md` na raiz do projeto — já confirmado a funcionar do
+Ver `docs/operations/WINDOWS_SETUP.md` na raiz do projeto — já confirmado a funcionar do
 zero na tua máquina: Docker Desktop para o Postgres, `npm install`, as
 migrações SQL em `prisma/manual-sql/` (por ordem numérica), `npm test`,
 `npm run dev`.

@@ -302,7 +302,7 @@ fornecedor concreto é operacional) a correr `docker-compose.prod.yml`
 a Prioridade 1 exige backups reais e **verificáveis por nós** — direto de
 garantir quando controlamos o Postgres, difícil de auditar de fora com um
 serviço gerido de terceiros. Um servidor único e o `docker-compose.yml`
-já validado localmente pelo utilizador (`WINDOWS_SETUP.md`) evita também
+já validado localmente pelo utilizador (`docs/operations/WINDOWS_SETUP.md`) evita também
 duplicar operação (duas contas, duas faturas) para uma aplicação pequena.
 Não é uma rejeição definitiva — só não faz sentido para 10–30 utilizadores;
 ver critérios de reconsideração em `DEPLOYMENT.md`.
@@ -674,7 +674,7 @@ Oracle criada agora fica sujeita ao valor novo, não ao antigo. Ainda assim,
 
 **O que mudou**: `docker-compose.prod.yml` ganhou um terceiro serviço
 (`caddy`, ver decisão seguinte) e o serviço `app` deixou de publicar a porta
-3000 diretamente (só acessível pelo Caddy, via rede interna). `Caddyfile`
+3000 diretamente (só acessível pelo Caddy, via rede interna). `deploy/Caddyfile`
 novo. `.env.production.example` ganhou `SITE_ADDRESS`.
 `docs/architecture/DEPLOYMENT.md` atualizado (hosting concretizado, secção
 nova de compatibilidade ARM64, secção de HTTPS resolvida). `BACKUP.md`
@@ -739,7 +739,7 @@ pré-requisito de lançamento (o cookie de sessão só é aceite pelo browser co
 **Decisão**: Caddy (`caddy:2-alpine`), não Nginx+Certbot. Um único critério
 decidiu isto, não preferência: Caddy obtém e renova certificados HTTPS
 automaticamente a partir de uma única linha de configuração (o hostname em
-`Caddyfile`), incluindo para hostnames sslip.io (ver decisão seguinte) — e
+`deploy/Caddyfile`), incluindo para hostnames sslip.io (ver decisão seguinte) — e
 quando um domínio real existir mais tarde, a transição é trocar um valor de
 variável de ambiente (`SITE_ADDRESS`), sem tocar em mais nada. Nginx exigiria
 Certbot como peça separada, com o próprio script de renovação e hook de
@@ -749,7 +749,7 @@ para o outro nesta escala).
 
 **O que mudou**: `docker-compose.prod.yml` ganhou o serviço `caddy`
 (único exposto a 80/443); `app` deixou de publicar a porta 3000
-diretamente. `Caddyfile` novo, com `reverse_proxy app:3000` e cabeçalhos de
+diretamente. `deploy/Caddyfile` novo, com `reverse_proxy app:3000` e cabeçalhos de
 segurança básicos (`X-Content-Type-Options`, `X-Frame-Options`,
 `Referrer-Policy`) — nada que precise de ser mantido manualmente.
 
@@ -847,7 +847,7 @@ passo); `.gitignore` com a exceção nova `!.env.render.example`. **Zero
 alterações a `src/`.**
 
 **O que NÃO mudou / não foi descartado**: `docker-compose.prod.yml`,
-`Caddyfile`, `scripts/backup/backup.sh`/`restore.sh`/`verify-backup.sh`,
+`deploy/Caddyfile`, `scripts/backup/backup.sh`/`restore.sh`/`verify-backup.sh`,
 e toda a documentação da Oracle (`docs/operations/ORACLE-CLOUD.md`,
 `docs/architecture/DEPLOYMENT.md`) continuam no repositório, válidos como
 caminho de self-host para o dia em que fizer sentido deixar de depender de

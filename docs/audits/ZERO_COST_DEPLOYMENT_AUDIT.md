@@ -156,7 +156,7 @@ diagrama original geraria, e secção 7 para a arquitetura recomendada.
    gerido, remoto, sem container Docker nosso para lhe aceder — o
    mecanismo de backup tem de mudar para `pg_dump` direto contra a
    connection string do Neon (ver secção 6 do plano, "Backups").
-6. **`docker-compose.prod.yml`/`Caddyfile` (feitos para a Oracle) ficam sem
+6. **`docker-compose.prod.yml`/`deploy/Caddyfile` (feitos para a Oracle) ficam sem
    uso neste caminho** — o Render já fornece HTTPS gerido e routing, não
    precisamos de Caddy nem de correr o Postgres nós próprios em Docker.
    Não é um problema, é só uma constatação: esse trabalho fica documentado

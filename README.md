@@ -36,7 +36,7 @@ docs/operations/            guias passo a passo de deploy (Oracle, Render+Neon)
    - **Se quiseres reproduzir exatamente como este projeto foi validado:** aplica manualmente, por ordem, `psql -f prisma/manual-sql/0001_init.sql`, `psql -f prisma/manual-sql/0002_seed_categories.sql`, `psql -f prisma/manual-sql/0003_add_last_login.sql` e `psql -f prisma/manual-sql/0004_add_feedback.sql` à tua base de dados — a app já está preparada para correr assim.
 4. `npm run dev` e abre `http://localhost:3000`.
 
-Guia completo e já validado do zero no Windows: `WINDOWS_SETUP.md`.
+Guia completo e já validado do zero no Windows: `docs/operations/WINDOWS_SETUP.md`.
 
 ### Nota sobre o Prisma
 

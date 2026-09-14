@@ -78,7 +78,7 @@ utilizadores.
   `db` continua sem porta publicada, como antes.
 - `.dockerignore`, `.env.production.example` (com a variável nova
   `SITE_ADDRESS`) — revistos/atualizados.
-- `Caddyfile` — novo, reverse proxy com HTTPS automático.
+- `deploy/Caddyfile` — novo, reverse proxy com HTTPS automático.
 - Volumes persistentes corretos: `konta_pg_data` (dados do Postgres),
   `caddy_data`/`caddy_config` (certificados TLS, novos) — todos volumes
   Docker nomeados, sobrevivem a `docker compose down` (sem `-v`).
@@ -203,7 +203,7 @@ Resolvido sem custo, sem domínio próprio ainda:
   que isto é suficiente para o Let's Encrypt validar via HTTP-01 e emitir
   um certificado real (técnica estabelecida, não um workaround inseguro).
 - **Com domínio (futuro)**: só a variável `SITE_ADDRESS` muda; nada mais no
-  `Caddyfile`/compose/código precisa de mudar.
+  `deploy/Caddyfile`/compose/código precisa de mudar.
 - **NÃO TESTADO — DEPENDE DA ORACLE CLOUD**: a emissão real do certificado
   só acontece com um IP público real e o Caddy a correr de facto — não
   simulável neste sandbox.

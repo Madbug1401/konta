@@ -181,7 +181,7 @@ aplicação, um único domínio custom basta (ver
 
 ## 8. O que fica diferente do plano Oracle Cloud
 
-- `docker-compose.prod.yml`/`Caddyfile`/`scripts/backup/backup.sh`
+- `docker-compose.prod.yml`/`deploy/Caddyfile`/`scripts/backup/backup.sh`
   (feitos para a Oracle) **não são usados neste caminho** — ficam no
   repositório, documentados, como opção de self-host para o dia em que
   fizer sentido deixar de depender de free tiers de terceiros.

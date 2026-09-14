@@ -181,7 +181,7 @@ nano .env.production      # colar os valores gerados, e o SITE_ADDRESS (ver sec�
 
 ## 9. Executar as migrações
 
-**DOCUMENTADO** (mecânica já usada em desenvolvimento, ver `WINDOWS_SETUP.md`
+**DOCUMENTADO** (mecânica já usada em desenvolvimento, ver `docs/operations/WINDOWS_SETUP.md`
 — o Prisma CLI continua bloqueado neste tipo de ambiente sandboxado, os
 SQL manuais em `prisma/manual-sql/` continuam a ser a fonte de verdade):
 
@@ -222,7 +222,7 @@ Deve devolver `200` e um corpo sem nenhum dado sensível.
 
 ## 12–13. Reverse proxy e HTTPS
 
-**Já configurado no `docker-compose.prod.yml`/`Caddyfile` deste repositório
+**Já configurado no `docker-compose.prod.yml`/`deploy/Caddyfile` deste repositório
 — aqui é só definir `SITE_ADDRESS` e confirmar.**
 
 ### Sem domínio próprio (situação inicial, orçamento $0)
@@ -250,7 +250,7 @@ Quando comprares um domínio (ex. `konta.app` ou `konta.cv`):
 2. Muda só `SITE_ADDRESS=konta.app` em `.env.production`.
 3. `docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build caddy`.
 
-Nada mais muda — nem o `Caddyfile`, nem o resto do compose, nem o código da
+Nada mais muda — nem o `deploy/Caddyfile`, nem o resto do compose, nem o código da
 aplicação. A app **não sabe** nem precisa de saber que hostname está a ser
 usado; isso é inteiramente responsabilidade do Caddy.
 

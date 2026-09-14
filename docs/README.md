@@ -20,6 +20,7 @@ Ponto de entrada. Cada pasta agrupa um tipo de documento; dentro delas, cada fic
 - **[RENDER-NEON.md](operations/RENDER-NEON.md)** — guia de deploy zero-custo (Render + Neon).
 - **[ORACLE-CLOUD.md](operations/ORACLE-CLOUD.md)** — guia de deploy na Oracle Cloud Always Free.
 - **[PRODUCTION-RUNBOOK.md](operations/PRODUCTION-RUNBOOK.md)** — runbook do dia-a-dia em produção.
+- **[WINDOWS_SETUP.md](operations/WINDOWS_SETUP.md)** — guia validado de setup do zero no Windows/WSL.
 
 ## `audits/` — relatórios pontuais (datados, ponto-no-tempo)
 
