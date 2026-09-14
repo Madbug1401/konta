@@ -9,18 +9,22 @@
 // nesta página, para o utilizador nunca ter de os repetir.
 // ============================================================================
 
-import { Sparkles } from "lucide-react";
-import { useState } from "react";
+import { Loader2, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AiMarkdown } from "@/components/ai-markdown";
+import { AiVisualizationView } from "@/components/ai-visualization";
 import { useAssistant } from "@/components/assistant-provider";
 import type { AnalyticsPageContext } from "@/lib/ai/chat/analytics-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = ["Por que aumentaram as minhas despesas?", "Onde posso poupar?", "Compara com o período anterior.", "Analisa as minhas dívidas."];
 
 export function AskKontaBar({ analyticsContext }: { analyticsContext: AnalyticsPageContext }) {
-  const { sendChat, sending, pending } = useAssistant();
+  const { turns, pending, sending, error, sendChat, confirmPending, cancelPending } = useAssistant();
   const [value, setValue] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   function submit(message: string) {
     const trimmed = message.trim();
@@ -29,25 +33,80 @@ export function AskKontaBar({ analyticsContext }: { analyticsContext: AnalyticsP
     void sendChat(trimmed, { analyticsContext });
   }
 
+  // [Bug corrigido — "clica na sugestão e não acontece nada"] Esta barra
+  // enviava a mensagem pelo mesmo `sendChat` do ChatPanel mas nunca desenhava
+  // `turns`/`pending`/`error` — a resposta chegava ao AssistantProvider
+  // partilhado e ficava sem UI nenhuma aqui para a mostrar. Mesmo padrão de
+  // chat-panel.tsx, só que num cartão compacto em vez de página inteira.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [turns.length, pending, sending]);
+
+  const hasConversation = turns.length > 0 || !!pending;
+
   return (
     <Card>
       <div className="mb-2 flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
         <p className="text-sm font-semibold text-foreground">Pergunta à Konta</p>
       </div>
-      <div className="mb-2 flex flex-wrap gap-1.5">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => submit(s)}
-            disabled={sending || !!pending}
-            className="rounded-full border border-border bg-surface-hover px-2.5 py-1 text-xs font-medium text-foreground hover:bg-border disabled:opacity-50"
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+
+      {hasConversation ? (
+        <div ref={scrollRef} className="mb-2 flex max-h-72 flex-col gap-2 overflow-y-auto rounded-lg border border-border bg-surface p-2.5">
+          {turns.map((turn, i) => (
+            <div
+              key={i}
+              className={cn(
+                "flex max-w-[90%] flex-col gap-2 rounded-xl px-3 py-2 text-sm",
+                turn.role === "user" ? "self-end bg-primary text-primary-foreground" : "self-start bg-surface-hover text-foreground",
+              )}
+            >
+              {turn.content && (turn.role === "assistant" ? <AiMarkdown text={turn.content} /> : <span>{turn.content}</span>)}
+              {turn.visualization && <AiVisualizationView visualization={turn.visualization} />}
+            </div>
+          ))}
+
+          {pending && (
+            <Card className="self-stretch border-primary/40 bg-surface-hover">
+              <p className="mb-3 whitespace-pre-line text-sm text-foreground">{pending.summary}</p>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => void cancelPending()} disabled={sending}>
+                  Cancelar
+                </Button>
+                <Button type="button" size="sm" onClick={() => void confirmPending()} disabled={sending}>
+                  Confirmar
+                </Button>
+              </div>
+            </Card>
+          )}
+
+          {sending && (
+            <div className="flex items-center gap-2 self-start text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> A pensar...
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => submit(s)}
+              disabled={sending || !!pending}
+              className="rounded-full border border-border bg-surface-hover px-2.5 py-1 text-xs font-medium text-foreground hover:bg-border disabled:opacity-50"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {error && <p className="mb-2 text-xs text-danger">{error}</p>}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
