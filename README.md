@@ -4,6 +4,9 @@ Gestor financeiro pessoal — regista, entende, prevê e orienta o teu dinheiro.
 Ver `docs/architecture/OVERVIEW.md` para a arquitetura completa e
 `docs/architecture/DECISIONS.md` para o porquê de cada decisão importante.
 
+Antes de fazer push: ver `WORKFLOW.md` para a ordem de trabalho
+(`konta` → `konta-github-ready` → GitHub).
+
 ## Stack
 
 Next.js 16 (App Router) + React 19 + TypeScript estrito + Tailwind CSS v4,
