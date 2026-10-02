@@ -7,6 +7,7 @@
 // encontrada na auditoria (ex: 333.33 * 3 !== 1000 em JS float).
 // ============================================================================
 
+import { getCurrencyDecimalPlaces } from "@/lib/currencies";
 import type { MinorAmount } from "./types";
 
 export function add(a: MinorAmount, b: MinorAmount): MinorAmount {
@@ -74,16 +75,68 @@ export function installmentsMatchTotal(
   return sum(installments) === totalMinor;
 }
 
-/** Formata um valor em unidade mínima para exibição, ex: 150000 CVE -> "150 000 CVE". */
+/** Formata um valor em unidade mínima para exibição, ex: 1050 EUR -> "10,50 EUR". */
 export function formatMinor(
   amountMinor: MinorAmount,
   currency: string,
   locale = "pt-CV",
 ): string {
-  // CVE não tem subunidade de uso corrente -> minorUnitFactor = 1.
-  // Preparado para moedas com cêntimos (EUR/USD) bastaria mudar este fator
-  // por moeda numa tabela de configuração — ver docs/architecture/DECISIONS.md.
-  const minorUnitFactor = 1;
-  const majorValue = Number(amountMinor) / minorUnitFactor;
-  return `${majorValue.toLocaleString(locale)} ${currency}`;
+  const decimals = getCurrencyDecimalPlaces(currency);
+  const majorValue = Number(amountMinor) / 10 ** decimals;
+  return `${majorValue.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${currency}`;
+}
+
+/**
+ * [Task 2 — Precisão monetária] Converte um valor digitado pelo utilizador
+ * (string, ex: "10.50") para a unidade mínima da moeda (ex: 1050 para EUR).
+ * Nunca usa `parseFloat`/`Math.round` — separa a parte inteira da decimal
+ * como string e compõe o BigInt diretamente, para nunca introduzir
+ * imprecisão de vírgula flutuante na conversão. Lança se o valor tiver mais
+ * casas decimais do que a moeda permite (ver getCurrencyDecimalPlaces) —
+ * nunca arredonda silenciosamente uma entrada do utilizador.
+ */
+export function toMinor(input: string, currency: string): MinorAmount {
+  const decimals = getCurrencyDecimalPlaces(currency);
+  const trimmed = input.trim();
+  const negative = trimmed.startsWith("-");
+  const unsigned = negative ? trimmed.slice(1) : trimmed;
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(unsigned);
+  if (!match) throw new Error(`Valor inválido: "${input}".`);
+  const [, intPart, fracPartRaw = ""] = match;
+  if (fracPartRaw.length > decimals) {
+    throw new Error(`"${currency}" só aceita ${decimals} casa${decimals === 1 ? "" : "s"} decimal${decimals === 1 ? "" : "is"}.`);
+  }
+  const fracPart = fracPartRaw.padEnd(decimals, "0");
+  const value = BigInt(`${intPart}${fracPart}`);
+  return negative ? -value : value;
+}
+
+/** Inverso de `toMinor` — devolve a representação decimal exata como string, nunca `number`. */
+export function fromMinor(amountMinor: MinorAmount, currency: string): string {
+  const decimals = getCurrencyDecimalPlaces(currency);
+  const negative = amountMinor < 0n;
+  const abs = negative ? -amountMinor : amountMinor;
+  if (decimals === 0) return `${negative ? "-" : ""}${abs.toString()}`;
+  const digits = abs.toString().padStart(decimals + 1, "0");
+  const intPart = digits.slice(0, -decimals);
+  const fracPart = digits.slice(-decimals);
+  return `${negative ? "-" : ""}${intPart}.${fracPart}`;
+}
+
+/**
+ * Arredondamento half-up determinístico de uma divisão inteira
+ * (numerator/denominator), nunca usando float — necessário para o cálculo
+ * de câmbio da Task 3 (destinationAmountMinor), mas já aqui porque é
+ * aritmética monetária pura, mesmo sítio que `splitIntoInstallments`.
+ * Half-up: se `2 * (numerator % denominator) >= denominator`, arredonda
+ * para cima. `denominator` tem de ser positivo.
+ */
+export function roundHalfUpDiv(numerator: bigint, denominator: bigint): bigint {
+  if (denominator <= 0n) throw new Error("O denominador tem de ser positivo.");
+  const negative = numerator < 0n;
+  const n = negative ? -numerator : numerator;
+  const quotient = n / denominator;
+  const remainder = n % denominator;
+  const roundedUp = 2n * remainder >= denominator ? quotient + 1n : quotient;
+  return negative ? -roundedUp : roundedUp;
 }

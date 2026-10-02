@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { createDebtWithInstallments, listDebts } from "@/lib/db/debts";
+import { CURRENCY_CODES } from "@/lib/currencies";
 import { withErrorHandling } from "@/lib/api-error";
 
 export const GET = withErrorHandling("api.debts.get", async () => {
@@ -30,7 +31,7 @@ const CreateDebtSchema = z.object({
   // Mesmo limite técnico (não regra de negócio) já usado em
   // src/app/api/transactions/route.ts e accounts/route.ts.
   originalAmountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-  currency: z.string().length(3).optional(),
+  currency: z.enum(CURRENCY_CODES).optional(), // [Task 2] antes aceitava qualquer string de 3 letras, nunca validada contra a lista curada — getCurrencyDecimalPlaces não saberia as casas decimais de uma moeda inventada
   interestRate: z.number().min(0).max(999.999).optional(),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   installmentCount: z.number().int().min(1).max(600),

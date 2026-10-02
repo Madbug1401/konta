@@ -126,6 +126,20 @@ export const POST = withErrorHandling("api.transactions.post", async (request: R
     const destination = await getAccountById(session.userId, input.destinationAccountId);
     if (!destination) return NextResponse.json({ error: "Conta de destino não encontrada." }, { status: 404 });
     if (destination.isArchived) return NextResponse.json({ error: "A conta de destino está arquivada." }, { status: 400 });
+    // [Task 2 — Precisão monetária, proteção mínima antecipada da Task 3]
+    // Antes disto, uma transferência entre contas de moedas diferentes era
+    // aceite sem aviso e sem conversão — o valor em bruto (na moeda de
+    // origem) era somado ao saldo da conta de destino como se fosse a mesma
+    // moeda (bug real, confirmado na auditoria, nunca chegou a produzir
+    // dados errados porque nunca ninguém o fez — ver docs/STATUS.md). Até a
+    // Task 3 (conversão de câmbio com taxa gravada) existir, rejeitar é mais
+    // seguro do que aceitar um valor sem sentido nenhum.
+    if (destination.currency !== account.currency) {
+      return NextResponse.json(
+        { error: "Transferências entre contas de moedas diferentes ainda não são suportadas." },
+        { status: 400 },
+      );
+    }
   }
 
   // [Correção — Pre-Beta Hardening, Prioridade 7] Mesmo princípio já

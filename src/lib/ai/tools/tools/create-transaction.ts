@@ -29,7 +29,10 @@ const CreateTransactionToolSchema = z
     type: z.enum(["INCOME", "EXPENSE", "TRANSFER"]),
     accountId: z.string().min(1),
     destinationAccountId: z.string().min(1).optional(),
-    amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+      .describe(
+        "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE não tem casas decimais — 1050 = 1050 CVE).",
+      ),
     // [Correção] Nome em texto livre, nunca um id. Ignorado para TRANSFER
     // (transferências não têm categoria — mesma regra de
     // POST /api/transactions), resolvido para uma categoria real (existente
@@ -78,6 +81,12 @@ async function execute(userId: string, params: CreateTransactionParams): Promise
     const destination = await getAccountById(userId, params.destinationAccountId);
     if (!destination) throw new ToolExecutionError("Conta de destino não encontrada.");
     if (destination.isArchived) throw new ToolExecutionError("A conta de destino está arquivada.");
+    // [Task 2 — mesma proteção de POST /api/transactions] Até a Task 3 (FX)
+    // existir, a IA também não pode criar uma transferência entre moedas
+    // diferentes sem conversão.
+    if (destination.currency !== account.currency) {
+      throw new ToolExecutionError("Transferências entre contas de moedas diferentes ainda não são suportadas.");
+    }
   }
 
   if (params.goalId) {

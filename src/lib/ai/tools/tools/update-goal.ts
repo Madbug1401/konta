@@ -11,7 +11,11 @@ const UpdateGoalToolSchema = z
     goalId: z.string().min(1),
     name: z.string().trim().min(1).max(120).optional(),
     description: z.string().trim().max(500).nullable().optional(),
-    targetAmountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+    targetAmountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+      .describe(
+        "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE não tem casas decimais — 1050 = 1050 CVE).",
+      )
+      .optional(),
     targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   })
   .strict();

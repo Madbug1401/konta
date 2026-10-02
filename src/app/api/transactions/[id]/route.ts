@@ -25,7 +25,15 @@ export const GET = withErrorHandling(
 // src/app/api/transactions/route.ts. Nenhuma regra de validação mudou.
 export const UpdateTransactionSchema = z.object({
   // Mesma correção de src/app/api/transactions/route.ts — ver comentário lá.
-  amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+  amountMinor: z
+    .number()
+    .int()
+    .positive()
+    .max(Number.MAX_SAFE_INTEGER)
+    .describe(
+      "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE não tem casas decimais — 1050 = 1050 CVE).",
+    )
+    .optional(),
   categoryId: z.string().min(1).optional(),
   description: z.string().trim().min(1).max(255).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

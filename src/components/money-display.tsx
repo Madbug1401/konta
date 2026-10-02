@@ -1,3 +1,4 @@
+import { getCurrencyDecimalPlaces } from "@/lib/currencies";
 import { cn } from "@/lib/utils";
 
 export interface MoneyDisplayProps {
@@ -12,9 +13,10 @@ export interface MoneyDisplayProps {
 
 // [DECISÃO] Componente único responsável por formatar dinheiro em toda a
 // aplicação — nenhum outro sítio deve fazer `.toLocaleString()` diretamente
-// num bigint/number monetário. Isto mantém a formatação (moeda, casas
-// decimais por moeda, sinal) consistente e fácil de mudar num único lugar
-// quando o Konta suportar mais do que CVE.
+// num bigint/number monetário. Casas decimais vêm sempre de
+// `getCurrencyDecimalPlaces` (src/lib/currencies.ts) — única fonte de
+// verdade, partilhada com `formatMinor` em financial-engine/money.ts — nunca
+// um valor fixo duplicado aqui.
 export function MoneyDisplay({
   amountMinor,
   currency,
@@ -23,9 +25,9 @@ export function MoneyDisplay({
   showSign = false,
   size = "md",
 }: MoneyDisplayProps) {
-  const minorUnitFactor = 1; // CVE não usa subunidade de uso corrente — ver docs/architecture/DECISIONS.md
-  const value = Number(amountMinor) / minorUnitFactor;
-  const formatted = Math.abs(value).toLocaleString(locale);
+  const decimals = getCurrencyDecimalPlaces(currency);
+  const value = Number(amountMinor) / 10 ** decimals;
+  const formatted = Math.abs(value).toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   const sign = showSign && value !== 0 ? (value > 0 ? "+" : "-") : value < 0 ? "-" : "";
 
   const sizeClass = size === "lg" ? "text-2xl font-bold" : size === "sm" ? "text-sm font-medium" : "text-lg font-semibold";

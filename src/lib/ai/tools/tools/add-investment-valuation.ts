@@ -11,7 +11,10 @@ const AddInvestmentValuationToolSchema = z
   .object({
     accountId: z.string().min(1),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    valueMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    valueMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+      .describe(
+        "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE não tem casas decimais — 1050 = 1050 CVE).",
+      ),
     accountName: z.string().trim().max(255).optional(),
   })
   .strict();

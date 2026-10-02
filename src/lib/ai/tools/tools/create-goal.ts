@@ -7,14 +7,22 @@
 import { z } from "zod";
 import { getAccountById } from "@/lib/db/accounts";
 import { createGoal } from "@/lib/db/goals";
+import { CURRENCY_CODES } from "@/lib/currencies";
 import { ToolExecutionError, type AiTool } from "../types";
 
 const CreateGoalToolSchema = z
   .object({
     name: z.string().trim().min(1).max(120),
     description: z.string().trim().max(500).optional(),
-    targetAmountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-    currency: z.string().length(3).optional(),
+    targetAmountMinor: z
+      .number()
+      .int()
+      .positive()
+      .max(Number.MAX_SAFE_INTEGER)
+      .describe(
+        "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 150000 = €1500.00 ou $1500.00; CVE não tem casas decimais — 150000 = 150000 CVE).",
+      ),
+    currency: z.enum(CURRENCY_CODES).optional(),
     targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     linkedAccountId: z.string().min(1),
     accountName: z.string().trim().max(255).optional(),

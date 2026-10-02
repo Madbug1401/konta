@@ -22,6 +22,7 @@ export default async function EditGoalPage({ params }: { params: Promise<{ id: s
           description: goal.description,
           targetAmountMinor: Number(goal.targetAmountMinor),
           targetDate: goal.targetDate,
+          currency: goal.currency,
         }}
       />
     </div>

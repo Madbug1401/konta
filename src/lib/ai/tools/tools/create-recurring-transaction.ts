@@ -16,7 +16,10 @@ const CreateRecurringTransactionToolSchema = z
     type: z.enum(["INCOME", "EXPENSE", "TRANSFER"]),
     accountId: z.string().min(1),
     destinationAccountId: z.string().min(1).optional(),
-    amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+      .describe(
+        "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE não tem casas decimais — 1050 = 1050 CVE).",
+      ),
     category: z.string().trim().min(1).max(100).optional(),
     description: z.string().trim().min(1).max(255),
     frequency: z.enum(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]),
@@ -50,6 +53,10 @@ async function execute(userId: string, params: CreateRecurringTransactionParams)
     const destination = await getAccountById(userId, params.destinationAccountId);
     if (!destination) throw new ToolExecutionError("Conta de destino não encontrada.");
     if (destination.isArchived) throw new ToolExecutionError("A conta de destino está arquivada.");
+    // [Task 2 — mesma proteção de POST /api/transactions]
+    if (destination.currency !== account.currency) {
+      throw new ToolExecutionError("Transferências entre contas de moedas diferentes ainda não são suportadas.");
+    }
   }
 
   const category =

@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/toast-provider";
+import { getCurrencyDecimalPlaces } from "@/lib/currencies";
+import { toMinor } from "@/lib/financial-engine/money";
 
 export interface GoalFormAccount {
   id: string;
   name: string;
+  currency: string;
 }
 
 export function GoalForm({ accounts }: { accounts: GoalFormAccount[] }) {
@@ -24,19 +27,29 @@ export function GoalForm({ accounts }: { accounts: GoalFormAccount[] }) {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
+  const currency = accounts.find((a) => a.id === linkedAccountId)?.currency ?? "CVE";
+  const decimalPlaces = getCurrencyDecimalPlaces(currency);
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
 
-    const targetAmountMinor = Number(targetAmount);
-    if (!Number.isInteger(targetAmountMinor) || targetAmountMinor <= 0) {
-      setError("Indica um valor inteiro maior que zero (em CVE).");
-      return;
-    }
     if (!linkedAccountId) {
       setError("Escolhe a conta onde vais guardar o dinheiro desta meta.");
       return;
     }
+    let targetAmountMinorBig: bigint;
+    try {
+      targetAmountMinorBig = toMinor(targetAmount, currency);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Valor inválido.");
+      return;
+    }
+    if (targetAmountMinorBig <= 0n) {
+      setError("Indica um valor maior que zero.");
+      return;
+    }
+    const targetAmountMinor = Number(targetAmountMinorBig);
 
     setLoading(true);
     try {
@@ -95,13 +108,13 @@ export function GoalForm({ accounts }: { accounts: GoalFormAccount[] }) {
           <Input placeholder="Ex: 6 meses de despesas" value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" />
         </label>
         <label className="text-xs font-medium text-muted-foreground">
-          Valor alvo (CVE)
+          {`Valor alvo (${currency})`}
           <Input
             type="number"
-            inputMode="numeric"
-            min={1}
-            step={1}
-            placeholder="Ex: 300000"
+            inputMode="decimal"
+            min={decimalPlaces > 0 ? 0.01 : 1}
+            step={decimalPlaces > 0 ? 10 ** -decimalPlaces : 1}
+            placeholder={decimalPlaces > 0 ? "Ex: 3000.00" : "Ex: 300000"}
             value={targetAmount}
             onChange={(e) => setTargetAmount(e.target.value)}
             required

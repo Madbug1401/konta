@@ -6,6 +6,7 @@
 import { z } from "zod";
 import { createDebtWithInstallments } from "@/lib/db/debts";
 import { listAllTransactionsForBalances } from "@/lib/db/transactions";
+import { CURRENCY_CODES } from "@/lib/currencies";
 import { toAiToolDebt, type AiToolDebt } from "../shared";
 import type { AiTool } from "../types";
 
@@ -15,8 +16,15 @@ const CreateDebtToolSchema = z
   .object({
     creditorName: z.string().trim().min(1).max(120),
     description: z.string().trim().max(500).optional(),
-    originalAmountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-    currency: z.string().length(3).optional(),
+    originalAmountMinor: z
+      .number()
+      .int()
+      .positive()
+      .max(Number.MAX_SAFE_INTEGER)
+      .describe(
+        "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 150000 = €1500.00 ou $1500.00; CVE não tem casas decimais — 150000 = 150000 CVE).",
+      ),
+    currency: z.enum(CURRENCY_CODES).optional(),
     interestRate: z.number().min(0).max(999.999).optional(),
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     installmentCount: z.number().int().min(1).max(600),

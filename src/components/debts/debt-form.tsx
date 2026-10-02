@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/toast-provider";
 import { generateInstallmentPlan } from "@/lib/financial-engine";
+import { toMinor } from "@/lib/financial-engine/money";
 
 const FREQUENCY_OPTIONS: { value: "MONTHLY" | "WEEKLY" | "DAILY" | "YEARLY"; label: string }[] = [
   { value: "MONTHLY", label: "Mensal" },
@@ -34,14 +35,18 @@ export function DebtForm() {
   // (generateInstallmentPlan) que o servidor volta a correr para gravar —
   // isto é só para o utilizador ver o que vai acontecer antes de confirmar,
   // nunca é o valor que fica gravado (o servidor recalcula sempre).
+  // [Task 2 — Precisão monetária] DebtForm não tem seletor de moeda (sempre
+  // CVE — o servidor assume "CVE" quando `currency` não é enviado, ver
+  // src/lib/db/debts.ts:69) — `toMinor` substitui a validação manual
+  // Number.isInteger por uma única função partilhada e testada, nunca
+  // duas implementações paralelas da mesma regra.
   const preview = useMemo(() => {
-    const amount = Number(originalAmount);
     const count = Number(installmentCount);
-    if (!Number.isInteger(amount) || amount <= 0 || !Number.isInteger(count) || count < 1 || !startDate) {
-      return null;
-    }
+    if (!Number.isInteger(count) || count < 1 || !startDate) return null;
     try {
-      return generateInstallmentPlan(BigInt(amount), count, startDate, frequency);
+      const amount = toMinor(originalAmount, "CVE");
+      if (amount <= 0n) return null;
+      return generateInstallmentPlan(amount, count, startDate, frequency);
     } catch {
       return null;
     }
@@ -51,12 +56,19 @@ export function DebtForm() {
     event.preventDefault();
     setError(null);
 
-    const amountMinor = Number(originalAmount);
-    const count = Number(installmentCount);
-    if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
-      setError("Indica um valor inteiro maior que zero (em CVE).");
+    let amountMinorBig: bigint;
+    try {
+      amountMinorBig = toMinor(originalAmount, "CVE");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Valor inválido.");
       return;
     }
+    if (amountMinorBig <= 0n) {
+      setError("Indica um valor maior que zero.");
+      return;
+    }
+    const amountMinor = Number(amountMinorBig);
+    const count = Number(installmentCount);
     if (!Number.isInteger(count) || count < 1) {
       setError("O número de parcelas tem de ser pelo menos 1.");
       return;

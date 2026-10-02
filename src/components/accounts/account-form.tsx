@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/toast-provider";
 import { ACCOUNT_COLORS, type AccountColorId } from "@/lib/account-colors";
-import { CURRENCIES, type CurrencyCode } from "@/lib/currencies";
+import { CURRENCIES, getCurrencyDecimalPlaces, type CurrencyCode } from "@/lib/currencies";
 import type { AccountType } from "@/lib/financial-engine";
+import { toMinor } from "@/lib/financial-engine/money";
 
 const TYPE_OPTIONS: { value: AccountType; label: string }[] = [
   { value: "WALLET", label: "Carteira" },
@@ -40,15 +41,28 @@ export function AccountForm() {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
+  const decimalPlaces = getCurrencyDecimalPlaces(currency);
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    // [Task 2 — Precisão monetária] Esta era a única das 6 entradas de
+    // dinheiro sem nenhuma guarda no cliente — `Number(initialBalance) || 0`
+    // aceitava "10.50" e enviava um float para a API (que o rejeitava com um
+    // erro genérico, nunca corrompia dados, mas sem orientação nenhuma).
+    let initialBalanceMinor: bigint;
+    try {
+      initialBalanceMinor = initialBalance.trim() === "" ? 0n : toMinor(initialBalance, currency);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Valor inválido.");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, type, currency, initialBalanceMinor: Number(initialBalance) || 0, color }),
+        body: JSON.stringify({ name, type, currency, initialBalanceMinor: Number(initialBalanceMinor), color }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -118,6 +132,8 @@ export function AccountForm() {
         Saldo inicial ({currency})
         <Input
           type="number"
+          inputMode="decimal"
+          step={decimalPlaces > 0 ? 10 ** -decimalPlaces : 1}
           placeholder="0"
           value={initialBalance}
           onChange={(e) => setInitialBalance(e.target.value)}

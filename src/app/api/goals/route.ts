@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { getAccountById } from "@/lib/db/accounts";
 import { createGoal, listGoals } from "@/lib/db/goals";
+import { CURRENCY_CODES } from "@/lib/currencies";
 import { withErrorHandling } from "@/lib/api-error";
 
 export const GET = withErrorHandling("api.goals.get", async () => {
@@ -17,7 +18,7 @@ const CreateGoalSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(500).optional(),
   targetAmountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-  currency: z.string().length(3).optional(),
+  currency: z.enum(CURRENCY_CODES).optional(), // [Task 2] antes aceitava qualquer string de 3 letras, ver debts/route.ts
   targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   // [Correção — implementação da interface de Metas] Obrigatório de
   // propósito: sem conta associada, `getGoalProgress`

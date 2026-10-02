@@ -81,7 +81,7 @@ export default async function InvestmentPage({ params }: { params: Promise<{ id:
 
           <Card className="flex flex-col gap-3">
             <h2 className="text-sm font-semibold text-muted-foreground">Registar avaliação</h2>
-            <ValuationForm accountId={id} />
+            <ValuationForm accountId={id} currency={account.currency} />
           </Card>
 
           {valuations.length > 0 && (

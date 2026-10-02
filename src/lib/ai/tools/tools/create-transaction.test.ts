@@ -123,6 +123,18 @@ describe("create_transaction tool", () => {
     expect(createTransactionMock).not.toHaveBeenCalled();
   });
 
+  it("[Task 2] rejeita TRANSFER entre contas de moedas diferentes, sem criar a transação", async () => {
+    getAccountByIdMock.mockImplementation(async (_userId: string, accountId: string) =>
+      accountId === "acc-1" ? { ...ACCOUNT, id: "acc-1", currency: "CVE" } : { ...ACCOUNT, id: "acc-2", currency: "EUR" },
+    );
+    const { createTransactionTool } = await import("./create-transaction");
+
+    await expect(
+      createTransactionTool.execute("user-1", validParams({ type: "TRANSFER", destinationAccountId: "acc-2" })),
+    ).rejects.toBeInstanceOf(ToolExecutionError);
+    expect(createTransactionMock).not.toHaveBeenCalled();
+  });
+
   it("ownership: rejeita uma goalId que não pertence ao utilizador", async () => {
     getAccountByIdMock.mockResolvedValue(ACCOUNT);
     getGoalByIdMock.mockResolvedValue(null);

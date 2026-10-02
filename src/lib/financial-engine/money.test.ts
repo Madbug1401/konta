@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitIntoInstallments, installmentsMatchTotal, sum, abs } from "./money";
+import { splitIntoInstallments, installmentsMatchTotal, sum, abs, toMinor, fromMinor, formatMinor, roundHalfUpDiv } from "./money";
 
 describe("splitIntoInstallments", () => {
   it("divide de forma exata quando o total é divisível", () => {
@@ -35,5 +35,84 @@ describe("abs", () => {
   it("devolve o valor absoluto sem alterar o sinal original de quem chama", () => {
     expect(abs(-500n)).toBe(500n);
     expect(abs(500n)).toBe(500n);
+  });
+});
+
+// [Task 2 — Precisão monetária] toMinor/fromMinor nunca usam parseFloat nem
+// Math.round — estes testes existem para provar isso com casos-limite reais
+// (nunca toBeCloseTo, que esconderia exatamente o tipo de erro que isto
+// previne).
+describe("toMinor", () => {
+  it("converte um valor inteiro para uma moeda sem casas decimais (CVE)", () => {
+    expect(toMinor("5000", "CVE")).toBe(5000n);
+  });
+
+  it("rejeita casas decimais numa moeda sem subunidade (CVE)", () => {
+    expect(() => toMinor("50.00", "CVE")).toThrow();
+  });
+
+  it("converte um valor com 2 casas decimais para EUR", () => {
+    expect(toMinor("10.50", "EUR")).toBe(1050n);
+  });
+
+  it("aceita um valor EUR sem parte decimal (completa com zeros)", () => {
+    expect(toMinor("10", "EUR")).toBe(1000n);
+  });
+
+  it("rejeita mais casas decimais do que a moeda permite", () => {
+    expect(() => toMinor("10.505", "EUR")).toThrow();
+  });
+
+  it("preserva o sinal negativo", () => {
+    expect(toMinor("-10.50", "EUR")).toBe(-1050n);
+  });
+
+  it("rejeita entrada não numérica", () => {
+    expect(() => toMinor("abc", "EUR")).toThrow();
+    expect(() => toMinor("", "EUR")).toThrow();
+  });
+
+  it("uma moeda desconhecida é tratada como 0 casas decimais (nunca lança por si só)", () => {
+    expect(toMinor("300", "XYZ")).toBe(300n);
+    expect(() => toMinor("300.50", "XYZ")).toThrow();
+  });
+});
+
+describe("fromMinor", () => {
+  it("é o inverso exato de toMinor para várias moedas", () => {
+    expect(fromMinor(1050n, "EUR")).toBe("10.50");
+    expect(fromMinor(5000n, "CVE")).toBe("5000");
+    expect(fromMinor(-1050n, "EUR")).toBe("-10.50");
+  });
+
+  it("preenche zeros à esquerda da parte decimal corretamente", () => {
+    expect(fromMinor(5n, "EUR")).toBe("0.05");
+  });
+});
+
+describe("formatMinor", () => {
+  it("formata CVE sem casas decimais e EUR com 2", () => {
+    expect(formatMinor(5000n, "CVE")).toBe("5000 CVE");
+    expect(formatMinor(1050n, "EUR")).toBe("10,50 EUR");
+  });
+});
+
+describe("roundHalfUpDiv", () => {
+  it("arredonda exatamente .5 para cima", () => {
+    expect(roundHalfUpDiv(5n, 2n)).toBe(3n); // 2.5 -> 3
+    expect(roundHalfUpDiv(15n, 10n)).toBe(2n); // 1.5 -> 2
+  });
+
+  it("não arredonda para cima quando o resto é menor que metade", () => {
+    expect(roundHalfUpDiv(14n, 10n)).toBe(1n); // 1.4 -> 1
+  });
+
+  it("funciona com valores negativos (arredonda o valor absoluto, preserva o sinal)", () => {
+    expect(roundHalfUpDiv(-15n, 10n)).toBe(-2n);
+  });
+
+  it("rejeita denominador não positivo", () => {
+    expect(() => roundHalfUpDiv(10n, 0n)).toThrow();
+    expect(() => roundHalfUpDiv(10n, -1n)).toThrow();
   });
 });

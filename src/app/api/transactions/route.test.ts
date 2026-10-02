@@ -173,3 +173,69 @@ describe("POST /api/transactions — ownership de categoryId (Prioridade 7)", ()
     expect(getCategoryByIdMock).not.toHaveBeenCalled();
   });
 });
+
+describe("POST /api/transactions — transferência entre moedas diferentes (Task 2)", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("rejeita com 400 uma transferência cuja conta de destino tem moeda diferente, sem criar a transação", async () => {
+    getSessionUserMock.mockResolvedValue(SESSION);
+    findUserByIdMock.mockResolvedValue({ timezone: "Atlantic/Cape_Verde" });
+    getAccountByIdMock.mockImplementation(async (_userId: string, accountId: string) =>
+      accountId === "acc-1" ? { ...ACCOUNT, id: "acc-1", currency: "CVE" } : { ...ACCOUNT, id: "acc-2", currency: "EUR" },
+    );
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      postRequest({
+        type: "TRANSFER",
+        accountId: "acc-1",
+        destinationAccountId: "acc-2",
+        amountMinor: 1000,
+        description: "Transferência",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Transferências entre contas de moedas diferentes ainda não são suportadas." });
+    expect(createTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it("aceita uma transferência entre contas da mesma moeda", async () => {
+    getSessionUserMock.mockResolvedValue(SESSION);
+    findUserByIdMock.mockResolvedValue({ timezone: "Atlantic/Cape_Verde" });
+    getAccountByIdMock.mockImplementation(async (_userId: string, accountId: string) => ({ ...ACCOUNT, id: accountId, currency: "CVE" }));
+    createTransactionMock.mockResolvedValue({
+      id: "tx-3",
+      userId: "user-1",
+      type: "TRANSFER",
+      status: "COMPLETED",
+      accountId: "acc-1",
+      destinationAccountId: "acc-2",
+      amountMinor: 1000n,
+      currency: "CVE",
+      categoryId: null,
+      description: "Transferência",
+      date: "2026-08-29",
+      debtId: null,
+      debtInstallmentId: null,
+      goalId: null,
+      recurringTransactionId: null,
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      postRequest({
+        type: "TRANSFER",
+        accountId: "acc-1",
+        destinationAccountId: "acc-2",
+        amountMinor: 1000,
+        description: "Transferência",
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(createTransactionMock).toHaveBeenCalled();
+  });
+});

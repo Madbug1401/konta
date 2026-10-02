@@ -6,33 +6,45 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/toast-provider";
+import { getCurrencyDecimalPlaces } from "@/lib/currencies";
+import { fromMinor, toMinor } from "@/lib/financial-engine/money";
 
 export interface GoalEditFormProps {
   goalId: string;
-  initialValues: { name: string; description: string | null; targetAmountMinor: number; targetDate: string | null };
+  initialValues: { name: string; description: string | null; targetAmountMinor: number; targetDate: string | null; currency: string };
 }
 
 // [Fase 2 — editar Meta] `linkedAccountId` não aparece aqui de propósito —
-// ver o comentário junto a `updateGoal` em src/lib/db/goals.ts.
+// ver o comentário junto a `updateGoal` em src/lib/db/goals.ts. `currency`
+// também não é editável (mesma regra de Account.currency) — só chega aqui
+// para converter o valor para a representação decimal correta.
 export function GoalEditForm({ goalId, initialValues }: GoalEditFormProps) {
   const router = useRouter();
   const toast = useToast();
   const [name, setName] = useState(initialValues.name);
   const [description, setDescription] = useState(initialValues.description ?? "");
-  const [targetAmount, setTargetAmount] = useState(String(initialValues.targetAmountMinor));
+  const [targetAmount, setTargetAmount] = useState(() => fromMinor(BigInt(initialValues.targetAmountMinor), initialValues.currency));
   const [targetDate, setTargetDate] = useState(initialValues.targetDate ?? "");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const decimalPlaces = getCurrencyDecimalPlaces(initialValues.currency);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
 
-    const targetAmountMinor = Number(targetAmount);
-    if (!Number.isInteger(targetAmountMinor) || targetAmountMinor <= 0) {
-      setError("Indica um valor inteiro maior que zero (em CVE).");
+    let targetAmountMinorBig: bigint;
+    try {
+      targetAmountMinorBig = toMinor(targetAmount, initialValues.currency);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Valor inválido.");
       return;
     }
+    if (targetAmountMinorBig <= 0n) {
+      setError("Indica um valor maior que zero.");
+      return;
+    }
+    const targetAmountMinor = Number(targetAmountMinorBig);
 
     setLoading(true);
     try {
@@ -71,12 +83,12 @@ export function GoalEditForm({ goalId, initialValues }: GoalEditFormProps) {
           <Input value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" />
         </label>
         <label className="text-xs font-medium text-muted-foreground">
-          Valor alvo (CVE)
+          {`Valor alvo (${initialValues.currency})`}
           <Input
             type="number"
-            inputMode="numeric"
-            min={1}
-            step={1}
+            inputMode="decimal"
+            min={decimalPlaces > 0 ? 0.01 : 1}
+            step={decimalPlaces > 0 ? 10 ** -decimalPlaces : 1}
             value={targetAmount}
             onChange={(e) => setTargetAmount(e.target.value)}
             required

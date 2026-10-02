@@ -5,6 +5,8 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/toast-provider";
+import { getCurrencyDecimalPlaces } from "@/lib/currencies";
+import { toMinor } from "@/lib/financial-engine/money";
 
 // [Fase 5 — Investimentos] Cada submissão cria uma InvestmentValuation
 // NOVA — nunca edita nem apaga uma antiga (ver comentário em
@@ -12,23 +14,31 @@ import { useToast } from "@/components/toast-provider";
 // corrige-se registando uma nova avaliação correta, nunca editando a
 // anterior — mesma filosofia de "nunca alterar um registo passado" já
 // usada no resto do projeto.
-export function ValuationForm({ accountId }: { accountId: string }) {
+export function ValuationForm({ accountId, currency }: { accountId: string; currency: string }) {
   const router = useRouter();
   const toast = useToast();
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const decimalPlaces = getCurrencyDecimalPlaces(currency);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
 
-    const valueMinor = Number(value);
-    if (!Number.isInteger(valueMinor) || valueMinor < 0) {
-      setError("Indica um valor inteiro maior ou igual a zero (em CVE).");
+    let valueMinorBig: bigint;
+    try {
+      valueMinorBig = toMinor(value, currency);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Valor inválido.");
       return;
     }
+    if (valueMinorBig < 0n) {
+      setError("Indica um valor maior ou igual a zero.");
+      return;
+    }
+    const valueMinor = Number(valueMinorBig);
 
     setLoading(true);
     try {
@@ -57,13 +67,13 @@ export function ValuationForm({ accountId }: { accountId: string }) {
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="mt-1" />
       </label>
       <label className="text-xs font-medium text-muted-foreground">
-        Valor de mercado (CVE)
+        {`Valor de mercado (${currency})`}
         <Input
           type="number"
-          inputMode="numeric"
+          inputMode="decimal"
           min={0}
-          step={1}
-          placeholder="Ex: 150000"
+          step={decimalPlaces > 0 ? 10 ** -decimalPlaces : 1}
+          placeholder={decimalPlaces > 0 ? "Ex: 1500.00" : "Ex: 150000"}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           required

@@ -71,6 +71,13 @@ export const POST = withErrorHandling("api.recurring-transactions.post", async (
     const destination = await getAccountById(session.userId, input.destinationAccountId);
     if (!destination) return NextResponse.json({ error: "Conta de destino não encontrada." }, { status: 404 });
     if (destination.isArchived) return NextResponse.json({ error: "A conta de destino está arquivada." }, { status: 400 });
+    // [Task 2 — mesma proteção de POST /api/transactions, ver comentário lá]
+    if (destination.currency !== account.currency) {
+      return NextResponse.json(
+        { error: "Transferências entre contas de moedas diferentes ainda não são suportadas." },
+        { status: 400 },
+      );
+    }
   }
 
   if (input.categoryId) {

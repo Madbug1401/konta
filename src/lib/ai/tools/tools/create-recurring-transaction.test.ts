@@ -49,6 +49,18 @@ describe("create_recurring_transaction tool", () => {
     expect(createRecurringTransactionMock).not.toHaveBeenCalled();
   });
 
+  it("[Task 2] rejeita TRANSFER entre contas de moedas diferentes, sem criar a série", async () => {
+    getAccountByIdMock.mockImplementation(async (_userId: string, accountId: string) =>
+      accountId === "acc-1" ? { ...ACCOUNT, id: "acc-1", currency: "CVE" } : { ...ACCOUNT, id: "acc-2", currency: "EUR" },
+    );
+    const { createRecurringTransactionTool } = await import("./create-recurring-transaction");
+
+    await expect(
+      createRecurringTransactionTool.execute("user-1", validParams({ type: "TRANSFER", destinationAccountId: "acc-2" })),
+    ).rejects.toBeInstanceOf(ToolExecutionError);
+    expect(createRecurringTransactionMock).not.toHaveBeenCalled();
+  });
+
   it("resolve a categoria por NOME (nunca id), reutilizando resolveCategoryByName", async () => {
     getAccountByIdMock.mockResolvedValue(ACCOUNT);
     listCategoriesMock.mockResolvedValue([]);

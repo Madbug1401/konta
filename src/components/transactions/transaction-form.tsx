@@ -7,11 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/toast-provider";
+import { getCurrencyDecimalPlaces } from "@/lib/currencies";
 import type { TransactionType } from "@/lib/financial-engine";
+import { fromMinor, toMinor } from "@/lib/financial-engine/money";
 
 export interface TransactionFormAccount {
   id: string;
   name: string;
+  currency: string;
 }
 export interface TransactionFormCategory {
   id: string;
@@ -55,7 +58,14 @@ export function TransactionForm({ accounts, categories, goals = [], mode, transa
   const [type, setType] = useState<TransactionType>(initialValues?.type ?? "EXPENSE");
   const [accountId, setAccountId] = useState(initialValues?.accountId ?? accounts[0]?.id ?? "");
   const [destinationAccountId, setDestinationAccountId] = useState(initialValues?.destinationAccountId ?? "");
-  const [amount, setAmount] = useState(initialValues ? String(initialValues.amountMinor) : "");
+  // [Task 2 — Precisão monetária] O campo mostra sempre a representação
+  // decimal (fromMinor), nunca o inteiro em unidade mínima cru — senão uma
+  // transação EUR editada mostraria "1050" em vez de "10.50".
+  const [amount, setAmount] = useState(() => {
+    if (!initialValues) return "";
+    const account = accounts.find((a) => a.id === initialValues.accountId);
+    return fromMinor(BigInt(initialValues.amountMinor), account?.currency ?? "CVE");
+  });
   const [categoryId, setCategoryId] = useState(initialValues?.categoryId ?? "");
   // Categorias podem crescer em runtime via CategoryQuickCreate — por isso
   // vivem em estado local (inicializado da prop), não só na prop diretamente.
@@ -67,16 +77,26 @@ export function TransactionForm({ accounts, categories, goals = [], mode, transa
   const [loading, setLoading] = useState(false);
 
   const relevantCategories = categoryList.filter((c) => c.kind === type);
+  const selectedAccount = accounts.find((a) => a.id === accountId);
+  const currency = selectedAccount?.currency ?? "CVE";
+  const decimalPlaces = getCurrencyDecimalPlaces(currency);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
 
-    const amountMinor = Number(amount);
-    if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
-      setError("Indica um valor inteiro maior que zero (em CVE).");
+    let amountMinorBig: bigint;
+    try {
+      amountMinorBig = toMinor(amount, currency);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Valor inválido.");
       return;
     }
+    if (amountMinorBig <= 0n) {
+      setError("Indica um valor maior que zero.");
+      return;
+    }
+    const amountMinor = Number(amountMinorBig);
     if (type === "TRANSFER" && !destinationAccountId) {
       setError("Escolhe a conta de destino da transferência.");
       return;
@@ -177,15 +197,15 @@ export function TransactionForm({ accounts, categories, goals = [], mode, transa
         )}
 
         <label className="text-xs font-medium text-muted-foreground">
-          Valor (CVE)
+          {`Valor (${currency})`}
           <Input
             type="number"
-            inputMode="numeric"
-            min={1}
-            step={1}
+            inputMode="decimal"
+            min={decimalPlaces > 0 ? 0.01 : 1}
+            step={decimalPlaces > 0 ? 10 ** -decimalPlaces : 1}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder="Ex: 5000"
+            placeholder={decimalPlaces > 0 ? "Ex: 50.00" : "Ex: 5000"}
             required
           />
         </label>
