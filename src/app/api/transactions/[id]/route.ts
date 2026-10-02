@@ -31,7 +31,7 @@ export const UpdateTransactionSchema = z.object({
     .positive()
     .max(Number.MAX_SAFE_INTEGER)
     .describe(
-      "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE não tem casas decimais — 1050 = 1050 CVE).",
+      "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE também tem 2 casas decimais (centavo) — 1050 = 10,50 CVE).",
     )
     .optional(),
   categoryId: z.string().min(1).optional(),

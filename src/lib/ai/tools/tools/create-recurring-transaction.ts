@@ -18,7 +18,7 @@ const CreateRecurringTransactionToolSchema = z
     destinationAccountId: z.string().min(1).optional(),
     amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
       .describe(
-        "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE não tem casas decimais — 1050 = 1050 CVE).",
+        "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE também tem 2 casas decimais (centavo) — 1050 = 10,50 CVE).",
       ),
     category: z.string().trim().min(1).max(100).optional(),
     description: z.string().trim().min(1).max(255),

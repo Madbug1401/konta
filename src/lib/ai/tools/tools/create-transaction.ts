@@ -31,7 +31,7 @@ const CreateTransactionToolSchema = z
     destinationAccountId: z.string().min(1).optional(),
     amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
       .describe(
-        "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE não tem casas decimais — 1050 = 1050 CVE).",
+        "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE também tem 2 casas decimais (centavo) — 1050 = 10,50 CVE).",
       ),
     // [Correção] Nome em texto livre, nunca um id. Ignorado para TRANSFER
     // (transferências não têm categoria — mesma regra de

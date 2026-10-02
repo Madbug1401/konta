@@ -43,7 +43,7 @@ describe("runFinancialSimulation — adjust_expenses", () => {
   it("nunca deixa a despesa simulada ficar negativa", () => {
     const dataset = makeDataset({ transactions: [makeTransaction({ type: "EXPENSE", amountMinor: 1000n, date: "2026-09-05" })] });
     const result = runFinancialSimulation(dataset, makeFilters(), { type: "adjust_expenses", amountMinorDelta: -999_999 });
-    expect(result.simulated.expenses.replace(/[^\d]/g, "")).toBe("0");
+    expect(result.simulated.expenses.replace(/[^\d]/g, "")).toBe("000"); // "0,00 CVE" sem separadores — 2 casas decimais
   });
 });
 

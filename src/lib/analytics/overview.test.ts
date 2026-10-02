@@ -6,9 +6,9 @@ describe("getAnalyticsOverview", () => {
   it("sem transações: tudo zero, sem percentagens inventadas", () => {
     const dataset = makeDataset();
     const overview = getAnalyticsOverview(dataset, makeFilters({ comparisonMode: "none", comparisonPeriod: null }));
-    expect(overview.income.current).toBe("0 CVE");
+    expect(overview.income.current).toBe("0,00 CVE");
     expect(overview.income.changePercent).toBeNull();
-    expect(overview.debtsOutstanding).toBe("0 CVE");
+    expect(overview.debtsOutstanding).toBe("0,00 CVE");
     expect(overview.goals).toEqual({ activeCount: 0, averageProgressPercent: null });
   });
 
@@ -50,7 +50,10 @@ describe("getAnalyticsOverview", () => {
       ],
     });
     const overview = getAnalyticsOverview(dataset, makeFilters());
-    expect(overview.availableBalance).toContain("5000"); // "pt-CV".toLocaleString não agrupa < 5 dígitos de forma consistente neste runtime — o valor numérico é o que importa
+    // "pt-CV".toLocaleString não agrupa < 5 dígitos de forma consistente
+    // neste runtime — comparamos só os dígitos, ignorando separador decimal
+    // e de milhares, para não depender da formatação exata.
+    expect(overview.availableBalance.replace(/[^\d]/g, "")).toContain("5000");
   });
 
   it("progresso médio de metas usa o saldo da conta ligada, nunca um número inventado", () => {

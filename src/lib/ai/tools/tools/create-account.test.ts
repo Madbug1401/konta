@@ -37,7 +37,7 @@ describe("create_account tool", () => {
     const result = await createAccountTool.execute("user-1", { name: "Carteira", type: "WALLET" });
 
     expect(createAccountMock).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", name: "Carteira", type: "WALLET" }));
-    expect(result).toEqual({ id: "acc-1", name: "Carteira", type: "WALLET", currency: "CVE", balance: "0 CVE" });
+    expect(result).toEqual({ id: "acc-1", name: "Carteira", type: "WALLET", currency: "CVE", balance: "0,00 CVE" });
   });
 
   it("summarize descreve a conta a criar", async () => {

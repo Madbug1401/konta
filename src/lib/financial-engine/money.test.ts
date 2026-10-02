@@ -43,12 +43,9 @@ describe("abs", () => {
 // (nunca toBeCloseTo, que esconderia exatamente o tipo de erro que isto
 // previne).
 describe("toMinor", () => {
-  it("converte um valor inteiro para uma moeda sem casas decimais (CVE)", () => {
-    expect(toMinor("5000", "CVE")).toBe(5000n);
-  });
-
-  it("rejeita casas decimais numa moeda sem subunidade (CVE)", () => {
-    expect(() => toMinor("50.00", "CVE")).toThrow();
+  it("converte um valor com 2 casas decimais para CVE (centavo, ISO 4217 — decisão de 02/10/2026)", () => {
+    expect(toMinor("50.00", "CVE")).toBe(5000n);
+    expect(toMinor("5000", "CVE")).toBe(500000n); // "5000" sem ponto = 5000 escudos inteiros = 500000 centavos
   });
 
   it("converte um valor com 2 casas decimais para EUR", () => {
@@ -61,6 +58,7 @@ describe("toMinor", () => {
 
   it("rejeita mais casas decimais do que a moeda permite", () => {
     expect(() => toMinor("10.505", "EUR")).toThrow();
+    expect(() => toMinor("50.001", "CVE")).toThrow();
   });
 
   it("preserva o sinal negativo", () => {
@@ -81,7 +79,7 @@ describe("toMinor", () => {
 describe("fromMinor", () => {
   it("é o inverso exato de toMinor para várias moedas", () => {
     expect(fromMinor(1050n, "EUR")).toBe("10.50");
-    expect(fromMinor(5000n, "CVE")).toBe("5000");
+    expect(fromMinor(5000n, "CVE")).toBe("50.00");
     expect(fromMinor(-1050n, "EUR")).toBe("-10.50");
   });
 
@@ -91,8 +89,8 @@ describe("fromMinor", () => {
 });
 
 describe("formatMinor", () => {
-  it("formata CVE sem casas decimais e EUR com 2", () => {
-    expect(formatMinor(5000n, "CVE")).toBe("5000 CVE");
+  it("formata CVE e EUR, ambos com 2 casas decimais", () => {
+    expect(formatMinor(5000n, "CVE")).toBe("50,00 CVE");
     expect(formatMinor(1050n, "EUR")).toBe("10,50 EUR");
   });
 });

@@ -30,7 +30,7 @@ describe("getDebtAnalysis", () => {
     ]);
     const dataset = makeDataset({ debts: [debt] });
     const analysis = getDebtAnalysis(dataset, makeFilters());
-    expect(analysis.installmentsDueInPeriod).toContain("1000");
+    expect(analysis.installmentsDueInPeriod.replace(/[^\d]/g, "")).toContain("1000");
   });
 
   it("debtServiceRatioPercent = parcelas do período / receita do período — nunca dividido por zero", () => {

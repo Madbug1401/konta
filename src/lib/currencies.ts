@@ -14,13 +14,16 @@
 // ============================================================================
 
 // [Task 2 — Precisão monetária] `decimalPlaces` é a única fonte de verdade
-// de quantas casas decimais cada moeda usa (CVE não tem subunidade de uso
-// corrente, por isso 0 — nunca 2; as restantes seguem o ISO 4217 normal).
+// de quantas casas decimais cada moeda usa. CVE usa 2 (centavo, ISO 4217 —
+// o centavo está descontinuado no uso corrente em Cabo Verde, mas bancos e
+// a maioria dos sistemas financeiros continuam a representar CVE com 2
+// casas, por isso o Konta segue o mesmo padrão — decisão explícita do
+// utilizador, 02/10/2026, substitui a anterior "CVE = 0 casas").
 // `src/lib/financial-engine/money.ts` (toMinor/fromMinor/formatMinor) e
 // `src/components/money-display.tsx` leem SEMPRE daqui — nunca um valor
 // fixo duplicado nesses sítios, para nunca poderem divergir entre si.
 export const CURRENCIES = [
-  { code: "CVE", label: "Escudo cabo-verdiano (CVE)", decimalPlaces: 0 },
+  { code: "CVE", label: "Escudo cabo-verdiano (CVE)", decimalPlaces: 2 },
   { code: "EUR", label: "Euro (EUR)", decimalPlaces: 2 },
   { code: "USD", label: "Dólar americano (USD)", decimalPlaces: 2 },
   { code: "GBP", label: "Libra esterlina (GBP)", decimalPlaces: 2 },

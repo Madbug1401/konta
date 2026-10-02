@@ -15,7 +15,7 @@ describe("getRecurringAnalysis", () => {
       recurring: [makeRecurring({ id: "rec-1", type: "EXPENSE", frequency: "MONTHLY", amountMinor: 5000n, accountId: "acc-1" })],
     });
     const analysis = getRecurringAnalysis(dataset, makeFilters());
-    expect(analysis.recurringMonthlyExpenseEquivalent).toContain("5000");
+    expect(analysis.recurringMonthlyExpenseEquivalent.replace(/[^\d]/g, "")).toContain("5000");
   });
 
   it("só conta séries ATIVAS no equivalente mensal — uma série em pausa entra na lista mas não no total", () => {
@@ -28,8 +28,8 @@ describe("getRecurringAnalysis", () => {
     });
     const analysis = getRecurringAnalysis(dataset, makeFilters());
     expect(analysis.items).toHaveLength(2);
-    expect(analysis.recurringMonthlyExpenseEquivalent).toContain("1000");
-    expect(analysis.recurringMonthlyExpenseEquivalent).not.toContain("999999");
+    expect(analysis.recurringMonthlyExpenseEquivalent.replace(/[^\d]/g, "")).toContain("1000");
+    expect(analysis.recurringMonthlyExpenseEquivalent.replace(/[^\d]/g, "")).not.toContain("999999");
   });
 
   it("nunca soma receitas e despesas recorrentes juntas", () => {
@@ -41,7 +41,7 @@ describe("getRecurringAnalysis", () => {
       ],
     });
     const analysis = getRecurringAnalysis(dataset, makeFilters());
-    expect(analysis.recurringMonthlyExpenseEquivalent).toContain("1000");
+    expect(analysis.recurringMonthlyExpenseEquivalent.replace(/[^\d]/g, "")).toContain("1000");
     expect(analysis.recurringMonthlyIncomeEquivalent.replace(/[^\d]/g, "")).toBe("50000");
   });
 

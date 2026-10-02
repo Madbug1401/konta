@@ -20,7 +20,7 @@ const CreateGoalToolSchema = z
       .positive()
       .max(Number.MAX_SAFE_INTEGER)
       .describe(
-        "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 150000 = €1500.00 ou $1500.00; CVE não tem casas decimais — 150000 = 150000 CVE).",
+        "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 150000 = €1500.00 ou $1500.00; CVE também tem 2 casas decimais (centavo) — 150000 = 1500,00 CVE).",
       ),
     currency: z.enum(CURRENCY_CODES).optional(),
     targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

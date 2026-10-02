@@ -6,8 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/toast-provider";
+import { getCurrencyDecimalPlaces } from "@/lib/currencies";
 import { generateInstallmentPlan } from "@/lib/financial-engine";
-import { toMinor } from "@/lib/financial-engine/money";
+import { fromMinor, toMinor } from "@/lib/financial-engine/money";
+
+const DEBT_CURRENCY = "CVE";
+const DEBT_DECIMAL_PLACES = getCurrencyDecimalPlaces(DEBT_CURRENCY);
 
 const FREQUENCY_OPTIONS: { value: "MONTHLY" | "WEEKLY" | "DAILY" | "YEARLY"; label: string }[] = [
   { value: "MONTHLY", label: "Mensal" },
@@ -44,7 +48,7 @@ export function DebtForm() {
     const count = Number(installmentCount);
     if (!Number.isInteger(count) || count < 1 || !startDate) return null;
     try {
-      const amount = toMinor(originalAmount, "CVE");
+      const amount = toMinor(originalAmount, DEBT_CURRENCY);
       if (amount <= 0n) return null;
       return generateInstallmentPlan(amount, count, startDate, frequency);
     } catch {
@@ -58,7 +62,7 @@ export function DebtForm() {
 
     let amountMinorBig: bigint;
     try {
-      amountMinorBig = toMinor(originalAmount, "CVE");
+      amountMinorBig = toMinor(originalAmount, DEBT_CURRENCY);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Valor inválido.");
       return;
@@ -134,13 +138,13 @@ export function DebtForm() {
           <Input placeholder="Ex: Empréstimo pessoal" value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" />
         </label>
         <label className="text-xs font-medium text-muted-foreground">
-          Valor total (CVE)
+          {`Valor total (${DEBT_CURRENCY})`}
           <Input
             type="number"
-            inputMode="numeric"
-            min={1}
-            step={1}
-            placeholder="Ex: 120000"
+            inputMode="decimal"
+            min={DEBT_DECIMAL_PLACES > 0 ? 0.01 : 1}
+            step={DEBT_DECIMAL_PLACES > 0 ? 10 ** -DEBT_DECIMAL_PLACES : 1}
+            placeholder={DEBT_DECIMAL_PLACES > 0 ? "Ex: 1200.00" : "Ex: 120000"}
             value={originalAmount}
             onChange={(e) => setOriginalAmount(e.target.value)}
             required
@@ -199,7 +203,7 @@ export function DebtForm() {
               {preview.length} parcela{preview.length === 1 ? "" : "s"}, última em {preview[preview.length - 1].dueDate}
             </p>
             <p>
-              Ex: 1ª parcela de {preview[0].amountMinor.toString()} CVE em {preview[0].dueDate}
+              Ex: 1ª parcela de {fromMinor(preview[0].amountMinor, DEBT_CURRENCY)} {DEBT_CURRENCY} em {preview[0].dueDate}
             </p>
           </div>
         )}
