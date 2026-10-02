@@ -3,6 +3,11 @@
 import { Repeat } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  RecurringTransactionForm,
+  type RecurringTransactionFormAccount,
+  type RecurringTransactionFormCategory,
+} from "@/components/recurring/recurring-transaction-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,36 +22,58 @@ const FREQUENCY_LABEL: Record<RecurrenceFrequency, string> = { DAILY: "dia(s)", 
 export interface RecurringTransactionCardProps {
   id: string;
   type: TransactionType;
+  accountId: string;
+  destinationAccountId: string | null;
+  categoryId: string | null;
   description: string;
   amountMinor: bigint;
   currency: string;
   frequency: RecurrenceFrequency;
   interval: number;
+  startDate: string;
+  endDate: string | null;
   nextRunDate: string;
   occurrencesGenerated: number;
   occurrencesTotal: number | null;
   isActive: boolean;
+  accounts: RecurringTransactionFormAccount[];
+  categories: RecurringTransactionFormCategory[];
 }
 
 // [Fase 4 — Recorrências] Pausar/retomar (PATCH .../[id]) é reversível a
 // qualquer momento — mesmo botão faz as duas coisas, sem window.confirm
 // (mesma filosofia de arquivar uma Conta na Fase 3, baixo risco).
+//
+// [Task 1 — editar/eliminar] "Editar" troca o cartão pelo formulário inline
+// (mesmo RecurringTransactionForm da criação, em mode="edit" — nunca um
+// componente novo a duplicar a validação). "Eliminar" usa window.confirm,
+// mesmo padrão já usado em todo o resto da app para eliminações
+// irreversíveis (ver AccountDeleteButton) — nunca um diálogo novo inventado
+// só para aqui.
 export function RecurringTransactionCard({
   id,
   type,
+  accountId,
+  destinationAccountId,
+  categoryId,
   description,
   amountMinor,
   currency,
   frequency,
   interval,
+  startDate,
+  endDate,
   nextRunDate,
   occurrencesGenerated,
   occurrencesTotal,
   isActive,
+  accounts,
+  categories,
 }: RecurringTransactionCardProps) {
   const router = useRouter();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   async function handleToggle() {
     setLoading(true);
@@ -68,6 +95,50 @@ export function RecurringTransactionCard({
     }
   }
 
+  async function handleDelete() {
+    if (!window.confirm("Eliminar esta recorrência definitivamente? As transações já geradas por ela ficam — só a série deixa de existir. Esta ação não pode ser desfeita.")) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/recurring-transactions/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast.error(body.error ?? "Não foi possível eliminar a recorrência.");
+        return;
+      }
+      toast.success("Recorrência eliminada.");
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <RecurringTransactionForm
+        accounts={accounts}
+        categories={categories}
+        mode="edit"
+        recurringTransactionId={id}
+        initialValues={{
+          type,
+          accountId,
+          destinationAccountId,
+          amountMinor: Number(amountMinor),
+          categoryId,
+          description,
+          frequency,
+          interval,
+          startDate,
+          endDate,
+        }}
+        onSaved={() => setEditing(false)}
+        onCancelEdit={() => setEditing(false)}
+      />
+    );
+  }
+
   return (
     <Card className="flex flex-col gap-3" style={{ opacity: isActive ? 1 : 0.6 }}>
       <CardHeader>
@@ -87,9 +158,17 @@ export function RecurringTransactionCard({
         {occurrencesTotal !== null ? ` · ${occurrencesGenerated}/${occurrencesTotal} geradas` : ` · ${occurrencesGenerated} geradas`}
       </p>
 
-      <Button size="sm" variant="secondary" onClick={handleToggle} disabled={loading} className="self-end">
-        {loading ? "..." : isActive ? "Pausar" : "Retomar"}
-      </Button>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={() => setEditing(true)} disabled={loading}>
+          Editar
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handleDelete} disabled={loading} className="text-danger hover:bg-danger/10">
+          {loading ? "..." : "Eliminar"}
+        </Button>
+        <Button size="sm" variant="secondary" onClick={handleToggle} disabled={loading}>
+          {loading ? "..." : isActive ? "Pausar" : "Retomar"}
+        </Button>
+      </div>
     </Card>
   );
 }

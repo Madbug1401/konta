@@ -246,7 +246,11 @@ model Transaction {
   goalId               String?
   goal                 Goal?                 @relation(fields: [goalId], references: [id])
   recurringTransactionId String?
-  recurringTransaction RecurringTransaction? @relation(fields: [recurringTransactionId], references: [id])
+  // [Task 1 — editar/eliminar recorrências, 0007_recurring_transaction_fk_setnull.sql]
+  // SetNull, não o restrict por omissão: eliminar o template nunca pode
+  // falhar por já ter gerado ocorrências — ver [DECISÃO 7] acima, cada
+  // Transaction gerada já é independente do template assim que existe.
+  recurringTransaction RecurringTransaction? @relation(fields: [recurringTransactionId], references: [id], onDelete: SetNull)
 
   metadata  Json?
   createdAt DateTime @default(now())

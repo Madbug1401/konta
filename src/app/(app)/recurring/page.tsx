@@ -43,15 +43,22 @@ export default async function RecurringTransactionsPage() {
               key={s.id}
               id={s.id}
               type={s.type}
+              accountId={s.accountId}
+              destinationAccountId={s.destinationAccountId}
+              categoryId={s.categoryId}
               description={s.description}
               amountMinor={s.amountMinor}
               currency={s.currency}
               frequency={s.frequency}
               interval={s.interval}
+              startDate={s.startDate}
+              endDate={s.endDate}
               nextRunDate={s.nextRunDate}
               occurrencesGenerated={s.occurrencesGenerated}
               occurrencesTotal={s.occurrencesTotal}
               isActive={s.isActive}
+              accounts={accounts}
+              categories={categories}
             />
           ))}
         </div>

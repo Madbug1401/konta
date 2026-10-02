@@ -155,3 +155,65 @@ describe("materializeDueOccurrences", () => {
     expect(clientQueryMock).not.toHaveBeenCalled();
   });
 });
+
+// [Task 1 — editar/eliminar recorrências] updateRecurringTransaction lê a
+// série existente (getRecurringTransactionById) e só depois faz o UPDATE —
+// por isso cada teste mocka as DUAS chamadas a poolQueryMock, por ordem.
+describe("updateRecurringTransaction", () => {
+  afterEach(() => {
+    poolQueryMock.mockReset();
+  });
+
+  it("atualiza os campos dados e mantém nextRunDate quando startDate não avança para além do cursor", async () => {
+    poolQueryMock.mockResolvedValueOnce({ rows: [BASE_SERIES_ROW] }); // getRecurringTransactionById
+    poolQueryMock.mockResolvedValueOnce({ rows: [{ ...BASE_SERIES_ROW, description: "Spotify Família", amountMinor: "2000" }] }); // UPDATE
+
+    const { updateRecurringTransaction } = await import("./recurring-transactions");
+    const result = await updateRecurringTransaction("user-1", "series-1", { description: "Spotify Família", amountMinor: 2000n });
+
+    expect(result?.description).toBe("Spotify Família");
+    const updateCall = poolQueryMock.mock.calls[1];
+    // último parâmetro passado é sempre o nextRunDate calculado — igual ao
+    // existente (startDate não mudou nesta edição).
+    expect(updateCall[1].at(-1)).toBe(BASE_SERIES_ROW.nextRunDate);
+  });
+
+  it("avança nextRunDate quando a nova startDate é depois do cursor atual", async () => {
+    poolQueryMock.mockResolvedValueOnce({ rows: [BASE_SERIES_ROW] }); // nextRunDate/startDate = 2026-06-30
+    poolQueryMock.mockResolvedValueOnce({ rows: [{ ...BASE_SERIES_ROW, startDate: "2026-09-01", nextRunDate: "2026-09-01" }] });
+
+    const { updateRecurringTransaction } = await import("./recurring-transactions");
+    await updateRecurringTransaction("user-1", "series-1", { startDate: "2026-09-01" });
+
+    const updateCall = poolQueryMock.mock.calls[1];
+    expect(updateCall[1].at(-1)).toBe("2026-09-01");
+  });
+
+  it("devolve null sem tentar o UPDATE quando a série não existe/não pertence ao utilizador", async () => {
+    poolQueryMock.mockResolvedValueOnce({ rows: [] }); // getRecurringTransactionById não encontra nada
+
+    const { updateRecurringTransaction } = await import("./recurring-transactions");
+    const result = await updateRecurringTransaction("user-1", "series-inexistente", { description: "X" });
+
+    expect(result).toBeNull();
+    expect(poolQueryMock).toHaveBeenCalledTimes(1); // nunca chega a tentar o UPDATE
+  });
+});
+
+describe("deleteRecurringTransaction", () => {
+  afterEach(() => {
+    poolQueryMock.mockReset();
+  });
+
+  it("devolve true quando a série é eliminada", async () => {
+    poolQueryMock.mockResolvedValueOnce({ rowCount: 1 });
+    const { deleteRecurringTransaction } = await import("./recurring-transactions");
+    expect(await deleteRecurringTransaction("user-1", "series-1")).toBe(true);
+  });
+
+  it("devolve false quando a série não existe/não pertence ao utilizador, nunca lança", async () => {
+    poolQueryMock.mockResolvedValueOnce({ rowCount: 0 });
+    const { deleteRecurringTransaction } = await import("./recurring-transactions");
+    expect(await deleteRecurringTransaction("user-1", "series-inexistente")).toBe(false);
+  });
+});

@@ -110,6 +110,82 @@ export async function setRecurringTransactionActive(
   return rows[0] ? mapRecurring(rows[0]) : null;
 }
 
+// [Task 1 — editar recorrência] `currency` e `type` ficam de fora de
+// propósito — mesma regra já aplicada a `Account.currency` (updateAccount,
+// src/lib/db/accounts.ts): mudar a moeda ou o tipo (EXPENSE/INCOME/TRANSFER)
+// de uma série já em uso misturaria o sentido das ocorrências já geradas em
+// silêncio. Para isso, cria-se uma série nova.
+export interface UpdateRecurringTransactionInput {
+  accountId?: string;
+  destinationAccountId?: string | null;
+  amountMinor?: bigint;
+  categoryId?: string | null;
+  description?: string;
+  frequency?: RecurrenceFrequency;
+  interval?: number;
+  startDate?: string;
+  endDate?: string | null;
+  occurrencesTotal?: number | null;
+}
+
+/**
+ * Edita o template — nunca toca nas Transaction já materializadas (ficam
+ * totalmente independentes, ver [DECISÃO 7]). Só afeta ocorrências futuras.
+ * `nextRunDate` só é recalculado quando `startDate` avança para depois do
+ * cursor atual (não se pode gerar uma ocorrência antes do novo início) —
+ * mudar só `frequency`/`interval` não antecipa nem atrasa a PRÓXIMA
+ * ocorrência já agendada, só as que vierem depois dela.
+ */
+export async function updateRecurringTransaction(
+  userId: string,
+  id: string,
+  input: UpdateRecurringTransactionInput,
+): Promise<RecurringTransactionRecord | null> {
+  const existing = await getRecurringTransactionById(userId, id);
+  if (!existing) return null;
+
+  const startDate = input.startDate ?? existing.startDate;
+  const nextRunDate = startDate > existing.nextRunDate ? startDate : existing.nextRunDate;
+
+  const { rows } = await getPool().query(
+    `UPDATE "RecurringTransaction" SET
+       "accountId" = $3, "destinationAccountId" = $4, "amountMinor" = $5, "categoryId" = $6,
+       description = $7, frequency = $8, interval = $9, "startDate" = $10, "endDate" = $11,
+       "occurrencesTotal" = $12, "nextRunDate" = $13, "updatedAt" = now()
+     WHERE "userId" = $1 AND id = $2
+     RETURNING id, "userId", type, "accountId", "destinationAccountId", "amountMinor", currency,
+               "categoryId", description, frequency, interval, "startDate", "endDate",
+               "occurrencesTotal", "occurrencesGenerated", "nextRunDate", "isActive"`,
+    [
+      userId,
+      id,
+      input.accountId ?? existing.accountId,
+      input.destinationAccountId !== undefined ? input.destinationAccountId : existing.destinationAccountId,
+      (input.amountMinor ?? existing.amountMinor).toString(),
+      input.categoryId !== undefined ? input.categoryId : existing.categoryId,
+      input.description ?? existing.description,
+      input.frequency ?? existing.frequency,
+      input.interval ?? existing.interval,
+      startDate,
+      input.endDate !== undefined ? input.endDate : existing.endDate,
+      input.occurrencesTotal !== undefined ? input.occurrencesTotal : existing.occurrencesTotal,
+      nextRunDate,
+    ],
+  );
+  return rows[0] ? mapRecurring(rows[0]) : null;
+}
+
+/**
+ * Elimina o template — nunca as Transaction já geradas (FK SetNull, ver
+ * 0007_recurring_transaction_fk_setnull.sql: ficam intactas, só perdem a
+ * ligação). Devolve false se a série não existir/não pertencer ao utilizador
+ * (nunca lança — o chamador decide o 404).
+ */
+export async function deleteRecurringTransaction(userId: string, id: string): Promise<boolean> {
+  const { rowCount } = await getPool().query(`DELETE FROM "RecurringTransaction" WHERE "userId" = $1 AND id = $2`, [userId, id]);
+  return (rowCount ?? 0) > 0;
+}
+
 // Salvaguarda contra uma série esquecida há anos (ex: diária, nunca aberta
 // na Web) gerar milhares de Transactions de uma só vez num único pedido.
 // Ocorrências além deste limite ficam para o próximo pedido — nunca

@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
-import { getRecurringTransactionById, setRecurringTransactionActive } from "@/lib/db/recurring-transactions";
+import { getAccountById } from "@/lib/db/accounts";
+import { getCategoryById } from "@/lib/db/categories";
+import {
+  deleteRecurringTransaction,
+  getRecurringTransactionById,
+  setRecurringTransactionActive,
+  updateRecurringTransaction,
+} from "@/lib/db/recurring-transactions";
 import { withErrorHandling } from "@/lib/api-error";
 
 export const GET = withErrorHandling(
@@ -18,12 +25,32 @@ export const GET = withErrorHandling(
   },
 );
 
-// [Fase 4 — Recorrências] Só pausa/retoma (`isActive`) — editar valor/
-// frequência/conta depois de já haver ocorrências geradas teria exatamente
-// o mesmo problema do `originalAmountMinor` de uma Dívida (Fase 2):
-// desincronizaria das Transactions já materializadas sem nenhuma
-// regeneração. Fica fora deste plano de propósito.
-const UpdateRecurringTransactionSchema = z.object({ isActive: z.boolean() });
+// [Task 1 — editar recorrência] `currency` e `type` ficam de fora, de
+// propósito — mesma regra de Account.currency (ver comentário em
+// updateRecurringTransaction, src/lib/db/recurring-transactions.ts).
+// Exportado para a tool `update_recurring_transaction` reutilizar
+// literalmente este schema, mesmo padrão de UpdateTransactionSchema.
+export const UpdateRecurringTransactionSchema = z.object({
+  isActive: z.boolean().optional(),
+  accountId: z.string().min(1).optional(),
+  destinationAccountId: z.string().min(1).nullable().optional(),
+  amountMinor: z
+    .number()
+    .int()
+    .positive()
+    .max(Number.MAX_SAFE_INTEGER)
+    .describe(
+      "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD/CVE — 1050 = 10,50 na moeda da conta).",
+    )
+    .optional(),
+  categoryId: z.string().min(1).nullable().optional(),
+  description: z.string().trim().min(1).max(255).optional(),
+  frequency: z.enum(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]).optional(),
+  interval: z.number().int().min(1).max(365).optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  occurrencesTotal: z.number().int().min(1).max(10_000).nullable().optional(),
+});
 
 export const PATCH = withErrorHandling(
   "api.recurring-transactions.[id].patch",
@@ -37,10 +64,107 @@ export const PATCH = withErrorHandling(
     if (!parsed.success) {
       return NextResponse.json({ error: "Dados inválidos.", details: parsed.error.flatten() }, { status: 400 });
     }
+    const input = parsed.data;
 
-    const updated = await setRecurringTransactionActive(session.userId, id, parsed.data.isActive);
+    const existing = await getRecurringTransactionById(session.userId, id);
+    if (!existing) return NextResponse.json({ error: "Recorrência não encontrada." }, { status: 404 });
+
+    const { isActive, ...fields } = input;
+    const hasFieldEdits = Object.values(fields).some((v) => v !== undefined);
+
+    if (hasFieldEdits) {
+      // [Task 1] `type` não é editável — a presença/ausência de destino é
+      // sempre decidida pelo type ORIGINAL da série, nunca pelo que o
+      // cliente manda agora.
+      if (fields.destinationAccountId !== undefined) {
+        if (existing.type !== "TRANSFER") {
+          return NextResponse.json({ error: "Só uma série de transferência pode ter conta de destino." }, { status: 400 });
+        }
+        if (fields.destinationAccountId === null) {
+          return NextResponse.json({ error: "Uma série de transferência precisa sempre de uma conta de destino." }, { status: 400 });
+        }
+      }
+
+      const nextAccountId = fields.accountId ?? existing.accountId;
+      const nextDestinationAccountId = fields.destinationAccountId !== undefined ? fields.destinationAccountId : existing.destinationAccountId;
+
+      // [Correção — self-transfer] Tem de comparar origem/destino RESULTANTES
+      // sempre que qualquer um dos dois muda, nunca só quando
+      // destinationAccountId vem no corpo do pedido — mudar só accountId
+      // para coincidir com um destinationAccountId já existente é a mesma
+      // colisão, só que do outro lado.
+      if ((fields.accountId !== undefined || fields.destinationAccountId !== undefined) && nextDestinationAccountId === nextAccountId) {
+        return NextResponse.json({ error: "A conta de destino tem de ser diferente da conta de origem." }, { status: 400 });
+      }
+
+      if (fields.accountId !== undefined) {
+        const account = await getAccountById(session.userId, fields.accountId);
+        if (!account) return NextResponse.json({ error: "Conta não encontrada." }, { status: 404 });
+        if (account.isArchived) return NextResponse.json({ error: "Esta conta está arquivada." }, { status: 400 });
+      }
+
+      if (fields.destinationAccountId) {
+        const destination = await getAccountById(session.userId, fields.destinationAccountId);
+        if (!destination) return NextResponse.json({ error: "Conta de destino não encontrada." }, { status: 404 });
+        if (destination.isArchived) return NextResponse.json({ error: "A conta de destino está arquivada." }, { status: 400 });
+      }
+
+      // [Task 2 — mesma proteção de POST /api/transactions] Só revalida
+      // quando origem ou destino mudam — não vale a pena ir à BD outra vez
+      // só porque a descrição mudou.
+      if (existing.type === "TRANSFER" && nextDestinationAccountId && (fields.accountId !== undefined || fields.destinationAccountId !== undefined)) {
+        const [origin, destination] = await Promise.all([
+          getAccountById(session.userId, nextAccountId),
+          getAccountById(session.userId, nextDestinationAccountId),
+        ]);
+        if (origin && destination && origin.currency !== destination.currency) {
+          return NextResponse.json(
+            { error: "Transferências entre contas de moedas diferentes ainda não são suportadas." },
+            { status: 400 },
+          );
+        }
+      }
+
+      if (fields.categoryId) {
+        const category = await getCategoryById(session.userId, fields.categoryId);
+        if (!category) return NextResponse.json({ error: "Categoria não encontrada." }, { status: 404 });
+      }
+
+      await updateRecurringTransaction(session.userId, id, {
+        accountId: fields.accountId,
+        destinationAccountId: fields.destinationAccountId,
+        amountMinor: fields.amountMinor !== undefined ? BigInt(fields.amountMinor) : undefined,
+        categoryId: fields.categoryId,
+        description: fields.description,
+        frequency: fields.frequency,
+        interval: fields.interval,
+        startDate: fields.startDate,
+        endDate: fields.endDate,
+        occurrencesTotal: fields.occurrencesTotal,
+      });
+    }
+
+    const updated = isActive !== undefined ? await setRecurringTransactionActive(session.userId, id, isActive) : await getRecurringTransactionById(session.userId, id);
     if (!updated) return NextResponse.json({ error: "Recorrência não encontrada." }, { status: 404 });
 
     return NextResponse.json({ ...updated, amountMinor: updated.amountMinor.toString() });
+  },
+);
+
+export const DELETE = withErrorHandling(
+  "api.recurring-transactions.[id].delete",
+  async (_request: Request, { params }: { params: Promise<{ id: string }> }) => {
+    const session = await getSessionUser();
+    if (!session) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+
+    const { id } = await params;
+    // deleteRecurringTransaction filtra sempre por userId (regra 6 do
+    // briefing) — nunca apaga a série de outro utilizador mesmo adivinhando
+    // o id. As Transaction já geradas sobrevivem (FK SetNull, ver
+    // 0007_recurring_transaction_fk_setnull.sql).
+    const deleted = await deleteRecurringTransaction(session.userId, id);
+    if (!deleted) return NextResponse.json({ error: "Recorrência não encontrada." }, { status: 404 });
+
+    return NextResponse.json({ ok: true });
   },
 );

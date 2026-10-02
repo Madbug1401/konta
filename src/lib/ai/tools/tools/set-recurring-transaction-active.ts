@@ -1,6 +1,6 @@
 // KONTA AI — tool: set_recurring_transaction_active (HIGH, Milestone 6).
-// Pausar/retomar — nunca eliminar (não existe DELETE para recorrências no
-// produto; ver src/app/api/recurring-transactions/). Mesmo mecanismo de
+// Pausar/retomar — para eliminar a série (Task 1) usa
+// delete_recurring_transaction. Mesmo mecanismo de
 // setRecurringTransactionActive já usado pela UI (/recurring).
 import { z } from "zod";
 import { getRecurringTransactionById, setRecurringTransactionActive } from "@/lib/db/recurring-transactions";
@@ -27,7 +27,7 @@ async function execute(userId: string, params: SetRecurringTransactionActivePara
 export const setRecurringTransactionActiveTool: AiTool<SetRecurringTransactionActiveParams, { isActive: boolean }> = {
   name: "set_recurring_transaction_active",
   description:
-    "Pausa (isActive=false) ou retoma (isActive=true) uma série recorrente — não existe forma de eliminar uma série, só pausar. `recurringTransactionId` tem de vir de get_recurring_transactions. Escrita financeira — exige confirmação explícita.",
+    "Pausa (isActive=false) ou retoma (isActive=true) uma série recorrente, sem a eliminar (para eliminar, usa delete_recurring_transaction). `recurringTransactionId` tem de vir de get_recurring_transactions. Escrita financeira — exige confirmação explícita.",
   paramsSchema: SetRecurringTransactionActiveToolSchema,
   riskTier: "HIGH",
   summarize: (params) => {

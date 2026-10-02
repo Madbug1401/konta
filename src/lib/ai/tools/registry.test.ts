@@ -28,6 +28,9 @@ const EXPECTED_TOOL_RISK: Record<string, "LOW" | "HIGH"> = {
   update_goal_status: "HIGH",
   create_recurring_transaction: "HIGH",
   set_recurring_transaction_active: "HIGH",
+  // Task 1 — editar/eliminar recorrências (02/10/2026)
+  update_recurring_transaction: "HIGH",
+  delete_recurring_transaction: "HIGH",
   create_investment_detail: "HIGH",
   update_investment_detail: "HIGH",
   add_investment_valuation: "HIGH",

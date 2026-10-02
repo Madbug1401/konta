@@ -3,13 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { CategoryQuickCreate, type CreatedCategory } from "@/components/transactions/category-quick-create";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/toast-provider";
 import { getCurrencyDecimalPlaces } from "@/lib/currencies";
 import type { RecurrenceFrequency, TransactionType } from "@/lib/financial-engine";
-import { toMinor } from "@/lib/financial-engine/money";
+import { fromMinor, toMinor } from "@/lib/financial-engine/money";
 
 export interface RecurringTransactionFormAccount {
   id: string;
@@ -29,32 +30,66 @@ const FREQUENCY_OPTIONS: { value: RecurrenceFrequency; label: string }[] = [
   { value: "YEARLY", label: "Anual" },
 ];
 
+export interface RecurringTransactionFormInitialValues {
+  type: TransactionType;
+  accountId: string;
+  destinationAccountId?: string | null;
+  amountMinor: number;
+  categoryId?: string | null;
+  description: string;
+  frequency: RecurrenceFrequency;
+  interval: number;
+  startDate: string;
+  endDate?: string | null;
+}
+
 // [Fase 4 — Recorrências] Reaproveita o seletor de tipo/conta/categoria já
 // usado em transaction-form.tsx (mesmo padrão visual, mesma lógica de
 // "categoria só faz sentido fora de TRANSFER") — os campos extra aqui
 // (frequência, intervalo, data de início, fim opcional) são só a "receita"
 // que o materializador (src/lib/db/recurring-transactions.ts) usa depois
 // para gerar as Transactions reais, uma a uma, na leitura.
+//
+// [Task 1 — editar recorrência] `mode="edit"` reutiliza o mesmo formulário
+// (mesmo padrão de TransactionForm create/edit) — `type` deixa de ser
+// escolhível (nunca editável, mesma regra de `currency`, ver
+// updateRecurringTransaction) e o `open` interno não se aplica: quem decide
+// mostrar o formulário de edição é o `RecurringTransactionCard`, não um
+// botão próprio aqui dentro.
 export function RecurringTransactionForm({
   accounts,
   categories,
+  mode = "create",
+  recurringTransactionId,
+  initialValues,
+  onSaved,
+  onCancelEdit,
 }: {
   accounts: RecurringTransactionFormAccount[];
   categories: RecurringTransactionFormCategory[];
+  mode?: "create" | "edit";
+  recurringTransactionId?: string;
+  initialValues?: RecurringTransactionFormInitialValues;
+  onSaved?: () => void;
+  onCancelEdit?: () => void;
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [type, setType] = useState<TransactionType>("EXPENSE");
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
-  const [destinationAccountId, setDestinationAccountId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [type, setType] = useState<TransactionType>(initialValues?.type ?? "EXPENSE");
+  const [accountId, setAccountId] = useState(initialValues?.accountId ?? accounts[0]?.id ?? "");
+  const [destinationAccountId, setDestinationAccountId] = useState(initialValues?.destinationAccountId ?? "");
+  const [amount, setAmount] = useState(() => {
+    if (!initialValues) return "";
+    const account = accounts.find((a) => a.id === initialValues.accountId);
+    return fromMinor(BigInt(initialValues.amountMinor), account?.currency ?? "CVE");
+  });
+  const [categoryId, setCategoryId] = useState(initialValues?.categoryId ?? "");
   const [categoryList, setCategoryList] = useState(categories);
-  const [description, setDescription] = useState("");
-  const [frequency, setFrequency] = useState<RecurrenceFrequency>("MONTHLY");
-  const [interval, setInterval] = useState("1");
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
-  const [endDate, setEndDate] = useState("");
+  const [description, setDescription] = useState(initialValues?.description ?? "");
+  const [frequency, setFrequency] = useState<RecurrenceFrequency>(initialValues?.frequency ?? "MONTHLY");
+  const [interval, setInterval] = useState(String(initialValues?.interval ?? 1));
+  const [startDate, setStartDate] = useState(initialValues?.startDate ?? new Date().toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState(initialValues?.endDate ?? "");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -96,36 +131,55 @@ export function RecurringTransactionForm({
 
     setLoading(true);
     try {
-      const res = await fetch("/api/recurring-transactions", {
-        method: "POST",
+      const isEdit = mode === "edit";
+      const res = await fetch(isEdit ? `/api/recurring-transactions/${recurringTransactionId}` : "/api/recurring-transactions", {
+        method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type,
-          accountId,
-          destinationAccountId: type === "TRANSFER" ? destinationAccountId : undefined,
-          amountMinor,
-          categoryId: type === "TRANSFER" ? undefined : categoryId || undefined,
-          description,
-          frequency,
-          interval: intervalValue,
-          startDate,
-          endDate: endDate || undefined,
-        }),
+        body: JSON.stringify(
+          isEdit
+            ? {
+                accountId,
+                destinationAccountId: type === "TRANSFER" ? destinationAccountId : undefined,
+                amountMinor,
+                categoryId: type === "TRANSFER" ? undefined : categoryId || null,
+                description,
+                frequency,
+                interval: intervalValue,
+                startDate,
+                endDate: endDate || null,
+              }
+            : {
+                type,
+                accountId,
+                destinationAccountId: type === "TRANSFER" ? destinationAccountId : undefined,
+                amountMinor,
+                categoryId: type === "TRANSFER" ? undefined : categoryId || undefined,
+                description,
+                frequency,
+                interval: intervalValue,
+                startDate,
+                endDate: endDate || undefined,
+              },
+        ),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body.error ?? "Não foi possível criar a recorrência.");
+        setError(body.error ?? `Não foi possível ${isEdit ? "guardar as alterações" : "criar a recorrência"}.`);
         return;
       }
-      toast.success("Recorrência criada.");
-      setOpen(false);
+      toast.success(isEdit ? "Recorrência atualizada." : "Recorrência criada.");
+      if (isEdit) {
+        onSaved?.();
+      } else {
+        setOpen(false);
+      }
       router.refresh();
     } finally {
       setLoading(false);
     }
   }
 
-  if (!open) {
+  if (mode === "create" && !open) {
     return (
       <Button variant="secondary" onClick={() => setOpen(true)}>
         + Nova recorrência
@@ -136,20 +190,29 @@ export function RecurringTransactionForm({
   return (
     <Card>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-2">
-          {(["EXPENSE", "INCOME", "TRANSFER"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setType(t)}
-              className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-                type === t ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
-              }`}
-            >
-              {t === "EXPENSE" ? "Despesa" : t === "INCOME" ? "Receita" : "Transferência"}
-            </button>
-          ))}
-        </div>
+        {mode === "create" ? (
+          <div className="grid grid-cols-3 gap-2">
+            {(["EXPENSE", "INCOME", "TRANSFER"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setType(t)}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                  type === t ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                }`}
+              >
+                {t === "EXPENSE" ? "Despesa" : t === "INCOME" ? "Receita" : "Transferência"}
+              </button>
+            ))}
+          </div>
+        ) : (
+          // [Task 1] `type` nunca é editável — mostrado só como etiqueta,
+          // nunca um controlo. Mudar o tipo de uma série já em uso é criar
+          // uma nova, não editar esta.
+          <Badge tone={type === "INCOME" ? "success" : type === "EXPENSE" ? "danger" : "info"}>
+            {type === "EXPENSE" ? "Despesa" : type === "INCOME" ? "Receita" : "Transferência"}
+          </Badge>
+        )}
 
         <label className="text-xs font-medium text-muted-foreground">
           {type === "TRANSFER" ? "Conta de origem" : "Conta"}
@@ -266,9 +329,9 @@ export function RecurringTransactionForm({
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         <div className="flex gap-2">
           <Button type="submit" disabled={loading}>
-            {loading ? "A criar..." : "Criar recorrência"}
+            {loading ? "A guardar..." : mode === "edit" ? "Guardar alterações" : "Criar recorrência"}
           </Button>
-          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+          <Button type="button" variant="ghost" onClick={() => (mode === "edit" ? onCancelEdit?.() : setOpen(false))}>
             Cancelar
           </Button>
         </div>

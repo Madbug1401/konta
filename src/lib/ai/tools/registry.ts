@@ -38,6 +38,8 @@ import { updateGoalTool } from "./tools/update-goal";
 import { updateGoalStatusTool } from "./tools/update-goal-status";
 import { createRecurringTransactionTool } from "./tools/create-recurring-transaction";
 import { setRecurringTransactionActiveTool } from "./tools/set-recurring-transaction-active";
+import { updateRecurringTransactionTool } from "./tools/update-recurring-transaction";
+import { deleteRecurringTransactionTool } from "./tools/delete-recurring-transaction";
 import { createInvestmentDetailTool } from "./tools/create-investment-detail";
 import { updateInvestmentDetailTool } from "./tools/update-investment-detail";
 import { addInvestmentValuationTool } from "./tools/add-investment-valuation";
@@ -87,6 +89,8 @@ const TOOLS: AiTool<unknown, unknown>[] = [
   defineTool(updateGoalStatusTool),
   defineTool(createRecurringTransactionTool),
   defineTool(setRecurringTransactionActiveTool),
+  defineTool(updateRecurringTransactionTool),
+  defineTool(deleteRecurringTransactionTool),
   defineTool(createInvestmentDetailTool),
   defineTool(updateInvestmentDetailTool),
   defineTool(addInvestmentValuationTool),
