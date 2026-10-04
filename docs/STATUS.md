@@ -36,7 +36,16 @@ consultar exatamente a mesma camada — incluindo a capacidade nova da IA
 sugerir mudanças à própria página (`set_analytics_view`, sempre validado,
 nunca execução de código) e devolver gráficos declarativos (nunca
 HTML/SVG/JS) — ver `docs/architecture/OVERVIEW.md`, secção "Konta
-Analytics", para o desenho completo.
+Analytics", para o desenho completo. As secções 2, 5 e 6 foram atualizadas
+de novo entre 01/10/2026 e 04/10/2026 para três tarefas relacionadas com
+dinheiro e moedas: (1) editar/eliminar séries recorrentes (antes só
+criar/pausar); (2) precisão monetária por moeda — cada moeda passa a ter as
+suas próprias casas decimais (CVE inclui, com 2 — decisão do utilizador,
+substitui o que esta secção dizia antes), em vez do sistema inteiro tratar
+tudo como se tivesse 0 casas; (3) transferências entre contas de moedas
+diferentes, com taxa de câmbio gravada e nunca recalculada. Ver
+`prisma/manual-sql/0007_recurring_transaction_fk_setnull.sql` e
+`0008_transfer_fx_fields.sql` para as migrations.
 
 ## 1. O que é o Konta hoje
 
@@ -82,7 +91,10 @@ protótipo, que misturava tudo num único registo genérico:
 - **Category** — categorias de receita/despesa, independentes por tipo.
 - **Transaction** — `type` (INCOME/EXPENSE/TRANSFER) + `status`
   (COMPLETED/PENDING/CANCELED). Uma transferência tem `destinationAccountId`
-  próprio — nunca é tratada como despesa.
+  próprio — nunca é tratada como despesa. Entre contas de moedas diferentes,
+  precisa de `exchangeRate` (taxa gravada, nunca recalculada depois) —
+  `destinationCurrency`/`destinationAmountMinor` ficam `null` em todos os
+  outros casos (mesma moeda, ou não é transferência).
 - **RecurringTransaction** — identidade própria (id), nunca identificada por
   título+valor como no protótipo.
 - **Debt** + **DebtInstallment** — dívida como entidade completa (credor,
@@ -93,8 +105,13 @@ protótipo, que misturava tudo num único registo genérico:
   atual são sempre dois números guardados separadamente (nunca um a fingir
   de outro).
 
-Todas as quantias em dinheiro são `BigInt` em unidade mínima (cêntimos),
-nunca `float`.
+Todas as quantias em dinheiro são `BigInt` em unidade mínima, nunca `float`.
+As casas decimais de cada moeda vêm de `src/lib/currencies.ts`
+(`getCurrencyDecimalPlaces`) — única fonte de verdade, nunca um valor fixo
+duplicado noutro sítio. CVE tem 2 casas (centavo, ISO 4217 — decisão do
+utilizador, 02/10/2026); EUR/USD/GBP/BRL também têm 2. `toMinor`/`fromMinor`
+(`src/lib/financial-engine/money.ts`) convertem entre a string digitada e o
+`BigInt` gravado, sem nunca passar por `parseFloat`.
 
 Este schema está espelhado 1:1 em SQL puro em `prisma/manual-sql/0001_init.sql`
 (ver secção 8 sobre porquê).
@@ -112,7 +129,7 @@ poder ser reutilizado por Web, futuro Mobile, relatórios e (mais tarde) IA.
 | `balance.ts` | `getAccountBalance`/`getNetWorth`/`getAvailableBalance` — saldo = inicial + Σ movimentos, sempre calculado, nunca guardado |
 | `cashflow.ts` | Receitas/despesas/poupança por período |
 | `debts.ts` | Cálculo de parcelas e progresso de dívida (lógica pronta; sem UI ainda) |
-| `recurring.ts` | Próxima data de ocorrência de uma série recorrente (lógica pronta; sem materialização automática ainda) |
+| `recurring.ts` | Próxima data de ocorrência de uma série recorrente — materialização automática já existe (`materializeDueOccurrences`, `src/lib/db/recurring-transactions.ts`) |
 | `goals.ts` | Progresso de metas e projeção de data de conclusão |
 | `investments.ts` | Separa capital aportado de valor atual/retorno |
 
@@ -159,7 +176,9 @@ poder ser reutilizado por Web, futuro Mobile, relatórios e (mais tarde) IA.
   marcação de incumprimento
 - `/goals` — criação de meta (ligada opcionalmente a uma conta dedicada),
   edição, progresso e projeção de data de conclusão
-- `/recurring` — séries recorrentes (criação, edição)
+- `/recurring` — séries recorrentes (criação, pausar/retomar, editar, eliminar
+  — inclui transferências entre contas de moedas diferentes com taxa de
+  câmbio gravada)
 - `/admin` — estatísticas da plataforma, só visível para emails em
   `ADMIN_EMAILS`; inclui agora um botão por utilizador para ativar/desativar
   o acesso ao Konta AI (`UserAiAccessButton`, `POST
@@ -204,9 +223,6 @@ poder ser reutilizado por Web, futuro Mobile, relatórios e (mais tarde) IA.
 **Ainda por construir** — nenhuma UI dedicada, mesmo com dados/motor prontos
 onde aplicável:
 
-- Materialização automática de `RecurringTransaction` em `Transaction` real
-  (o cálculo de próxima ocorrência já existe em `financial-engine/recurring.ts`,
-  falta o job/rota que a executa)
 - Onboarding
 - No Konta AI: memória persistente entre sessões, streaming de resposta,
   notificações proativas, `AiActionLog` persistente — ver secção "Konta AI"
@@ -289,9 +305,6 @@ documento, que fica desatualizado a cada novo teste.
   `src/lib/db/*.ts`, com assinaturas idênticas às que o Prisma Client teria.
   Na tua máquina isto pode não ser necessário — `npx prisma generate && npx
   prisma db push` deve funcionar sem bloqueios (ver `docs/operations/WINDOWS_SETUP.md`).
-- **Sem materialização automática de transações recorrentes** — a função que
-  calcula "quando é a próxima ocorrência" existe (`recurring.ts`), mas nada
-  a transforma ainda numa `Transaction` real na base de dados.
 - **Migração do protótipo** — só o mapeamento/desenho existe
   (`docs/architecture/MIGRATION.md`); o script executável de migração dos
   dados de `localStorage` ainda não foi escrito.

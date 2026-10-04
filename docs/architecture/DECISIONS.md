@@ -35,11 +35,21 @@ Ficheiro: `src/lib/financial-engine/balance.ts`. Prova de regressão:
 
 Todos os campos monetários são `BigInt` em Postgres/Prisma (`amountMinor`,
 `initialBalanceMinor`, `targetAmountMinor`, etc.) e `bigint` em TypeScript.
-CVE não tem subunidade de uso corrente, por isso `minorUnitFactor = 1`; para
-suportar EUR/USD no futuro bastaria uma tabela `minorUnitFactor` por moeda em
-`src/components/money-display.tsx` e `src/lib/financial-engine/money.ts` — a
-escolha de já guardar tudo como inteiro é o que torna essa mudança futura
-segura e sem migração de dados.
+
+**[ATUALIZADO 02/10/2026 — Task 2]** Esta decisão previa originalmente
+`minorUnitFactor = 1` fixo para todas as moedas (CVE não teria subunidade de
+uso corrente) — substituído por decisão explícita do utilizador: CVE também
+passa a ter 2 casas decimais (centavo, ISO 4217; o centavo está
+descontinuado no uso corrente em Cabo Verde, mas bancos/sistemas financeiros
+continuam a representá-lo assim). `src/lib/currencies.ts`
+(`getCurrencyDecimalPlaces`) é agora a única fonte de verdade de quantas
+casas cada moeda usa (CVE/EUR/USD/GBP/BRL = 2 hoje); `toMinor`/`fromMinor`
+(`src/lib/financial-engine/money.ts`) convertem exatamente entre a string
+digitada e o `BigInt` gravado, nunca `parseFloat`. A escolha original de já
+guardar tudo como inteiro revelou-se correta na prática: a mudança de CVE
+0→2 casas não exigiu migração de *schema* nenhuma — só um `UPDATE` de dados
+(`×100` nos registos já existentes, ver `docs/STATUS.md`), porque a coluna
+já era `BigInt` desde sempre.
 
 ## 5. Modelo de dados separado (Accounts / Transactions / Categories / Debts / Goals / Recurring / Investments)
 
