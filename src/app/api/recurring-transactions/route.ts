@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { getAccountById } from "@/lib/db/accounts";
 import { getCategoryById } from "@/lib/db/categories";
 import { createRecurringTransaction, listRecurringTransactions } from "@/lib/db/recurring-transactions";
+import { convertByExchangeRate } from "@/lib/financial-engine/money";
 import { withErrorHandling } from "@/lib/api-error";
 
 export const GET = withErrorHandling("api.recurring-transactions.get", async () => {
@@ -11,7 +12,13 @@ export const GET = withErrorHandling("api.recurring-transactions.get", async () 
   if (!session) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
 
   const series = await listRecurringTransactions(session.userId);
-  return NextResponse.json({ recurringTransactions: series.map((s) => ({ ...s, amountMinor: s.amountMinor.toString() })) });
+  return NextResponse.json({
+    recurringTransactions: series.map((s) => ({
+      ...s,
+      amountMinor: s.amountMinor.toString(),
+      destinationAmountMinor: s.destinationAmountMinor?.toString() ?? null,
+    })),
+  });
 });
 
 // [Fase 4 — Recorrências] Mesmas regras já usadas em
@@ -25,6 +32,11 @@ const CreateRecurringTransactionSchema = z
     accountId: z.string().min(1),
     destinationAccountId: z.string().min(1).optional(),
     amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    // [Task 3] Ver comentário em CreateTransactionSchema (src/app/api/transactions/route.ts).
+    exchangeRate: z
+      .string()
+      .regex(/^\d+(\.\d+)?$/, "Taxa de câmbio inválida.")
+      .optional(),
     categoryId: z.string().min(1).optional(),
     description: z.string().trim().min(1).max(255),
     frequency: z.enum(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]),
@@ -67,16 +79,26 @@ export const POST = withErrorHandling("api.recurring-transactions.post", async (
   if (!account) return NextResponse.json({ error: "Conta não encontrada." }, { status: 404 });
   if (account.isArchived) return NextResponse.json({ error: "Esta conta está arquivada." }, { status: 400 });
 
+  let destinationCurrency: string | null = null;
+  let destinationAmountMinor: bigint | null = null;
   if (input.destinationAccountId) {
     const destination = await getAccountById(session.userId, input.destinationAccountId);
     if (!destination) return NextResponse.json({ error: "Conta de destino não encontrada." }, { status: 404 });
     if (destination.isArchived) return NextResponse.json({ error: "A conta de destino está arquivada." }, { status: 400 });
-    // [Task 2 — mesma proteção de POST /api/transactions, ver comentário lá]
     if (destination.currency !== account.currency) {
-      return NextResponse.json(
-        { error: "Transferências entre contas de moedas diferentes ainda não são suportadas." },
-        { status: 400 },
-      );
+      // [Task 2 — mesma proteção de POST /api/transactions, ver comentário lá]
+      if (!input.exchangeRate) {
+        return NextResponse.json(
+          { error: "Transferências entre contas de moedas diferentes precisam de taxa de câmbio (exchangeRate)." },
+          { status: 400 },
+        );
+      }
+      try {
+        destinationCurrency = destination.currency;
+        destinationAmountMinor = convertByExchangeRate(BigInt(input.amountMinor), input.exchangeRate, account.currency, destination.currency);
+      } catch (e) {
+        return NextResponse.json({ error: e instanceof Error ? e.message : "Taxa de câmbio inválida." }, { status: 400 });
+      }
     }
   }
 
@@ -92,6 +114,9 @@ export const POST = withErrorHandling("api.recurring-transactions.post", async (
     destinationAccountId: input.destinationAccountId,
     amountMinor: BigInt(input.amountMinor),
     currency: account.currency,
+    destinationCurrency,
+    destinationAmountMinor,
+    exchangeRate: destinationAmountMinor !== null ? input.exchangeRate : null,
     categoryId: input.type === "TRANSFER" ? null : input.categoryId,
     description: input.description,
     frequency: input.frequency,
@@ -101,5 +126,8 @@ export const POST = withErrorHandling("api.recurring-transactions.post", async (
     occurrencesTotal: input.occurrencesTotal,
   });
 
-  return NextResponse.json({ ...series, amountMinor: series.amountMinor.toString() }, { status: 201 });
+  return NextResponse.json(
+    { ...series, amountMinor: series.amountMinor.toString(), destinationAmountMinor: series.destinationAmountMinor?.toString() ?? null },
+    { status: 201 },
+  );
 });

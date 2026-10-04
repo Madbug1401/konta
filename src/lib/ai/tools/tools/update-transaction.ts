@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { UpdateTransactionSchema } from "@/app/api/transactions/[id]/route";
 import { getTransactionById, updateTransaction } from "@/lib/db/transactions";
+import { convertByExchangeRate } from "@/lib/financial-engine/money";
 import { resolveCategoryByName, toAiToolTransaction, type AiToolTransaction } from "../shared";
 import { ToolExecutionError, type AiTool } from "../types";
 
@@ -46,11 +47,32 @@ async function execute(userId: string, params: UpdateTransactionParams): Promise
   const category =
     params.category && existing.type !== "TRANSFER" ? await resolveCategoryByName(userId, params.category, existing.type) : null;
 
+  // [Task 3 — "edição... só valor/taxa dispara novo cálculo", ver mesma
+  // lógica em PATCH /api/transactions/[id]] Nunca recalcula
+  // destinationAmountMinor ao editar outro campo (ex: descrição).
+  let destinationAmountMinor: bigint | null | undefined;
+  if (params.amountMinor !== undefined || params.exchangeRate !== undefined) {
+    if (existing.destinationCurrency) {
+      const rate = params.exchangeRate ?? existing.exchangeRate;
+      if (!rate) throw new ToolExecutionError("Falta a taxa de câmbio desta transferência.");
+      const amount = params.amountMinor !== undefined ? BigInt(params.amountMinor) : existing.amountMinor;
+      try {
+        destinationAmountMinor = convertByExchangeRate(amount, rate, existing.currency, existing.destinationCurrency);
+      } catch (e) {
+        throw new ToolExecutionError(e instanceof Error ? e.message : "Taxa de câmbio inválida.");
+      }
+    } else if (params.exchangeRate !== undefined) {
+      throw new ToolExecutionError("Esta transação não é uma transferência entre moedas diferentes.");
+    }
+  }
+
   // updateTransaction (src/lib/db/transactions.ts) já filtra sempre por
   // "userId" = $1 AND id = $2 — não é possível atualizar uma transação de
   // outro utilizador mesmo adivinhando o id.
   const updated = await updateTransaction(userId, params.id, {
     amountMinor: params.amountMinor !== undefined ? BigInt(params.amountMinor) : undefined,
+    destinationAmountMinor,
+    exchangeRate: params.exchangeRate,
     categoryId: params.category ? (category?.id ?? null) : undefined,
     description: params.description,
     date: params.date,
@@ -63,7 +85,7 @@ async function execute(userId: string, params: UpdateTransactionParams): Promise
 export const updateTransactionTool: AiTool<UpdateTransactionParams, AiToolTransaction> = {
   name: "update_transaction",
   description:
-    'Atualiza o valor, categoria (por nome, ex: "Alimentação" — nunca um id), descrição ou data de uma transação existente do utilizador, identificada pelo id (obtido previamente via get_transactions). Escrita financeira — exige confirmação explícita.',
+    'Atualiza o valor, categoria (por nome, ex: "Alimentação" — nunca um id), descrição, data, ou a taxa de câmbio (`exchangeRate`, só se já for uma transferência entre moedas diferentes) de uma transação existente do utilizador, identificada pelo id (obtido previamente via get_transactions). Escrita financeira — exige confirmação explícita.',
   paramsSchema: UpdateTransactionToolSchema,
   riskTier: "HIGH",
   summarize: (params) => {

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { UpdateRecurringTransactionSchema } from "@/app/api/recurring-transactions/[id]/route";
 import { getAccountById } from "@/lib/db/accounts";
 import { getRecurringTransactionById, updateRecurringTransaction } from "@/lib/db/recurring-transactions";
+import { convertByExchangeRate } from "@/lib/financial-engine/money";
 import { resolveCategoryByName } from "../shared";
 import { ToolExecutionError, type AiTool } from "../types";
 
@@ -57,14 +58,54 @@ async function execute(userId: string, params: UpdateRecurringTransactionParams)
     if (destination.isArchived) throw new ToolExecutionError("A conta de destino está arquivada.");
   }
 
-  if (existing.type === "TRANSFER" && nextDestinationAccountId && (params.accountId !== undefined || params.destinationAccountId !== undefined)) {
+  // [Task 3 — mesma lógica de PATCH /api/recurring-transactions/[id], ver
+  // comentário lá] `fx` undefined = não tocar nos 3 campos de câmbio.
+  let fx: { destinationCurrency: string | null; destinationAmountMinor: bigint | null; exchangeRate: string | null } | undefined;
+  const accountsChanging = params.accountId !== undefined || params.destinationAccountId !== undefined;
+
+  if (existing.type === "TRANSFER" && nextDestinationAccountId && accountsChanging) {
     const [origin, destination] = await Promise.all([
       getAccountById(userId, nextAccountId),
       getAccountById(userId, nextDestinationAccountId),
     ]);
-    if (origin && destination && origin.currency !== destination.currency) {
-      throw new ToolExecutionError("Transferências entre contas de moedas diferentes ainda não são suportadas.");
+    if (origin && destination) {
+      if (origin.currency !== destination.currency) {
+        if (!params.exchangeRate) {
+          throw new ToolExecutionError("Transferências entre contas de moedas diferentes precisam de taxa de câmbio (exchangeRate).");
+        }
+        const amount = params.amountMinor !== undefined ? BigInt(params.amountMinor) : existing.amountMinor;
+        try {
+          fx = {
+            destinationCurrency: destination.currency,
+            destinationAmountMinor: convertByExchangeRate(amount, params.exchangeRate, origin.currency, destination.currency),
+            exchangeRate: params.exchangeRate,
+          };
+        } catch (e) {
+          throw new ToolExecutionError(e instanceof Error ? e.message : "Taxa de câmbio inválida.");
+        }
+      } else {
+        fx = { destinationCurrency: null, destinationAmountMinor: null, exchangeRate: null };
+      }
     }
+  } else if (existing.type === "TRANSFER" && (params.amountMinor !== undefined || params.exchangeRate !== undefined)) {
+    if (existing.destinationCurrency) {
+      const rate = params.exchangeRate ?? existing.exchangeRate;
+      if (!rate) throw new ToolExecutionError("Falta a taxa de câmbio desta transferência.");
+      const amount = params.amountMinor !== undefined ? BigInt(params.amountMinor) : existing.amountMinor;
+      try {
+        fx = {
+          destinationCurrency: existing.destinationCurrency,
+          destinationAmountMinor: convertByExchangeRate(amount, rate, existing.currency, existing.destinationCurrency),
+          exchangeRate: rate,
+        };
+      } catch (e) {
+        throw new ToolExecutionError(e instanceof Error ? e.message : "Taxa de câmbio inválida.");
+      }
+    } else if (params.exchangeRate !== undefined) {
+      throw new ToolExecutionError("Esta série não é uma transferência entre moedas diferentes.");
+    }
+  } else if (params.exchangeRate !== undefined) {
+    throw new ToolExecutionError("Esta série não é uma transferência entre moedas diferentes.");
   }
 
   const category =
@@ -74,6 +115,9 @@ async function execute(userId: string, params: UpdateRecurringTransactionParams)
     accountId: params.accountId,
     destinationAccountId: params.destinationAccountId,
     amountMinor: params.amountMinor !== undefined ? BigInt(params.amountMinor) : undefined,
+    destinationCurrency: fx?.destinationCurrency,
+    destinationAmountMinor: fx?.destinationAmountMinor,
+    exchangeRate: fx?.exchangeRate,
     categoryId: params.category ? (category?.id ?? null) : undefined,
     description: params.description,
     frequency: params.frequency,
@@ -90,7 +134,7 @@ async function execute(userId: string, params: UpdateRecurringTransactionParams)
 export const updateRecurringTransactionTool: AiTool<UpdateRecurringTransactionParams, { id: string }> = {
   name: "update_recurring_transaction",
   description:
-    "Atualiza uma série recorrente existente — valor, conta, categoria (por nome, nunca id), descrição, frequência, datas. `recurringTransactionId` tem de vir de get_recurring_transactions. Nunca muda `type` nem a moeda da série, e nunca toca nas transações já geradas por esta série (só afeta ocorrências futuras). Escrita financeira — exige confirmação explícita.",
+    "Atualiza uma série recorrente existente — valor, conta, categoria (por nome, nunca id), descrição, frequência, datas, ou a taxa de câmbio (`exchangeRate`, só se já for/passar a ser uma transferência entre moedas diferentes). `recurringTransactionId` tem de vir de get_recurring_transactions. Nunca muda `type` nem a moeda da série, e nunca toca nas transações já geradas por esta série (só afeta ocorrências futuras, incluindo a taxa usada por elas).  Escrita financeira — exige confirmação explícita.",
   paramsSchema: UpdateRecurringTransactionToolSchema,
   riskTier: "HIGH",
   summarize: (params) => {

@@ -8,6 +8,7 @@
 import { z } from "zod";
 import { getAccountById } from "@/lib/db/accounts";
 import { createRecurringTransaction } from "@/lib/db/recurring-transactions";
+import { convertByExchangeRate } from "@/lib/financial-engine/money";
 import { resolveCategoryByName } from "../shared";
 import { ToolExecutionError, type AiTool } from "../types";
 
@@ -20,6 +21,11 @@ const CreateRecurringTransactionToolSchema = z
       .describe(
         "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE também tem 2 casas decimais (centavo) — 1050 = 10,50 CVE).",
       ),
+    // [Task 3] Ver comentário em create-transaction.ts.
+    exchangeRate: z
+      .string()
+      .regex(/^\d+(\.\d+)?$/, "Taxa de câmbio inválida.")
+      .optional(),
     category: z.string().trim().min(1).max(100).optional(),
     description: z.string().trim().min(1).max(255),
     frequency: z.enum(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]),
@@ -49,13 +55,23 @@ async function execute(userId: string, params: CreateRecurringTransactionParams)
   if (!account) throw new ToolExecutionError("Conta não encontrada.");
   if (account.isArchived) throw new ToolExecutionError("Esta conta está arquivada.");
 
+  let destinationCurrency: string | null = null;
+  let destinationAmountMinor: bigint | null = null;
   if (params.destinationAccountId) {
     const destination = await getAccountById(userId, params.destinationAccountId);
     if (!destination) throw new ToolExecutionError("Conta de destino não encontrada.");
     if (destination.isArchived) throw new ToolExecutionError("A conta de destino está arquivada.");
-    // [Task 2 — mesma proteção de POST /api/transactions]
     if (destination.currency !== account.currency) {
-      throw new ToolExecutionError("Transferências entre contas de moedas diferentes ainda não são suportadas.");
+      // [Task 2 — mesma proteção de POST /api/transactions]
+      if (!params.exchangeRate) {
+        throw new ToolExecutionError("Transferências entre contas de moedas diferentes precisam de taxa de câmbio (exchangeRate).");
+      }
+      try {
+        destinationCurrency = destination.currency;
+        destinationAmountMinor = convertByExchangeRate(BigInt(params.amountMinor), params.exchangeRate, account.currency, destination.currency);
+      } catch (e) {
+        throw new ToolExecutionError(e instanceof Error ? e.message : "Taxa de câmbio inválida.");
+      }
     }
   }
 
@@ -69,6 +85,9 @@ async function execute(userId: string, params: CreateRecurringTransactionParams)
     destinationAccountId: params.destinationAccountId,
     amountMinor: BigInt(params.amountMinor),
     currency: account.currency,
+    destinationCurrency,
+    destinationAmountMinor,
+    exchangeRate: destinationAmountMinor !== null ? params.exchangeRate : null,
     categoryId: category?.id ?? null,
     description: params.description,
     frequency: params.frequency,
@@ -83,7 +102,7 @@ async function execute(userId: string, params: CreateRecurringTransactionParams)
 export const createRecurringTransactionTool: AiTool<CreateRecurringTransactionParams, { id: string }> = {
   name: "create_recurring_transaction",
   description:
-    "Cria uma série de transações recorrentes (receita, despesa ou transferência) numa conta. Usa `category` (nome em texto livre, nunca id) para receitas/despesas. A primeira transação real só aparece quando a série for materializada automaticamente (nunca a partir desta tool). Escrita financeira — exige confirmação explícita.",
+    "Cria uma série de transações recorrentes (receita, despesa ou transferência) numa conta. Usa `category` (nome em texto livre, nunca id) para receitas/despesas. Uma transferência recorrente entre contas de moedas DIFERENTES precisa de `exchangeRate` (ver create_transaction) — essa taxa fica gravada na série e é copiada tal e qual em cada ocorrência gerada, nunca recalculada automaticamente (editar a série depois é a única forma de mudar a taxa das próximas ocorrências). A primeira transação real só aparece quando a série for materializada automaticamente (nunca a partir desta tool). Escrita financeira — exige confirmação explícita.",
   paramsSchema: CreateRecurringTransactionToolSchema,
   riskTier: "HIGH",
   summarize: (params) => {

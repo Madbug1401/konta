@@ -42,6 +42,7 @@ interface ToolParams {
   accountId: string;
   destinationAccountId?: string;
   amountMinor: number;
+  exchangeRate?: string;
   category?: string;
   description: string;
   date?: string;
@@ -133,6 +134,20 @@ describe("create_transaction tool", () => {
       createTransactionTool.execute("user-1", validParams({ type: "TRANSFER", destinationAccountId: "acc-2" })),
     ).rejects.toBeInstanceOf(ToolExecutionError);
     expect(createTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it("[Task 3] aceita TRANSFER entre moedas diferentes COM exchangeRate, calculando destinationAmountMinor", async () => {
+    getAccountByIdMock.mockImplementation(async (_userId: string, accountId: string) =>
+      accountId === "acc-1" ? { ...ACCOUNT, id: "acc-1", currency: "EUR" } : { ...ACCOUNT, id: "acc-2", currency: "CVE" },
+    );
+    createTransactionMock.mockResolvedValue({ ...CREATED, currency: "EUR", destinationCurrency: "CVE", destinationAmountMinor: 1_100_000n, exchangeRate: "110" });
+    const { createTransactionTool } = await import("./create-transaction");
+
+    await createTransactionTool.execute("user-1", validParams({ type: "TRANSFER", destinationAccountId: "acc-2", amountMinor: 10_000, exchangeRate: "110" }));
+
+    expect(createTransactionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ destinationCurrency: "CVE", destinationAmountMinor: 1_100_000n, exchangeRate: "110" }),
+    );
   });
 
   it("ownership: rejeita uma goalId que não pertence ao utilizador", async () => {

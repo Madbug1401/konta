@@ -2,6 +2,11 @@ import type { Pool, PoolClient } from "pg";
 import type { TransactionRecord, TransactionType } from "@/lib/financial-engine";
 import { getPool, toBigInt, toISODateString } from "./client";
 
+const SELECT_COLUMNS = `id, "userId", type, status, "accountId", "destinationAccountId", "amountMinor",
+            currency, "destinationCurrency", "destinationAmountMinor", "exchangeRate",
+            "categoryId", description, date, "debtId", "debtInstallmentId",
+            "goalId", "recurringTransactionId"`;
+
 export interface ListTransactionsFilter {
   accountId?: string;
   categoryId?: string;
@@ -53,9 +58,7 @@ export async function listTransactions(
   params.push(limit, offset);
 
   const { rows } = await getPool().query(
-    `SELECT id, "userId", type, status, "accountId", "destinationAccountId", "amountMinor",
-            currency, "categoryId", description, date, "debtId", "debtInstallmentId",
-            "goalId", "recurringTransactionId"
+    `SELECT ${SELECT_COLUMNS}
      FROM "Transaction"
      WHERE ${conditions.join(" AND ")}
      ORDER BY date DESC, "createdAt" DESC
@@ -73,6 +76,12 @@ export async function createTransaction(
     destinationAccountId?: string | null;
     amountMinor: bigint;
     currency: string;
+    // [Task 3 — transferências multi-moeda] Os três só fazem sentido juntos
+    // — ou todos null (same-currency / não é TRANSFER), ou todos
+    // preenchidos. Quem chama (rota/tool) já validou isto antes.
+    destinationCurrency?: string | null;
+    destinationAmountMinor?: bigint | null;
+    exchangeRate?: string | null;
     categoryId?: string | null;
     description: string;
     date: string;
@@ -98,11 +107,10 @@ export async function createTransaction(
   const { rows } = await client.query(
     `INSERT INTO "Transaction"
        (id, "userId", type, "accountId", "destinationAccountId", "amountMinor", currency,
+        "destinationCurrency", "destinationAmountMinor", "exchangeRate",
         "categoryId", description, date, "debtId", "debtInstallmentId", "goalId", "recurringTransactionId")
-     VALUES ('c' || replace(gen_random_uuid()::text, '-', ''), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-     RETURNING id, "userId", type, status, "accountId", "destinationAccountId", "amountMinor",
-               currency, "categoryId", description, date, "debtId", "debtInstallmentId",
-               "goalId", "recurringTransactionId"`,
+     VALUES ('c' || replace(gen_random_uuid()::text, '-', ''), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+     RETURNING ${SELECT_COLUMNS}`,
     [
       input.userId,
       input.type,
@@ -110,6 +118,9 @@ export async function createTransaction(
       input.destinationAccountId ?? null,
       input.amountMinor.toString(),
       input.currency,
+      input.destinationCurrency ?? null,
+      input.destinationAmountMinor?.toString() ?? null,
+      input.exchangeRate ?? null,
       input.categoryId ?? null,
       input.description,
       input.date,
@@ -124,10 +135,7 @@ export async function createTransaction(
 
 export async function getTransactionById(userId: string, id: string): Promise<TransactionRecord | null> {
   const { rows } = await getPool().query(
-    `SELECT id, "userId", type, status, "accountId", "destinationAccountId", "amountMinor",
-            currency, "categoryId", description, date, "debtId", "debtInstallmentId",
-            "goalId", "recurringTransactionId"
-     FROM "Transaction" WHERE "userId" = $1 AND id = $2`,
+    `SELECT ${SELECT_COLUMNS} FROM "Transaction" WHERE "userId" = $1 AND id = $2`,
     [userId, id],
   );
   return rows[0] ? mapTransaction(rows[0]) : null;
@@ -136,20 +144,39 @@ export async function getTransactionById(userId: string, id: string): Promise<Tr
 export async function updateTransaction(
   userId: string,
   id: string,
-  patch: { amountMinor?: bigint; categoryId?: string | null; description?: string; date?: string },
+  patch: {
+    amountMinor?: bigint;
+    // [Task 3] Só relevante para editar o valor/taxa de uma TRANSFER já
+    // multi-moeda — ver update-transaction.ts (API/tool) para quem decide
+    // quando recalcular `destinationAmountMinor` antes de chamar isto.
+    destinationAmountMinor?: bigint | null;
+    exchangeRate?: string | null;
+    categoryId?: string | null;
+    description?: string;
+    date?: string;
+  },
 ): Promise<TransactionRecord | null> {
   const { rows } = await getPool().query(
     `UPDATE "Transaction" SET
        "amountMinor" = COALESCE($3, "amountMinor"),
-       "categoryId" = COALESCE($4, "categoryId"),
-       description = COALESCE($5, description),
-       date = COALESCE($6, date),
+       "destinationAmountMinor" = COALESCE($4, "destinationAmountMinor"),
+       "exchangeRate" = COALESCE($5, "exchangeRate"),
+       "categoryId" = COALESCE($6, "categoryId"),
+       description = COALESCE($7, description),
+       date = COALESCE($8, date),
        "updatedAt" = now()
      WHERE "userId" = $1 AND id = $2
-     RETURNING id, "userId", type, status, "accountId", "destinationAccountId", "amountMinor",
-               currency, "categoryId", description, date, "debtId", "debtInstallmentId",
-               "goalId", "recurringTransactionId"`,
-    [userId, id, patch.amountMinor?.toString() ?? null, patch.categoryId ?? null, patch.description ?? null, patch.date ?? null],
+     RETURNING ${SELECT_COLUMNS}`,
+    [
+      userId,
+      id,
+      patch.amountMinor?.toString() ?? null,
+      patch.destinationAmountMinor?.toString() ?? null,
+      patch.exchangeRate ?? null,
+      patch.categoryId ?? null,
+      patch.description ?? null,
+      patch.date ?? null,
+    ],
   );
   return rows[0] ? mapTransaction(rows[0]) : null;
 }
@@ -167,9 +194,7 @@ export async function deleteTransaction(userId: string, id: string): Promise<boo
  */
 export async function listAllTransactionsForBalances(userId: string): Promise<TransactionRecord[]> {
   const { rows } = await getPool().query(
-    `SELECT id, "userId", type, status, "accountId", "destinationAccountId", "amountMinor",
-            currency, "categoryId", description, date, "debtId", "debtInstallmentId",
-            "goalId", "recurringTransactionId"
+    `SELECT ${SELECT_COLUMNS}
      FROM "Transaction"
      WHERE "userId" = $1 AND status = 'COMPLETED'`,
     [userId],
@@ -186,6 +211,9 @@ interface TransactionRow {
   destinationAccountId: string | null;
   amountMinor: string;
   currency: string;
+  destinationCurrency: string | null;
+  destinationAmountMinor: string | null;
+  exchangeRate: string | null;
   categoryId: string | null;
   description: string;
   date: Date | string;
@@ -205,6 +233,9 @@ function mapTransaction(row: TransactionRow): TransactionRecord {
     destinationAccountId: row.destinationAccountId,
     amountMinor: toBigInt(row.amountMinor),
     currency: row.currency,
+    destinationCurrency: row.destinationCurrency,
+    destinationAmountMinor: row.destinationAmountMinor !== null ? toBigInt(row.destinationAmountMinor) : null,
+    exchangeRate: row.exchangeRate,
     categoryId: row.categoryId,
     description: row.description,
     date: toISODateString(row.date),

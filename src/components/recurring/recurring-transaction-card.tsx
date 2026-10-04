@@ -38,6 +38,9 @@ export interface RecurringTransactionCardProps {
   isActive: boolean;
   accounts: RecurringTransactionFormAccount[];
   categories: RecurringTransactionFormCategory[];
+  // [Task 3] Só preenchido quando já é uma série de transferência entre
+  // moedas diferentes.
+  exchangeRate: string | null;
 }
 
 // [Fase 4 — Recorrências] Pausar/retomar (PATCH .../[id]) é reversível a
@@ -69,6 +72,7 @@ export function RecurringTransactionCard({
   isActive,
   accounts,
   categories,
+  exchangeRate,
 }: RecurringTransactionCardProps) {
   const router = useRouter();
   const toast = useToast();
@@ -132,6 +136,7 @@ export function RecurringTransactionCard({
           interval,
           startDate,
           endDate,
+          exchangeRate,
         }}
         onSaved={() => setEditing(false)}
         onCancelEdit={() => setEditing(false)}

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/toast-provider";
 import { getCurrencyDecimalPlaces } from "@/lib/currencies";
 import type { RecurrenceFrequency, TransactionType } from "@/lib/financial-engine";
-import { fromMinor, toMinor } from "@/lib/financial-engine/money";
+import { convertByExchangeRate, fromMinor, toMinor } from "@/lib/financial-engine/money";
 
 export interface RecurringTransactionFormAccount {
   id: string;
@@ -41,6 +41,9 @@ export interface RecurringTransactionFormInitialValues {
   interval: number;
   startDate: string;
   endDate?: string | null;
+  // [Task 3] Só preenchido quando já é uma série de transferência entre
+  // moedas diferentes — pré-enche o campo de taxa ao editar.
+  exchangeRate?: string | null;
 }
 
 // [Fase 4 — Recorrências] Reaproveita o seletor de tipo/conta/categoria já
@@ -83,6 +86,7 @@ export function RecurringTransactionForm({
     const account = accounts.find((a) => a.id === initialValues.accountId);
     return fromMinor(BigInt(initialValues.amountMinor), account?.currency ?? "CVE");
   });
+  const [exchangeRate, setExchangeRate] = useState(initialValues?.exchangeRate ?? "");
   const [categoryId, setCategoryId] = useState(initialValues?.categoryId ?? "");
   const [categoryList, setCategoryList] = useState(categories);
   const [description, setDescription] = useState(initialValues?.description ?? "");
@@ -98,6 +102,18 @@ export function RecurringTransactionForm({
   const selectedAccount = accounts.find((a) => a.id === accountId);
   const currency = selectedAccount?.currency ?? "CVE";
   const decimalPlaces = getCurrencyDecimalPlaces(currency);
+
+  // [Task 3 — transferências multi-moeda]
+  const destinationCurrency = accounts.find((a) => a.id === destinationAccountId)?.currency;
+  const needsExchangeRate = type === "TRANSFER" && !!destinationCurrency && destinationCurrency !== currency;
+  let destinationPreview: string | null = null;
+  if (needsExchangeRate && exchangeRate && destinationCurrency) {
+    try {
+      destinationPreview = fromMinor(convertByExchangeRate(toMinor(amount || "0", currency), exchangeRate, currency, destinationCurrency), destinationCurrency);
+    } catch {
+      destinationPreview = null;
+    }
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -123,6 +139,10 @@ export function RecurringTransactionForm({
       setError("A conta de destino tem de ser diferente da conta de origem.");
       return;
     }
+    if (needsExchangeRate && !exchangeRate) {
+      setError("Indica a taxa de câmbio desta transferência.");
+      return;
+    }
     const intervalValue = Number(interval);
     if (!Number.isInteger(intervalValue) || intervalValue < 1) {
       setError("O intervalo tem de ser pelo menos 1.");
@@ -141,6 +161,7 @@ export function RecurringTransactionForm({
                 accountId,
                 destinationAccountId: type === "TRANSFER" ? destinationAccountId : undefined,
                 amountMinor,
+                exchangeRate: needsExchangeRate ? exchangeRate : undefined,
                 categoryId: type === "TRANSFER" ? undefined : categoryId || null,
                 description,
                 frequency,
@@ -153,6 +174,7 @@ export function RecurringTransactionForm({
                 accountId,
                 destinationAccountId: type === "TRANSFER" ? destinationAccountId : undefined,
                 amountMinor,
+                exchangeRate: needsExchangeRate ? exchangeRate : undefined,
                 categoryId: type === "TRANSFER" ? undefined : categoryId || undefined,
                 description,
                 frequency,
@@ -263,6 +285,28 @@ export function RecurringTransactionForm({
             className="mt-1"
           />
         </label>
+
+        {needsExchangeRate && (
+          <label className="text-xs font-medium text-muted-foreground">
+            {`Taxa de câmbio (${destinationCurrency} por 1 ${currency})`}
+            <Input
+              type="number"
+              inputMode="decimal"
+              min={0.000001}
+              step="any"
+              value={exchangeRate}
+              onChange={(e) => setExchangeRate(e.target.value)}
+              placeholder="Ex: 110"
+              required
+              className="mt-1"
+            />
+            {destinationPreview && (
+              <span className="mt-1 block text-xs text-muted-foreground">
+                A conta de destino recebe ≈ {destinationPreview} {destinationCurrency} por ocorrência
+              </span>
+            )}
+          </label>
+        )}
 
         {type !== "TRANSFER" && (
           <label className="text-xs font-medium text-muted-foreground">

@@ -140,3 +140,43 @@ export function roundHalfUpDiv(numerator: bigint, denominator: bigint): bigint {
   const roundedUp = 2n * remainder >= denominator ? quotient + 1n : quotient;
   return negative ? -roundedUp : roundedUp;
 }
+
+/**
+ * [Task 3 — transferências multi-moeda] Converte uma taxa de câmbio
+ * digitada (ex: "110.265") num par numerador/denominador inteiro exato —
+ * mesma técnica de `toMinor`: separa a parte inteira da decimal como
+ * string e compõe o BigInt diretamente, nunca `parseFloat`. A taxa
+ * significa sempre "quantas unidades da moeda de destino por 1 unidade da
+ * moeda de origem" (ex: rate="110" para EUR→CVE = 1 EUR vale 110 CVE).
+ */
+export function parseExchangeRate(rate: string): { numerator: bigint; denominator: bigint } {
+  const trimmed = rate.trim();
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(trimmed);
+  if (!match) throw new Error(`Taxa de câmbio inválida: "${rate}".`);
+  const [, intPart, fracPartRaw = ""] = match;
+  const numerator = BigInt(`${intPart}${fracPartRaw}`);
+  const denominator = 10n ** BigInt(fracPartRaw.length);
+  if (numerator <= 0n) throw new Error("A taxa de câmbio tem de ser maior que zero.");
+  return { numerator, denominator };
+}
+
+/**
+ * Quanto chega à conta de destino, na moeda de destino, dado o valor de
+ * origem (na unidade mínima da moeda de origem) e a taxa "X destino por 1
+ * origem". Tem em conta as casas decimais de cada moeda (podem ser
+ * diferentes) — nunca assume as duas iguais. Arredondamento half-up
+ * determinístico (`roundHalfUpDiv`), nunca `Number(x) * rate` em float.
+ */
+export function convertByExchangeRate(
+  sourceAmountMinor: MinorAmount,
+  rate: string,
+  sourceCurrency: string,
+  destinationCurrency: string,
+): MinorAmount {
+  const { numerator, denominator } = parseExchangeRate(rate);
+  const sourceDecimals = getCurrencyDecimalPlaces(sourceCurrency);
+  const destinationDecimals = getCurrencyDecimalPlaces(destinationCurrency);
+  const scaledNumerator = numerator * 10n ** BigInt(destinationDecimals);
+  const scaledDenominator = denominator * 10n ** BigInt(sourceDecimals);
+  return roundHalfUpDiv(sourceAmountMinor * scaledNumerator, scaledDenominator);
+}

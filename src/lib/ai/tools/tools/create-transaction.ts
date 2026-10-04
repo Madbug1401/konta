@@ -7,6 +7,7 @@ import { getGoalById } from "@/lib/db/goals";
 import { createTransaction } from "@/lib/db/transactions";
 import { findUserById } from "@/lib/db/users";
 import { getTodayInTimezone } from "@/lib/financial-engine";
+import { convertByExchangeRate } from "@/lib/financial-engine/money";
 import { resolveCategoryByName, toAiToolTransaction, type AiToolTransaction } from "../shared";
 import { ToolExecutionError, type AiTool } from "../types";
 
@@ -33,6 +34,13 @@ const CreateTransactionToolSchema = z
       .describe(
         "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE também tem 2 casas decimais (centavo) — 1050 = 10,50 CVE).",
       ),
+    // [Task 3] Só usado/aceite quando type=TRANSFER e a conta de destino tem
+    // moeda diferente da de origem — "quantas unidades da moeda de destino
+    // por 1 unidade da moeda de origem" (ex: "110" para EUR→CVE).
+    exchangeRate: z
+      .string()
+      .regex(/^\d+(\.\d+)?$/, "Taxa de câmbio inválida.")
+      .optional(),
     // [Correção] Nome em texto livre, nunca um id. Ignorado para TRANSFER
     // (transferências não têm categoria — mesma regra de
     // POST /api/transactions), resolvido para uma categoria real (existente
@@ -77,15 +85,23 @@ async function execute(userId: string, params: CreateTransactionParams): Promise
   if (!account) throw new ToolExecutionError("Conta não encontrada.");
   if (account.isArchived) throw new ToolExecutionError("Esta conta está arquivada.");
 
+  let destinationCurrency: string | null = null;
+  let destinationAmountMinor: bigint | null = null;
   if (params.destinationAccountId) {
     const destination = await getAccountById(userId, params.destinationAccountId);
     if (!destination) throw new ToolExecutionError("Conta de destino não encontrada.");
     if (destination.isArchived) throw new ToolExecutionError("A conta de destino está arquivada.");
-    // [Task 2 — mesma proteção de POST /api/transactions] Até a Task 3 (FX)
-    // existir, a IA também não pode criar uma transferência entre moedas
-    // diferentes sem conversão.
     if (destination.currency !== account.currency) {
-      throw new ToolExecutionError("Transferências entre contas de moedas diferentes ainda não são suportadas.");
+      // [Task 2 — mesma proteção de POST /api/transactions]
+      if (!params.exchangeRate) {
+        throw new ToolExecutionError("Transferências entre contas de moedas diferentes precisam de taxa de câmbio (exchangeRate).");
+      }
+      try {
+        destinationCurrency = destination.currency;
+        destinationAmountMinor = convertByExchangeRate(BigInt(params.amountMinor), params.exchangeRate, account.currency, destination.currency);
+      } catch (e) {
+        throw new ToolExecutionError(e instanceof Error ? e.message : "Taxa de câmbio inválida.");
+      }
     }
   }
 
@@ -112,6 +128,9 @@ async function execute(userId: string, params: CreateTransactionParams): Promise
     destinationAccountId: params.destinationAccountId,
     amountMinor: BigInt(params.amountMinor),
     currency: account.currency,
+    destinationCurrency,
+    destinationAmountMinor,
+    exchangeRate: destinationAmountMinor !== null ? params.exchangeRate : null,
     categoryId: category?.id ?? null,
     description: params.description,
     date,
@@ -130,7 +149,7 @@ function describeType(type: CreateTransactionParams["type"]): string {
 export const createTransactionTool: AiTool<CreateTransactionParams, AiToolTransaction> = {
   name: "create_transaction",
   description:
-    'Regista uma nova transação (receita, despesa ou transferência) numa conta do utilizador. Usa `category` (o NOME da categoria, ex: "Alimentação", "Transporte", nunca um id) sempre que a descrição do utilizador corresponder claramente a um tipo de despesa/receita — se já existir uma categoria com esse nome é reutilizada, senão é criada uma nova automaticamente. Nunca uses `category` numa transferência (não têm categoria). Quando `accountId` vier de uma proposta já resolvida por `propose_transactions`, passa também `accountName` (o nome dessa conta) para o texto de confirmação mostrar claramente em que conta vai ficar. Escrita financeira — exige confirmação explícita.',
+    'Regista uma nova transação (receita, despesa ou transferência) numa conta do utilizador. Usa `category` (o NOME da categoria, ex: "Alimentação", "Transporte", nunca um id) sempre que a descrição do utilizador corresponder claramente a um tipo de despesa/receita — se já existir uma categoria com esse nome é reutilizada, senão é criada uma nova automaticamente. Nunca uses `category` numa transferência (não têm categoria). Uma transferência entre contas de moedas DIFERENTES precisa de `exchangeRate` (quantas unidades da moeda de destino por 1 unidade da moeda de origem, ex: "110" para EUR→CVE) — pede a taxa ao utilizador se ele não a disser; sem isto a transferência é rejeitada. Quando `accountId` vier de uma proposta já resolvida por `propose_transactions`, passa também `accountName` (o nome dessa conta) para o texto de confirmação mostrar claramente em que conta vai ficar. Escrita financeira — exige confirmação explícita.',
   paramsSchema: CreateTransactionToolSchema,
   riskTier: "HIGH",
   // [Limitação conhecida, documentada] summarize() é síncrono e só recebe
@@ -150,7 +169,12 @@ export const createTransactionTool: AiTool<CreateTransactionParams, AiToolTransa
   summarize: (params) => {
     const categoryPhrase = params.category && params.type !== "TRANSFER" ? ` na categoria "${params.category}"` : "";
     const accountPhrase = params.accountName ? ` em "${params.accountName}"` : "";
-    return `Registar ${describeType(params.type)} de ${params.amountMinor.toLocaleString("pt-CV")} (moeda da conta)${categoryPhrase}${accountPhrase} — "${params.description}"${
+    // [Task 3] A taxa é só texto literal do próprio utilizador/modelo (um
+    // número), nunca um valor já convertido — o valor convertido real só
+    // existe depois de execute() correr (não dá para o calcular aqui, o
+    // moeda de destino não é conhecida sem consultar a conta).
+    const ratePhrase = params.exchangeRate ? ` (taxa: ${params.exchangeRate})` : "";
+    return `Registar ${describeType(params.type)} de ${params.amountMinor.toLocaleString("pt-CV")} (moeda da conta)${ratePhrase}${categoryPhrase}${accountPhrase} — "${params.description}"${
       params.date ? `, em ${params.date}` : ", hoje"
     }.`;
   },

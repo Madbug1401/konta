@@ -33,6 +33,9 @@ function income(id: string, accountId: string, amount: bigint, date: string): Tr
     destinationAccountId: null,
     amountMinor: amount,
     currency: "CVE",
+    destinationCurrency: null,
+    destinationAmountMinor: null,
+    exchangeRate: null,
     categoryId: null,
     description: "Salário",
     date,
@@ -66,6 +69,18 @@ describe("getAccountBalance", () => {
     const txs = [transfer("t1", "acc_bank", "acc_savings", 3_000n, "2026-01-01")];
     expect(getAccountBalance(bank, txs)).toBe(7_000n); // 10000 - 3000
     expect(getAccountBalance(savings, txs)).toBe(3_000n); // 0 + 3000
+  });
+
+  it("[Task 3] transferência multi-moeda: a origem desconta amountMinor, o destino recebe destinationAmountMinor (não o mesmo valor)", () => {
+    const fxTransfer: TransactionRecord = {
+      ...transfer("t1", "acc_bank", "acc_savings", 10_000n, "2026-01-01"), // 100.00 EUR
+      currency: "EUR",
+      destinationCurrency: "CVE",
+      destinationAmountMinor: 1_100_000n, // 11 000,00 CVE (taxa 110)
+      exchangeRate: "110",
+    };
+    expect(getAccountBalance(bank, [fxTransfer])).toBe(0n); // 10000 - 10000 (desconta na moeda de origem)
+    expect(getAccountBalance(savings, [fxTransfer])).toBe(1_100_000n); // 0 + 1100000, nunca 0 + 10000
   });
 
   it("ignora transações PENDING ao calcular o saldo (só COMPLETED afeta o saldo)", () => {

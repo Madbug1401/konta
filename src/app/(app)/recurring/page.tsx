@@ -59,6 +59,7 @@ export default async function RecurringTransactionsPage() {
               isActive={s.isActive}
               accounts={accounts}
               categories={categories}
+              exchangeRate={s.exchangeRate}
             />
           ))}
         </div>

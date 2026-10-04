@@ -7,6 +7,7 @@ import { getGoalById } from "@/lib/db/goals";
 import { createTransaction, listTransactions } from "@/lib/db/transactions";
 import { findUserById } from "@/lib/db/users";
 import { getTodayInTimezone, type TransactionType } from "@/lib/financial-engine";
+import { convertByExchangeRate } from "@/lib/financial-engine/money";
 import { withErrorHandling } from "@/lib/api-error";
 import { parsePagination } from "@/lib/pagination";
 
@@ -43,7 +44,11 @@ export const GET = withErrorHandling("api.transactions.get", async (request: Req
   });
 
   return NextResponse.json({
-    transactions: transactions.map((t) => ({ ...t, amountMinor: t.amountMinor.toString() })),
+    transactions: transactions.map((t) => ({
+      ...t,
+      amountMinor: t.amountMinor.toString(),
+      destinationAmountMinor: t.destinationAmountMinor?.toString() ?? null,
+    })),
   });
 });
 
@@ -69,6 +74,14 @@ export const CreateTransactionSchema = z
     // deixa de ser garantida — não uma regra de negócio sobre "quanto
     // dinheiro alguém pode ter", que não é uma decisão para tomar aqui.
     amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    // [Task 3 — transferências multi-moeda] Só usado/aceite quando
+    // type=TRANSFER e a conta de destino tem moeda diferente da de origem.
+    // String exata (Decimal, nunca float) — "quantas unidades da moeda de
+    // destino por 1 unidade da moeda de origem" (ex: "110" para EUR→CVE).
+    exchangeRate: z
+      .string()
+      .regex(/^\d+(\.\d+)?$/, "Taxa de câmbio inválida.")
+      .optional(),
     categoryId: z.string().min(1).optional(),
     description: z.string().trim().min(1).max(255),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -122,23 +135,32 @@ export const POST = withErrorHandling("api.transactions.post", async (request: R
   // alguém chame esta rota diretamente com o id certo.
   if (account.isArchived) return NextResponse.json({ error: "Esta conta está arquivada." }, { status: 400 });
 
+  // [Task 3 — transferências multi-moeda] destinationCurrency/
+  // destinationAmountMinor ficam null para tudo o que não for uma
+  // TRANSFER entre moedas diferentes — mesmo comportamento de sempre.
+  let destinationCurrency: string | null = null;
+  let destinationAmountMinor: bigint | null = null;
   if (input.destinationAccountId) {
     const destination = await getAccountById(session.userId, input.destinationAccountId);
     if (!destination) return NextResponse.json({ error: "Conta de destino não encontrada." }, { status: 404 });
     if (destination.isArchived) return NextResponse.json({ error: "A conta de destino está arquivada." }, { status: 400 });
-    // [Task 2 — Precisão monetária, proteção mínima antecipada da Task 3]
-    // Antes disto, uma transferência entre contas de moedas diferentes era
-    // aceite sem aviso e sem conversão — o valor em bruto (na moeda de
-    // origem) era somado ao saldo da conta de destino como se fosse a mesma
-    // moeda (bug real, confirmado na auditoria, nunca chegou a produzir
-    // dados errados porque nunca ninguém o fez — ver docs/STATUS.md). Até a
-    // Task 3 (conversão de câmbio com taxa gravada) existir, rejeitar é mais
-    // seguro do que aceitar um valor sem sentido nenhum.
     if (destination.currency !== account.currency) {
-      return NextResponse.json(
-        { error: "Transferências entre contas de moedas diferentes ainda não são suportadas." },
-        { status: 400 },
-      );
+      // [Task 2 — bug real da auditoria] Sem taxa, aceitar isto seria somar
+      // o valor em bruto (moeda de origem) ao saldo da conta de destino
+      // como se fosse a mesma moeda — por isso continua a exigir uma taxa
+      // explícita, nunca assumida.
+      if (!input.exchangeRate) {
+        return NextResponse.json(
+          { error: "Transferências entre contas de moedas diferentes precisam de taxa de câmbio (exchangeRate)." },
+          { status: 400 },
+        );
+      }
+      try {
+        destinationCurrency = destination.currency;
+        destinationAmountMinor = convertByExchangeRate(BigInt(input.amountMinor), input.exchangeRate, account.currency, destination.currency);
+      } catch (e) {
+        return NextResponse.json({ error: e instanceof Error ? e.message : "Taxa de câmbio inválida." }, { status: 400 });
+      }
     }
   }
 
@@ -166,11 +188,21 @@ export const POST = withErrorHandling("api.transactions.post", async (request: R
     destinationAccountId: input.destinationAccountId,
     amountMinor: BigInt(input.amountMinor),
     currency: account.currency,
+    destinationCurrency,
+    destinationAmountMinor,
+    exchangeRate: destinationAmountMinor !== null ? input.exchangeRate : null,
     categoryId: input.type === "TRANSFER" ? null : input.categoryId,
     description: input.description,
     date,
     goalId: input.goalId,
   });
 
-  return NextResponse.json({ ...transaction, amountMinor: transaction.amountMinor.toString() }, { status: 201 });
+  return NextResponse.json(
+    {
+      ...transaction,
+      amountMinor: transaction.amountMinor.toString(),
+      destinationAmountMinor: transaction.destinationAmountMinor?.toString() ?? null,
+    },
+    { status: 201 },
+  );
 });

@@ -30,6 +30,9 @@ const BASE_SERIES_ROW = {
   destinationAccountId: null,
   amountMinor: "1500",
   currency: "CVE",
+  destinationCurrency: null,
+  destinationAmountMinor: null,
+  exchangeRate: null,
   categoryId: null,
   description: "Spotify",
   frequency: "MONTHLY",
@@ -52,6 +55,9 @@ function fakeTransactionRow(date: string) {
     destinationAccountId: null,
     amountMinor: "1500",
     currency: "CVE",
+    destinationCurrency: null,
+    destinationAmountMinor: null,
+    exchangeRate: null,
     categoryId: null,
     description: "Spotify",
     date,
@@ -97,6 +103,36 @@ describe("materializeDueOccurrences", () => {
     expect(cursorUpdate?.[1]).toEqual(["series-1", "2026-09-30", 3]);
     expect(clientQueryMock).toHaveBeenCalledWith("COMMIT");
     expect(releaseMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("[Task 3] copia destinationCurrency/destinationAmountMinor/exchangeRate do template para cada ocorrência gerada, nunca recalcula", async () => {
+    const fxSeriesRow = {
+      ...BASE_SERIES_ROW,
+      currency: "EUR",
+      destinationCurrency: "CVE",
+      destinationAmountMinor: "1100000",
+      exchangeRate: "110",
+      endDate: "2026-06-30", // só 1 ocorrência, para simplificar o mock
+    };
+    poolQueryMock.mockResolvedValueOnce({ rows: [{ id: "series-1" }] });
+    clientQueryMock
+      .mockResolvedValueOnce(undefined) // BEGIN
+      .mockResolvedValueOnce({ rows: [fxSeriesRow] }) // SELECT ... FOR UPDATE
+      .mockResolvedValueOnce({ rows: [] }) // SELECT contas arquivadas — nenhuma
+      .mockResolvedValueOnce({ rows: [fakeTransactionRow("2026-06-30")] }) // INSERT Transaction #1
+      .mockResolvedValueOnce(undefined) // UPDATE RecurringTransaction (cursor)
+      .mockResolvedValueOnce(undefined); // COMMIT
+
+    const { materializeDueOccurrences } = await import("./recurring-transactions");
+    await materializeDueOccurrences("user-1", "2026-08-30");
+
+    const insertCall = clientQueryMock.mock.calls.find(([sql]) => typeof sql === "string" && sql.includes(`INSERT INTO "Transaction"`));
+    expect(insertCall).toBeDefined();
+    const params = insertCall![1] as unknown[];
+    // índices 6/7/8 do array de parâmetros: destinationCurrency, destinationAmountMinor, exchangeRate.
+    expect(params[6]).toBe("CVE");
+    expect(params[7]).toBe("1100000");
+    expect(params[8]).toBe("110");
   });
 
   it("pausa a série (isActive=false) e nunca gera Transactions quando a conta está arquivada", async () => {
@@ -173,9 +209,9 @@ describe("updateRecurringTransaction", () => {
 
     expect(result?.description).toBe("Spotify Família");
     const updateCall = poolQueryMock.mock.calls[1];
-    // último parâmetro passado é sempre o nextRunDate calculado — igual ao
-    // existente (startDate não mudou nesta edição).
-    expect(updateCall[1].at(-1)).toBe(BASE_SERIES_ROW.nextRunDate);
+    // Índice 12 do array de parâmetros é sempre o nextRunDate calculado —
+    // igual ao existente (startDate não mudou nesta edição).
+    expect(updateCall[1][12]).toBe(BASE_SERIES_ROW.nextRunDate);
   });
 
   it("avança nextRunDate quando a nova startDate é depois do cursor atual", async () => {
@@ -186,7 +222,7 @@ describe("updateRecurringTransaction", () => {
     await updateRecurringTransaction("user-1", "series-1", { startDate: "2026-09-01" });
 
     const updateCall = poolQueryMock.mock.calls[1];
-    expect(updateCall[1].at(-1)).toBe("2026-09-01");
+    expect(updateCall[1][12]).toBe("2026-09-01");
   });
 
   it("devolve null sem tentar o UPDATE quando a série não existe/não pertence ao utilizador", async () => {

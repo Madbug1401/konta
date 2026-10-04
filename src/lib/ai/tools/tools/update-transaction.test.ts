@@ -18,6 +18,9 @@ const EXISTING = {
   destinationAccountId: null,
   amountMinor: 750n,
   currency: "CVE",
+  destinationCurrency: null,
+  destinationAmountMinor: null,
+  exchangeRate: null,
   categoryId: null,
   description: "Almoço",
   date: "2026-09-15",
@@ -142,5 +145,35 @@ describe("update_transaction tool", () => {
 
     expect(listCategoriesMock).not.toHaveBeenCalled();
     expect(updateTransactionMock).toHaveBeenCalledWith("user-1", "tx-1", expect.objectContaining({ categoryId: undefined }));
+  });
+
+  it("[Task 3] recalcula destinationAmountMinor ao editar o valor de uma TRANSFER já multi-moeda", async () => {
+    getTransactionByIdMock.mockResolvedValue({
+      ...EXISTING,
+      type: "TRANSFER",
+      currency: "EUR",
+      destinationCurrency: "CVE",
+      exchangeRate: "110",
+    });
+    updateTransactionMock.mockResolvedValue(UPDATED);
+    const { updateTransactionTool } = await import("./update-transaction");
+
+    await updateTransactionTool.execute("user-1", { id: "tx-1", amountMinor: 10_000 }); // 100.00 EUR
+
+    expect(updateTransactionMock).toHaveBeenCalledWith(
+      "user-1",
+      "tx-1",
+      expect.objectContaining({ destinationAmountMinor: 1_100_000n }),
+    );
+  });
+
+  it("[Task 3] rejeita exchangeRate numa transação que nunca foi uma transferência multi-moeda", async () => {
+    getTransactionByIdMock.mockResolvedValue(EXISTING); // destinationCurrency: null
+    const { updateTransactionTool } = await import("./update-transaction");
+
+    await expect(updateTransactionTool.execute("user-1", { id: "tx-1", exchangeRate: "110" })).rejects.toBeInstanceOf(
+      ToolExecutionError,
+    );
+    expect(updateTransactionMock).not.toHaveBeenCalled();
   });
 });

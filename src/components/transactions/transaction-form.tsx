@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/toast-provider";
 import { getCurrencyDecimalPlaces } from "@/lib/currencies";
 import type { TransactionType } from "@/lib/financial-engine";
-import { fromMinor, toMinor } from "@/lib/financial-engine/money";
+import { convertByExchangeRate, fromMinor, toMinor } from "@/lib/financial-engine/money";
 
 export interface TransactionFormAccount {
   id: string;
@@ -43,6 +43,10 @@ export interface TransactionFormProps {
     categoryId?: string | null;
     description: string;
     date: string;
+    // [Task 3] Só preenchidos quando já é uma transferência entre moedas
+    // diferentes — permite editar a taxa (e recalcula o valor de destino).
+    destinationCurrency?: string | null;
+    exchangeRate?: string | null;
   };
 }
 
@@ -66,6 +70,7 @@ export function TransactionForm({ accounts, categories, goals = [], mode, transa
     const account = accounts.find((a) => a.id === initialValues.accountId);
     return fromMinor(BigInt(initialValues.amountMinor), account?.currency ?? "CVE");
   });
+  const [exchangeRate, setExchangeRate] = useState(initialValues?.exchangeRate ?? "");
   const [categoryId, setCategoryId] = useState(initialValues?.categoryId ?? "");
   // Categorias podem crescer em runtime via CategoryQuickCreate — por isso
   // vivem em estado local (inicializado da prop), não só na prop diretamente.
@@ -80,6 +85,23 @@ export function TransactionForm({ accounts, categories, goals = [], mode, transa
   const selectedAccount = accounts.find((a) => a.id === accountId);
   const currency = selectedAccount?.currency ?? "CVE";
   const decimalPlaces = getCurrencyDecimalPlaces(currency);
+
+  // [Task 3 — transferências multi-moeda] No modo "create", a moeda de
+  // destino vem da conta escolhida no próprio formulário; no modo "edit", a
+  // conta de destino não é editável aqui (UpdateTransactionSchema nunca
+  // aceitou mudar accountId/destinationAccountId), por isso usa-se sempre a
+  // que já estava gravada (initialValues.destinationCurrency).
+  const destinationCurrency =
+    mode === "create" ? accounts.find((a) => a.id === destinationAccountId)?.currency : initialValues?.destinationCurrency;
+  const needsExchangeRate = type === "TRANSFER" && !!destinationCurrency && destinationCurrency !== currency;
+  let destinationPreview: string | null = null;
+  if (needsExchangeRate && exchangeRate && destinationCurrency) {
+    try {
+      destinationPreview = fromMinor(convertByExchangeRate(toMinor(amount || "0", currency), exchangeRate, currency, destinationCurrency), destinationCurrency);
+    } catch {
+      destinationPreview = null;
+    }
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -105,6 +127,10 @@ export function TransactionForm({ accounts, categories, goals = [], mode, transa
       setError("A conta de destino tem de ser diferente da conta de origem.");
       return;
     }
+    if (needsExchangeRate && !exchangeRate) {
+      setError("Indica a taxa de câmbio desta transferência.");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -115,12 +141,13 @@ export function TransactionForm({ accounts, categories, goals = [], mode, transa
               accountId,
               destinationAccountId: type === "TRANSFER" ? destinationAccountId : undefined,
               amountMinor,
+              exchangeRate: needsExchangeRate ? exchangeRate : undefined,
               categoryId: type === "TRANSFER" ? undefined : categoryId || undefined,
               description,
               date,
               goalId: goalId || undefined,
             }
-          : { amountMinor, categoryId: categoryId || undefined, description, date };
+          : { amountMinor, exchangeRate: needsExchangeRate ? exchangeRate : undefined, categoryId: categoryId || undefined, description, date };
 
       const res = await fetch(mode === "create" ? "/api/transactions" : `/api/transactions/${transactionId}`, {
         method: mode === "create" ? "POST" : "PATCH",
@@ -209,6 +236,27 @@ export function TransactionForm({ accounts, categories, goals = [], mode, transa
             required
           />
         </label>
+
+        {needsExchangeRate && (
+          <label className="text-xs font-medium text-muted-foreground">
+            {`Taxa de câmbio (${destinationCurrency} por 1 ${currency})`}
+            <Input
+              type="number"
+              inputMode="decimal"
+              min={0.000001}
+              step="any"
+              value={exchangeRate}
+              onChange={(e) => setExchangeRate(e.target.value)}
+              placeholder="Ex: 110"
+              required
+            />
+            {destinationPreview && (
+              <span className="mt-1 block text-xs text-muted-foreground">
+                A conta de destino recebe ≈ {destinationPreview} {destinationCurrency}
+              </span>
+            )}
+          </label>
+        )}
 
         {type !== "TRANSFER" && (
           <label className="text-xs font-medium text-muted-foreground">

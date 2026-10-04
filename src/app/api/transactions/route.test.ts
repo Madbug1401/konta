@@ -174,12 +174,12 @@ describe("POST /api/transactions — ownership de categoryId (Prioridade 7)", ()
   });
 });
 
-describe("POST /api/transactions — transferência entre moedas diferentes (Task 2)", () => {
+describe("POST /api/transactions — transferência entre moedas diferentes (Task 2/3)", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it("rejeita com 400 uma transferência cuja conta de destino tem moeda diferente, sem criar a transação", async () => {
+  it("rejeita com 400 uma transferência entre moedas diferentes SEM exchangeRate, sem criar a transação", async () => {
     getSessionUserMock.mockResolvedValue(SESSION);
     findUserByIdMock.mockResolvedValue({ timezone: "Atlantic/Cape_Verde" });
     getAccountByIdMock.mockImplementation(async (_userId: string, accountId: string) =>
@@ -198,8 +198,57 @@ describe("POST /api/transactions — transferência entre moedas diferentes (Tas
     );
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: "Transferências entre contas de moedas diferentes ainda não são suportadas." });
+    expect(await response.json()).toEqual({
+      error: "Transferências entre contas de moedas diferentes precisam de taxa de câmbio (exchangeRate).",
+    });
     expect(createTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it("[Task 3] aceita uma transferência entre moedas diferentes COM exchangeRate, calculando destinationAmountMinor", async () => {
+    getSessionUserMock.mockResolvedValue(SESSION);
+    findUserByIdMock.mockResolvedValue({ timezone: "Atlantic/Cape_Verde" });
+    getAccountByIdMock.mockImplementation(async (_userId: string, accountId: string) =>
+      accountId === "acc-1" ? { ...ACCOUNT, id: "acc-1", currency: "EUR" } : { ...ACCOUNT, id: "acc-2", currency: "CVE" },
+    );
+    createTransactionMock.mockResolvedValue({
+      id: "tx-fx",
+      userId: "user-1",
+      type: "TRANSFER",
+      status: "COMPLETED",
+      accountId: "acc-1",
+      destinationAccountId: "acc-2",
+      amountMinor: 10_000n,
+      currency: "EUR",
+      destinationCurrency: "CVE",
+      destinationAmountMinor: 1_100_000n,
+      exchangeRate: "110",
+      categoryId: null,
+      description: "Transferência",
+      date: "2026-08-29",
+      debtId: null,
+      debtInstallmentId: null,
+      goalId: null,
+      recurringTransactionId: null,
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      postRequest({
+        type: "TRANSFER",
+        accountId: "acc-1",
+        destinationAccountId: "acc-2",
+        amountMinor: 10_000, // 100.00 EUR
+        exchangeRate: "110",
+        description: "Transferência",
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(createTransactionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ destinationCurrency: "CVE", destinationAmountMinor: 1_100_000n, exchangeRate: "110" }),
+    );
+    const body = await response.json();
+    expect(body.destinationAmountMinor).toBe("1100000");
   });
 
   it("aceita uma transferência entre contas da mesma moeda", async () => {

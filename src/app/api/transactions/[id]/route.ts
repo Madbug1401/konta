@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/session";
 import { deleteTransaction, getTransactionById, updateTransaction } from "@/lib/db/transactions";
 import { getCategoryById } from "@/lib/db/categories";
+import { convertByExchangeRate } from "@/lib/financial-engine/money";
 import { withErrorHandling } from "@/lib/api-error";
 
 export const GET = withErrorHandling(
@@ -15,7 +16,11 @@ export const GET = withErrorHandling(
     const transaction = await getTransactionById(session.userId, id);
     if (!transaction) return NextResponse.json({ error: "Transação não encontrada." }, { status: 404 });
 
-    return NextResponse.json({ ...transaction, amountMinor: transaction.amountMinor.toString() });
+    return NextResponse.json({
+      ...transaction,
+      amountMinor: transaction.amountMinor.toString(),
+      destinationAmountMinor: transaction.destinationAmountMinor?.toString() ?? null,
+    });
   },
 );
 
@@ -33,6 +38,14 @@ export const UpdateTransactionSchema = z.object({
     .describe(
       "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD — 1050 = €10.50 ou $10.50; CVE também tem 2 casas decimais (centavo) — 1050 = 10,50 CVE).",
     )
+    .optional(),
+  // [Task 3] Só tem efeito numa TRANSFER que já tenha destinationCurrency
+  // (moedas diferentes) — editar isto, ou o valor, recalcula
+  // destinationAmountMinor; editar qualquer outro campo nunca o toca (ver
+  // PATCH abaixo).
+  exchangeRate: z
+    .string()
+    .regex(/^\d+(\.\d+)?$/, "Taxa de câmbio inválida.")
     .optional(),
   categoryId: z.string().min(1).optional(),
   description: z.string().trim().min(1).max(255).optional(),
@@ -61,15 +74,46 @@ export const PATCH = withErrorHandling(
       if (!category) return NextResponse.json({ error: "Categoria não encontrada." }, { status: 404 });
     }
 
+    // [Task 3 — "edição... só valor/taxa dispara novo cálculo"] Uma
+    // transferência já criada com taxa gravada nunca é recalculada ao
+    // editar outro campo (ex: descrição). Só entra aqui quando a própria
+    // transação já é uma TRANSFER multi-moeda (destinationCurrency != null)
+    // E o pedido muda amountMinor e/ou exchangeRate.
+    let destinationAmountMinor: bigint | null | undefined;
+    if (parsed.data.amountMinor !== undefined || parsed.data.exchangeRate !== undefined) {
+      const existing = await getTransactionById(session.userId, id);
+      if (!existing) return NextResponse.json({ error: "Transação não encontrada." }, { status: 404 });
+      if (existing.destinationCurrency) {
+        const rate = parsed.data.exchangeRate ?? existing.exchangeRate;
+        if (!rate) return NextResponse.json({ error: "Falta a taxa de câmbio desta transferência." }, { status: 400 });
+        const amount = parsed.data.amountMinor !== undefined ? BigInt(parsed.data.amountMinor) : existing.amountMinor;
+        try {
+          destinationAmountMinor = convertByExchangeRate(amount, rate, existing.currency, existing.destinationCurrency);
+        } catch (e) {
+          return NextResponse.json({ error: e instanceof Error ? e.message : "Taxa de câmbio inválida." }, { status: 400 });
+        }
+      } else if (parsed.data.exchangeRate !== undefined) {
+        // Taxa só faz sentido numa transferência multi-moeda já existente —
+        // nunca inventada numa transação que nunca teve uma.
+        return NextResponse.json({ error: "Esta transação não é uma transferência entre moedas diferentes." }, { status: 400 });
+      }
+    }
+
     const updated = await updateTransaction(session.userId, id, {
       amountMinor: parsed.data.amountMinor !== undefined ? BigInt(parsed.data.amountMinor) : undefined,
+      destinationAmountMinor,
+      exchangeRate: parsed.data.exchangeRate,
       categoryId: parsed.data.categoryId,
       description: parsed.data.description,
       date: parsed.data.date,
     });
     if (!updated) return NextResponse.json({ error: "Transação não encontrada." }, { status: 404 });
 
-    return NextResponse.json({ ...updated, amountMinor: updated.amountMinor.toString() });
+    return NextResponse.json({
+      ...updated,
+      amountMinor: updated.amountMinor.toString(),
+      destinationAmountMinor: updated.destinationAmountMinor?.toString() ?? null,
+    });
   },
 );
 

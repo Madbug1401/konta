@@ -56,6 +56,17 @@ export interface TransactionRecord {
   destinationAccountId: string | null;
   amountMinor: MinorAmount;
   currency: string;
+  // [Task 3 — transferências multi-moeda] Só preenchidos quando type=TRANSFER
+  // e a conta de destino tem moeda diferente da de origem — null em todos
+  // os outros casos (mesma moeda, ou não é transferência). Congelados no
+  // momento da criação, nunca recalculados — uma alteração futura da taxa
+  // de câmbio nunca deve mudar uma transação já feita, mesmo princípio já
+  // usado para `currency`. `exchangeRate` é a string exata digitada pelo
+  // utilizador (nunca um `number`, para nunca perder precisão) — "X
+  // <currency> por <destinationCurrency>".
+  destinationCurrency: string | null;
+  destinationAmountMinor: MinorAmount | null;
+  exchangeRate: string | null;
   categoryId: string | null;
   description: string;
   /** Dia local (YYYY-MM-DD), já resolvido no timezone do utilizador. */
@@ -120,6 +131,12 @@ export interface RecurringTransactionRecord {
   // só faltava no tipo — mesma lacuna que AccountRecord/DebtRecord/GoalRecord
   // já tinham antes de serem alargados.
   currency: string;
+  // [Task 3] Mesmo princípio de TransactionRecord — a taxa fica gravada no
+  // template e cada ocorrência materializada copia-a tal e qual (nunca vai
+  // buscar uma taxa "atual" a lado nenhum).
+  destinationCurrency: string | null;
+  destinationAmountMinor: MinorAmount | null;
+  exchangeRate: string | null;
   categoryId: string | null;
   description: string;
   frequency: RecurrenceFrequency;

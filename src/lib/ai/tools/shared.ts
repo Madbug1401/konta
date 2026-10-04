@@ -36,6 +36,10 @@ export interface AiToolTransaction {
   id: string;
   type: TransactionRecord["type"];
   amount: string;
+  // [Task 3] Só preenchido numa TRANSFER entre moedas diferentes — quanto
+  // chegou à conta de destino, já formatado na moeda de destino. Null em
+  // todos os outros casos.
+  destinationAmount: string | null;
   description: string;
   date: string;
   categoryName: string | null;
@@ -47,6 +51,10 @@ export function toAiToolTransaction(transaction: TransactionRecord, categories: 
     id: transaction.id,
     type: transaction.type,
     amount: formatMinor(transaction.amountMinor, transaction.currency),
+    destinationAmount:
+      transaction.destinationAmountMinor != null && transaction.destinationCurrency != null
+        ? formatMinor(transaction.destinationAmountMinor, transaction.destinationCurrency)
+        : null,
     description: transaction.description,
     date: transaction.date,
     categoryName: transaction.categoryId ? (categoryNameById.get(transaction.categoryId) ?? "Categoria") : null,

@@ -15,6 +15,9 @@ const TRANSACTION = {
   destinationAccountId: null,
   amountMinor: 750n,
   currency: "CVE",
+  destinationCurrency: null,
+  destinationAmountMinor: null,
+  exchangeRate: null,
   categoryId: "cat-1",
   description: "Almoço",
   date: "2026-09-10",
@@ -67,15 +70,19 @@ describe("get_transactions tool", () => {
     expect(listTransactionsMock).toHaveBeenCalledWith("user-1", expect.objectContaining({ limit: 20 }));
   });
 
-  it("devolve um DTO com só id/type/amount/description/date/categoryName — nunca userId/accountId/categoryId", async () => {
+  it("devolve um DTO com só id/type/amount/destinationAmount/description/date/categoryName — nunca userId/accountId/categoryId", async () => {
     listTransactionsMock.mockResolvedValue([TRANSACTION]);
     listCategoriesMock.mockResolvedValue([{ id: "cat-1", name: "Alimentação", kind: "EXPENSE", isSystem: true }]);
     const { getTransactionsTool } = await import("./get-transactions");
 
     const [transaction] = await getTransactionsTool.execute("user-1", {});
 
-    expect(Object.keys(transaction).sort()).toEqual(["id", "type", "amount", "description", "date", "categoryName"].sort());
+    expect(Object.keys(transaction).sort()).toEqual(
+      ["id", "type", "amount", "destinationAmount", "description", "date", "categoryName"].sort(),
+    );
     expect(transaction.categoryName).toBe("Alimentação");
+    // [Task 3] null quando a transação não é uma transferência multi-moeda — nunca omitido, nunca inventado.
+    expect(transaction.destinationAmount).toBeNull();
     const serialized = JSON.stringify(transaction);
     expect(serialized).not.toContain("userId");
     expect(serialized).not.toContain("accountId");

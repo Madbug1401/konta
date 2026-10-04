@@ -48,6 +48,14 @@ export function getAccountBalance(
       (t.type === "EXPENSE" && t.accountId === account.id) ||
       (t.type === "TRANSFER" && t.accountId === account.id);
 
+    // [Task 3 — transferências multi-moeda] O lado da conta de DESTINO usa
+    // `destinationAmountMinor` quando existir (transferência entre moedas
+    // diferentes, convertido à taxa gravada no momento) — o lado da ORIGEM
+    // nunca muda, continua sempre `amountMinor`, na moeda de origem. Para
+    // tudo o resto (INCOME, EXPENSE, TRANSFER same-currency com
+    // destinationAmountMinor=null) comporta-se exatamente como antes.
+    const incomingAmount = t.type === "TRANSFER" && t.destinationAmountMinor !== null ? t.destinationAmountMinor : t.amountMinor;
+
     // [Correção — bug crítico encontrado em auditoria Go-to-Beta, 29/08/2026]
     // Isto era "if / else if": para uma TRANSFER em que accountId ===
     // destinationAccountId (auto-transferência), isIncoming e isOutgoing
@@ -62,7 +70,7 @@ export function getAccountBalance(
     // outros casos (já cobertos pelos testes existentes) isIncoming e
     // isOutgoing nunca são verdadeiros ao mesmo tempo, por isso este troca
     // não muda nenhum comportamento anterior.
-    if (isIncoming) balance += t.amountMinor;
+    if (isIncoming) balance += incomingAmount;
     if (isOutgoing) balance -= t.amountMinor;
   }
   return balance;

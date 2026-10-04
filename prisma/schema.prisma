@@ -232,6 +232,17 @@ model Transaction {
   amountMinor BigInt // sempre positivo; a direção vem de "type"
   currency    String
 
+  // [Task 3 — transferências multi-moeda, 0008_transfer_fx_fields.sql] Só
+  // preenchidos quando type=TRANSFER e destinationAccount.currency !=
+  // currency no momento da criação — null em todos os outros casos
+  // (incluindo TRANSFER same-currency, comportamento inalterado). Nunca
+  // recalculados depois: a taxa fica congelada, tal como `currency` já
+  // fica. `exchangeRate` é a string exata digitada (Decimal, não Float),
+  // "quantas unidades de destinationCurrency por 1 unidade de currency".
+  destinationCurrency    String?
+  destinationAmountMinor BigInt?
+  exchangeRate           Decimal? @db.Decimal(24, 12)
+
   categoryId String? // obrigatório (a nível de aplicação) para INCOME/EXPENSE, null para TRANSFER
   category   Category? @relation(fields: [categoryId], references: [id])
 
@@ -282,6 +293,11 @@ model RecurringTransaction {
 
   amountMinor BigInt
   currency    String
+  // [Task 3] Mesmo princípio de Transaction — gravado no template, cada
+  // ocorrência materializada copia tal e qual (nunca recalcula a taxa).
+  destinationCurrency    String?
+  destinationAmountMinor BigInt?
+  exchangeRate           Decimal? @db.Decimal(24, 12)
   categoryId  String?
   category    Category?       @relation(fields: [categoryId], references: [id])
   description String

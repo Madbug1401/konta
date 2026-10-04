@@ -36,6 +36,8 @@ export default async function EditTransactionPage({ params }: { params: Promise<
           categoryId: transaction.categoryId,
           description: transaction.description,
           date: transaction.date,
+          destinationCurrency: transaction.destinationCurrency,
+          exchangeRate: transaction.exchangeRate,
         }}
       />
     </div>

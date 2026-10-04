@@ -108,7 +108,7 @@ describe("PATCH /api/recurring-transactions/[id]", () => {
     expect(updateRecurringTransactionMock).not.toHaveBeenCalled();
   });
 
-  it("[Task 2] rejeita mudar para uma conta de destino com moeda diferente da origem", async () => {
+  it("[Task 2] rejeita mudar para uma conta de destino com moeda diferente da origem, sem exchangeRate", async () => {
     getSessionUserMock.mockResolvedValue(SESSION);
     getRecurringTransactionByIdMock.mockResolvedValue({ ...SERIES, type: "TRANSFER", accountId: "acc-1", destinationAccountId: "acc-2" });
     getAccountByIdMock.mockImplementation(async (_u: string, id: string) =>
@@ -119,8 +119,56 @@ describe("PATCH /api/recurring-transactions/[id]", () => {
     const response = await PATCH(patchRequest({ destinationAccountId: "acc-3" }), { params: Promise.resolve({ id: "series-1" }) });
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: "Transferências entre contas de moedas diferentes ainda não são suportadas." });
+    expect(await response.json()).toEqual({
+      error: "Transferências entre contas de moedas diferentes precisam de taxa de câmbio (exchangeRate).",
+    });
     expect(updateRecurringTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it("[Task 3] aceita mudar para uma conta de destino com moeda diferente, COM exchangeRate", async () => {
+    getSessionUserMock.mockResolvedValue(SESSION);
+    getRecurringTransactionByIdMock.mockResolvedValue({ ...SERIES, type: "TRANSFER", accountId: "acc-1", destinationAccountId: "acc-2" });
+    getAccountByIdMock.mockImplementation(async (_u: string, id: string) =>
+      id === "acc-1" ? { ...ACCOUNT, id: "acc-1", currency: "CVE" } : { ...ACCOUNT, id: "acc-3", currency: "EUR" },
+    );
+    updateRecurringTransactionMock.mockResolvedValue(undefined);
+
+    const { PATCH } = await import("./route");
+    const response = await PATCH(patchRequest({ destinationAccountId: "acc-3", exchangeRate: "0.01" }), {
+      params: Promise.resolve({ id: "series-1" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(updateRecurringTransactionMock).toHaveBeenCalledWith(
+      "user-1",
+      "series-1",
+      expect.objectContaining({ destinationCurrency: "EUR", exchangeRate: "0.01" }),
+    );
+  });
+
+  it("[Task 3] recalcula destinationAmountMinor ao editar só o valor de uma TRANSFER já multi-moeda", async () => {
+    getSessionUserMock.mockResolvedValue(SESSION);
+    getRecurringTransactionByIdMock.mockResolvedValue({
+      ...SERIES,
+      type: "TRANSFER",
+      accountId: "acc-1",
+      destinationAccountId: "acc-2",
+      currency: "EUR",
+      destinationCurrency: "CVE",
+      exchangeRate: "110",
+    });
+    updateRecurringTransactionMock.mockResolvedValue(undefined);
+
+    const { PATCH } = await import("./route");
+    const response = await PATCH(patchRequest({ amountMinor: 10_000 }), { params: Promise.resolve({ id: "series-1" }) }); // 100.00 EUR
+
+    expect(response.status).toBe(200);
+    expect(updateRecurringTransactionMock).toHaveBeenCalledWith(
+      "user-1",
+      "series-1",
+      expect.objectContaining({ destinationAmountMinor: 1_100_000n, exchangeRate: "110" }),
+    );
+    expect(getAccountByIdMock).not.toHaveBeenCalled(); // não precisa de ir à BD: não é accountId/destinationAccountId que mudou
   });
 
   it("rejeita um categoryId que não pertence ao utilizador", async () => {

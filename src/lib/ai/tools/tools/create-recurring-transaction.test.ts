@@ -61,6 +61,23 @@ describe("create_recurring_transaction tool", () => {
     expect(createRecurringTransactionMock).not.toHaveBeenCalled();
   });
 
+  it("[Task 3] aceita TRANSFER entre moedas diferentes COM exchangeRate, calculando destinationAmountMinor", async () => {
+    getAccountByIdMock.mockImplementation(async (_userId: string, accountId: string) =>
+      accountId === "acc-1" ? { ...ACCOUNT, id: "acc-1", currency: "EUR" } : { ...ACCOUNT, id: "acc-2", currency: "CVE" },
+    );
+    createRecurringTransactionMock.mockResolvedValue({ id: "rec-1" });
+    const { createRecurringTransactionTool } = await import("./create-recurring-transaction");
+
+    await createRecurringTransactionTool.execute(
+      "user-1",
+      validParams({ type: "TRANSFER", destinationAccountId: "acc-2", amountMinor: 10_000, exchangeRate: "110" }),
+    );
+
+    expect(createRecurringTransactionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ destinationCurrency: "CVE", destinationAmountMinor: 1_100_000n, exchangeRate: "110" }),
+    );
+  });
+
   it("resolve a categoria por NOME (nunca id), reutilizando resolveCategoryByName", async () => {
     getAccountByIdMock.mockResolvedValue(ACCOUNT);
     listCategoriesMock.mockResolvedValue([]);

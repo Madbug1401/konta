@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { splitIntoInstallments, installmentsMatchTotal, sum, abs, toMinor, fromMinor, formatMinor, roundHalfUpDiv } from "./money";
+import {
+  splitIntoInstallments,
+  installmentsMatchTotal,
+  sum,
+  abs,
+  toMinor,
+  fromMinor,
+  formatMinor,
+  roundHalfUpDiv,
+  parseExchangeRate,
+  convertByExchangeRate,
+} from "./money";
 
 describe("splitIntoInstallments", () => {
   it("divide de forma exata quando o total é divisível", () => {
@@ -112,5 +123,38 @@ describe("roundHalfUpDiv", () => {
   it("rejeita denominador não positivo", () => {
     expect(() => roundHalfUpDiv(10n, 0n)).toThrow();
     expect(() => roundHalfUpDiv(10n, -1n)).toThrow();
+  });
+});
+
+describe("parseExchangeRate", () => {
+  it("converte uma taxa decimal exata em numerador/denominador", () => {
+    expect(parseExchangeRate("110")).toEqual({ numerator: 110n, denominator: 1n });
+    expect(parseExchangeRate("110.265")).toEqual({ numerator: 110265n, denominator: 1000n });
+  });
+
+  it("rejeita taxa <= 0 e entrada não numérica", () => {
+    expect(() => parseExchangeRate("0")).toThrow();
+    expect(() => parseExchangeRate("-5")).toThrow();
+    expect(() => parseExchangeRate("abc")).toThrow();
+  });
+});
+
+describe("convertByExchangeRate", () => {
+  it("100 EUR a 110 CVE/EUR -> 11 000,00 CVE (ambas com 2 casas decimais)", () => {
+    // sourceAmountMinor = 10000 (100.00 EUR em cêntimos)
+    expect(convertByExchangeRate(10_000n, "110", "EUR", "CVE")).toBe(1_100_000n); // 11000.00 CVE em centavos
+  });
+
+  it("nunca usa float — uma taxa com muitas casas continua exata", () => {
+    // 100.00 EUR a 110.265 CVE/EUR = 11026.50 CVE
+    expect(convertByExchangeRate(10_000n, "110.265", "EUR", "CVE")).toBe(1_102_650n);
+  });
+
+  it("arredonda half-up no limite exato de .5, nunca trunca para baixo", () => {
+    // 1.00 EUR * 1.005 = 1.005 centavos-equivalente -> exatamente no meio
+    // (remainder*2 == denominator) -> half-up arredonda para 101, não 100.
+    expect(convertByExchangeRate(100n, "1.005", "EUR", "CVE")).toBe(101n);
+    // abaixo do meio (0.5%): fica para baixo, sem arredondar.
+    expect(convertByExchangeRate(1n, "1.005", "EUR", "CVE")).toBe(1n);
   });
 });

@@ -9,6 +9,7 @@ import {
   setRecurringTransactionActive,
   updateRecurringTransaction,
 } from "@/lib/db/recurring-transactions";
+import { convertByExchangeRate } from "@/lib/financial-engine/money";
 import { withErrorHandling } from "@/lib/api-error";
 
 export const GET = withErrorHandling(
@@ -21,7 +22,11 @@ export const GET = withErrorHandling(
     const series = await getRecurringTransactionById(session.userId, id);
     if (!series) return NextResponse.json({ error: "Recorrência não encontrada." }, { status: 404 });
 
-    return NextResponse.json({ ...series, amountMinor: series.amountMinor.toString() });
+    return NextResponse.json({
+      ...series,
+      amountMinor: series.amountMinor.toString(),
+      destinationAmountMinor: series.destinationAmountMinor?.toString() ?? null,
+    });
   },
 );
 
@@ -42,6 +47,14 @@ export const UpdateRecurringTransactionSchema = z.object({
     .describe(
       "Valor em unidade mínima da moeda (ex: cêntimos para EUR/USD/CVE — 1050 = 10,50 na moeda da conta).",
     )
+    .optional(),
+  // [Task 3] Ver comentário em UpdateTransactionSchema
+  // (src/app/api/transactions/[id]/route.ts) — mesma regra: só tem efeito
+  // numa série que já seja (ou vá passar a ser, se accountId/
+  // destinationAccountId mudarem) uma TRANSFER multi-moeda.
+  exchangeRate: z
+    .string()
+    .regex(/^\d+(\.\d+)?$/, "Taxa de câmbio inválida.")
     .optional(),
   categoryId: z.string().min(1).nullable().optional(),
   description: z.string().trim().min(1).max(255).optional(),
@@ -109,20 +122,60 @@ export const PATCH = withErrorHandling(
         if (destination.isArchived) return NextResponse.json({ error: "A conta de destino está arquivada." }, { status: 400 });
       }
 
-      // [Task 2 — mesma proteção de POST /api/transactions] Só revalida
-      // quando origem ou destino mudam — não vale a pena ir à BD outra vez
-      // só porque a descrição mudou.
-      if (existing.type === "TRANSFER" && nextDestinationAccountId && (fields.accountId !== undefined || fields.destinationAccountId !== undefined)) {
+      // [Task 3 — câmbio] `fx` undefined = não tocar nos 3 campos (mantém o
+      // que já estava); só calculado quando há algo que possa mudar o
+      // resultado — origem/destino, valor, ou a taxa em si. Uma edição que
+      // só muda a descrição, por exemplo, nunca recalcula nada disto.
+      let fx: { destinationCurrency: string | null; destinationAmountMinor: bigint | null; exchangeRate: string | null } | undefined;
+      const accountsChanging = fields.accountId !== undefined || fields.destinationAccountId !== undefined;
+
+      if (existing.type === "TRANSFER" && nextDestinationAccountId && accountsChanging) {
         const [origin, destination] = await Promise.all([
           getAccountById(session.userId, nextAccountId),
           getAccountById(session.userId, nextDestinationAccountId),
         ]);
-        if (origin && destination && origin.currency !== destination.currency) {
-          return NextResponse.json(
-            { error: "Transferências entre contas de moedas diferentes ainda não são suportadas." },
-            { status: 400 },
-          );
+        if (origin && destination) {
+          if (origin.currency !== destination.currency) {
+            if (!fields.exchangeRate) {
+              return NextResponse.json(
+                { error: "Transferências entre contas de moedas diferentes precisam de taxa de câmbio (exchangeRate)." },
+                { status: 400 },
+              );
+            }
+            const amount = fields.amountMinor !== undefined ? BigInt(fields.amountMinor) : existing.amountMinor;
+            try {
+              fx = {
+                destinationCurrency: destination.currency,
+                destinationAmountMinor: convertByExchangeRate(amount, fields.exchangeRate, origin.currency, destination.currency),
+                exchangeRate: fields.exchangeRate,
+              };
+            } catch (e) {
+              return NextResponse.json({ error: e instanceof Error ? e.message : "Taxa de câmbio inválida." }, { status: 400 });
+            }
+          } else {
+            // Origem/destino passaram a ter a mesma moeda — limpa os campos de câmbio antigos.
+            fx = { destinationCurrency: null, destinationAmountMinor: null, exchangeRate: null };
+          }
         }
+      } else if (existing.type === "TRANSFER" && (fields.amountMinor !== undefined || fields.exchangeRate !== undefined)) {
+        if (existing.destinationCurrency) {
+          const rate = fields.exchangeRate ?? existing.exchangeRate;
+          if (!rate) return NextResponse.json({ error: "Falta a taxa de câmbio desta transferência." }, { status: 400 });
+          const amount = fields.amountMinor !== undefined ? BigInt(fields.amountMinor) : existing.amountMinor;
+          try {
+            fx = {
+              destinationCurrency: existing.destinationCurrency,
+              destinationAmountMinor: convertByExchangeRate(amount, rate, existing.currency, existing.destinationCurrency),
+              exchangeRate: rate,
+            };
+          } catch (e) {
+            return NextResponse.json({ error: e instanceof Error ? e.message : "Taxa de câmbio inválida." }, { status: 400 });
+          }
+        } else if (fields.exchangeRate !== undefined) {
+          return NextResponse.json({ error: "Esta série não é uma transferência entre moedas diferentes." }, { status: 400 });
+        }
+      } else if (fields.exchangeRate !== undefined) {
+        return NextResponse.json({ error: "Esta série não é uma transferência entre moedas diferentes." }, { status: 400 });
       }
 
       if (fields.categoryId) {
@@ -134,6 +187,9 @@ export const PATCH = withErrorHandling(
         accountId: fields.accountId,
         destinationAccountId: fields.destinationAccountId,
         amountMinor: fields.amountMinor !== undefined ? BigInt(fields.amountMinor) : undefined,
+        destinationCurrency: fx?.destinationCurrency,
+        destinationAmountMinor: fx?.destinationAmountMinor,
+        exchangeRate: fx?.exchangeRate,
         categoryId: fields.categoryId,
         description: fields.description,
         frequency: fields.frequency,
@@ -147,7 +203,11 @@ export const PATCH = withErrorHandling(
     const updated = isActive !== undefined ? await setRecurringTransactionActive(session.userId, id, isActive) : await getRecurringTransactionById(session.userId, id);
     if (!updated) return NextResponse.json({ error: "Recorrência não encontrada." }, { status: 404 });
 
-    return NextResponse.json({ ...updated, amountMinor: updated.amountMinor.toString() });
+    return NextResponse.json({
+      ...updated,
+      amountMinor: updated.amountMinor.toString(),
+      destinationAmountMinor: updated.destinationAmountMinor?.toString() ?? null,
+    });
   },
 );
 

@@ -22,12 +22,14 @@ import { logError, logInfo } from "@/lib/logger";
 import { getPool, toBigInt, toISODateString } from "./client";
 import { createTransaction } from "./transactions";
 
+const SELECT_COLUMNS = `id, "userId", type, "accountId", "destinationAccountId", "amountMinor", currency,
+            "destinationCurrency", "destinationAmountMinor", "exchangeRate",
+            "categoryId", description, frequency, interval, "startDate", "endDate",
+            "occurrencesTotal", "occurrencesGenerated", "nextRunDate", "isActive"`;
+
 export async function listRecurringTransactions(userId: string): Promise<RecurringTransactionRecord[]> {
   const { rows } = await getPool().query(
-    `SELECT id, "userId", type, "accountId", "destinationAccountId", "amountMinor", currency,
-            "categoryId", description, frequency, interval, "startDate", "endDate",
-            "occurrencesTotal", "occurrencesGenerated", "nextRunDate", "isActive"
-     FROM "RecurringTransaction" WHERE "userId" = $1 ORDER BY "createdAt" DESC`,
+    `SELECT ${SELECT_COLUMNS} FROM "RecurringTransaction" WHERE "userId" = $1 ORDER BY "createdAt" DESC`,
     [userId],
   );
   return rows.map(mapRecurring);
@@ -35,10 +37,7 @@ export async function listRecurringTransactions(userId: string): Promise<Recurri
 
 export async function getRecurringTransactionById(userId: string, id: string): Promise<RecurringTransactionRecord | null> {
   const { rows } = await getPool().query(
-    `SELECT id, "userId", type, "accountId", "destinationAccountId", "amountMinor", currency,
-            "categoryId", description, frequency, interval, "startDate", "endDate",
-            "occurrencesTotal", "occurrencesGenerated", "nextRunDate", "isActive"
-     FROM "RecurringTransaction" WHERE "userId" = $1 AND id = $2`,
+    `SELECT ${SELECT_COLUMNS} FROM "RecurringTransaction" WHERE "userId" = $1 AND id = $2`,
     [userId, id],
   );
   return rows[0] ? mapRecurring(rows[0]) : null;
@@ -51,6 +50,11 @@ export async function createRecurringTransaction(input: {
   destinationAccountId?: string | null;
   amountMinor: bigint;
   currency: string;
+  // [Task 3] Ou os três preenchidos (TRANSFER entre moedas diferentes), ou
+  // os três null — quem chama (rota/tool) já validou isto.
+  destinationCurrency?: string | null;
+  destinationAmountMinor?: bigint | null;
+  exchangeRate?: string | null;
   categoryId?: string | null;
   description: string;
   frequency: RecurrenceFrequency;
@@ -66,12 +70,11 @@ export async function createRecurringTransaction(input: {
   const { rows } = await getPool().query(
     `INSERT INTO "RecurringTransaction"
        (id, "userId", type, "accountId", "destinationAccountId", "amountMinor", currency,
+        "destinationCurrency", "destinationAmountMinor", "exchangeRate",
         "categoryId", description, frequency, interval, "startDate", "endDate",
         "occurrencesTotal", "nextRunDate")
-     VALUES ('c' || replace(gen_random_uuid()::text, '-', ''), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $11)
-     RETURNING id, "userId", type, "accountId", "destinationAccountId", "amountMinor", currency,
-               "categoryId", description, frequency, interval, "startDate", "endDate",
-               "occurrencesTotal", "occurrencesGenerated", "nextRunDate", "isActive"`,
+     VALUES ('c' || replace(gen_random_uuid()::text, '-', ''), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $14)
+     RETURNING ${SELECT_COLUMNS}`,
     [
       input.userId,
       input.type,
@@ -79,6 +82,9 @@ export async function createRecurringTransaction(input: {
       input.destinationAccountId ?? null,
       input.amountMinor.toString(),
       input.currency,
+      input.destinationCurrency ?? null,
+      input.destinationAmountMinor?.toString() ?? null,
+      input.exchangeRate ?? null,
       input.categoryId ?? null,
       input.description,
       input.frequency,
@@ -102,9 +108,7 @@ export async function setRecurringTransactionActive(
   const { rows } = await getPool().query(
     `UPDATE "RecurringTransaction" SET "isActive" = $3, "updatedAt" = now()
      WHERE "userId" = $1 AND id = $2
-     RETURNING id, "userId", type, "accountId", "destinationAccountId", "amountMinor", currency,
-               "categoryId", description, frequency, interval, "startDate", "endDate",
-               "occurrencesTotal", "occurrencesGenerated", "nextRunDate", "isActive"`,
+     RETURNING ${SELECT_COLUMNS}`,
     [userId, id, isActive],
   );
   return rows[0] ? mapRecurring(rows[0]) : null;
@@ -119,6 +123,12 @@ export interface UpdateRecurringTransactionInput {
   accountId?: string;
   destinationAccountId?: string | null;
   amountMinor?: bigint;
+  // [Task 3] Os três ficam juntos — quem chama (rota/tool) já recalculou
+  // destinationAmountMinor a partir do exchangeRate antes de chegar aqui
+  // (nunca recalculado silenciosamente dentro desta função).
+  destinationCurrency?: string | null;
+  destinationAmountMinor?: bigint | null;
+  exchangeRate?: string | null;
   categoryId?: string | null;
   description?: string;
   frequency?: RecurrenceFrequency;
@@ -151,11 +161,11 @@ export async function updateRecurringTransaction(
     `UPDATE "RecurringTransaction" SET
        "accountId" = $3, "destinationAccountId" = $4, "amountMinor" = $5, "categoryId" = $6,
        description = $7, frequency = $8, interval = $9, "startDate" = $10, "endDate" = $11,
-       "occurrencesTotal" = $12, "nextRunDate" = $13, "updatedAt" = now()
+       "occurrencesTotal" = $12, "nextRunDate" = $13,
+       "destinationCurrency" = $14, "destinationAmountMinor" = $15, "exchangeRate" = $16,
+       "updatedAt" = now()
      WHERE "userId" = $1 AND id = $2
-     RETURNING id, "userId", type, "accountId", "destinationAccountId", "amountMinor", currency,
-               "categoryId", description, frequency, interval, "startDate", "endDate",
-               "occurrencesTotal", "occurrencesGenerated", "nextRunDate", "isActive"`,
+     RETURNING ${SELECT_COLUMNS}`,
     [
       userId,
       id,
@@ -170,6 +180,9 @@ export async function updateRecurringTransaction(
       input.endDate !== undefined ? input.endDate : existing.endDate,
       input.occurrencesTotal !== undefined ? input.occurrencesTotal : existing.occurrencesTotal,
       nextRunDate,
+      input.destinationCurrency !== undefined ? input.destinationCurrency : existing.destinationCurrency,
+      (input.destinationAmountMinor !== undefined ? input.destinationAmountMinor : existing.destinationAmountMinor)?.toString() ?? null,
+      input.exchangeRate !== undefined ? input.exchangeRate : existing.exchangeRate,
     ],
   );
   return rows[0] ? mapRecurring(rows[0]) : null;
@@ -224,13 +237,10 @@ async function materializeSeries(userId: string, seriesId: string, todayIso: str
     // [Correção — mesmo padrão de payInstallment em src/lib/db/debts.ts]
     // Bloqueia a linha (FOR UPDATE): sem isto, duas abas a carregar a app ao
     // mesmo tempo podiam materializar a mesma ocorrência duas vezes.
-    const { rows } = await client.query(
-      `SELECT id, "userId", type, "accountId", "destinationAccountId", "amountMinor", currency,
-              "categoryId", description, frequency, interval, "startDate", "endDate",
-              "occurrencesTotal", "occurrencesGenerated", "nextRunDate", "isActive"
-       FROM "RecurringTransaction" WHERE id = $1 AND "userId" = $2 FOR UPDATE`,
-      [seriesId, userId],
-    );
+    const { rows } = await client.query(`SELECT ${SELECT_COLUMNS} FROM "RecurringTransaction" WHERE id = $1 AND "userId" = $2 FOR UPDATE`, [
+      seriesId,
+      userId,
+    ]);
     const row = rows[0];
     if (!row) {
       await client.query("ROLLBACK");
@@ -280,6 +290,12 @@ async function materializeSeries(userId: string, seriesId: string, todayIso: str
           destinationAccountId: series.destinationAccountId,
           amountMinor: series.amountMinor,
           currency: series.currency,
+          // [Task 3] Copiado tal e qual do template, nunca recalculado — a
+          // taxa que a série tinha gravada no momento desta materialização,
+          // mesmo princípio de todos os outros campos aqui.
+          destinationCurrency: series.destinationCurrency,
+          destinationAmountMinor: series.destinationAmountMinor,
+          exchangeRate: series.exchangeRate,
           categoryId: series.categoryId,
           description: series.description,
           date: runDate,
@@ -318,6 +334,9 @@ interface RecurringRow {
   destinationAccountId: string | null;
   amountMinor: string;
   currency: string;
+  destinationCurrency: string | null;
+  destinationAmountMinor: string | null;
+  exchangeRate: string | null;
   categoryId: string | null;
   description: string;
   frequency: RecurrenceFrequency;
@@ -339,6 +358,9 @@ function mapRecurring(row: RecurringRow): RecurringTransactionRecord {
     destinationAccountId: row.destinationAccountId,
     amountMinor: toBigInt(row.amountMinor),
     currency: row.currency,
+    destinationCurrency: row.destinationCurrency,
+    destinationAmountMinor: row.destinationAmountMinor !== null ? toBigInt(row.destinationAmountMinor) : null,
+    exchangeRate: row.exchangeRate,
     categoryId: row.categoryId,
     description: row.description,
     frequency: row.frequency,
