@@ -32,6 +32,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Cor da barra de estado/título quando instalada como app (igual ao fundo do tema).
+  themeColor: "#12141c",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
