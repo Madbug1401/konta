@@ -226,12 +226,10 @@ export function TransactionForm({ accounts, categories, goals = [], mode, transa
         <label className="text-xs font-medium text-muted-foreground">
           {`Valor (${currency})`}
           <Input
-            type="number"
+            type="text"
             inputMode="decimal"
-            min={decimalPlaces > 0 ? 0.01 : 1}
-            step={decimalPlaces > 0 ? 10 ** -decimalPlaces : 1}
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => setAmount(e.target.value.replace(",", "."))}
             placeholder={decimalPlaces > 0 ? "Ex: 50.00" : "Ex: 5000"}
             required
           />
@@ -241,13 +239,11 @@ export function TransactionForm({ accounts, categories, goals = [], mode, transa
           <label className="text-xs font-medium text-muted-foreground">
             {`Taxa de câmbio (${destinationCurrency} por 1 ${currency})`}
             <Input
-              type="number"
+              type="text"
               inputMode="decimal"
-              min={0.000001}
-              step="any"
               value={exchangeRate}
-              onChange={(e) => setExchangeRate(e.target.value)}
-              placeholder="Ex: 110"
+              onChange={(e) => setExchangeRate(e.target.value.replace(",", "."))}
+              placeholder="Ex: 110.265"
               required
             />
             {destinationPreview && (
