@@ -41,7 +41,22 @@ psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f pr
 psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0004_add_feedback.sql
 psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0005_add_ai_access_toggle.sql
 psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0006_ai_access_default_false_for_new_users.sql
+psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0007_recurring_transaction_fk_setnull.sql
+psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0008_transfer_fx_fields.sql
+psql "postgresql://user:password@ep-xxxx.neon.tech/neondb?sslmode=require" -f prisma\manual-sql\0009_add_notifications.sql
 ```
+
+> **[Incidente 04–05/10/2026]** As migrações `0007`–`0009` ficaram feitas no
+> código e promovidas até ao GitHub, mas o passo manual de as correr contra
+> o Neon de produção foi esquecido — o Render fez deploy do código novo
+> (que já espera as colunas/tabelas novas) antes de a base de dados as ter,
+> e toda a app (menos `/admin`, `/assistant`, `/help`, que não tocam nas
+> tabelas afetadas) ficou a devolver `column ... does not exist` /
+> `relation ... does not exist` até se correr a migração em falta.
+> **Regra daqui para a frente: nunca fazer `git push origin main` (passo 4
+> do fluxo em `WORKFLOW.md`) de uma alteração que adicione uma migração
+> nova sem, no mesmo momento, correr essa migração contra o Neon de
+> produção** — o Render não tem nenhum passo automático que o faça por si.
 
 Alternativa: dá-me a connection string temporariamente (por um canal
 seguro, não em texto simples numa mensagem pública) e corro estes comandos
