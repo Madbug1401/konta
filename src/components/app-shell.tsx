@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, List, Wallet, Landmark, Target, Repeat, Plus, LogOut, HelpCircle, BarChart3, Sparkles, PieChart } from "lucide-react";
+import { LayoutDashboard, List, Wallet, Landmark, Target, Repeat, Plus, LogOut, HelpCircle, BarChart3, Sparkles, PieChart, Bell } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -54,11 +54,13 @@ export function AppShell({
   userEmail,
   isAdmin = false,
   aiEnabled = true,
+  unreadNotifications = 0,
 }: {
   children: ReactNode;
   userEmail: string;
   isAdmin?: boolean;
   aiEnabled?: boolean;
+  unreadNotifications?: number;
 }) {
   const pathname = usePathname();
   // [Sugestão do utilizador — "quero que uma conta nova venha logo sem o
@@ -93,6 +95,17 @@ export function AppShell({
             ali obrigaria a redesenhar essa barra. Em mobile, o mesmo link
             aparece no cabeçalho (ver abaixo). */}
         <div className="mt-2 flex flex-col gap-1">
+          {/* [Sugestão do utilizador — "quero enviar mensagens aos meus
+              users, como notificação"] Mesma razão de "Ajuda"/"Estatísticas"
+              para ficar fora de NAV_ITEMS: utilitário, não uma secção
+              central da app. */}
+          <NavLink
+            href="/notifications"
+            label="Notificações"
+            icon={Bell}
+            active={pathname.startsWith("/notifications")}
+            badge={unreadNotifications}
+          />
           <NavLink href="/help" label="Ajuda" icon={HelpCircle} active={pathname.startsWith("/help")} />
           {/* [Sugestão do utilizador — "como posso observar os meus
               utilizadores"] Mesma razão do "Ajuda" para ficar fora de
@@ -127,6 +140,16 @@ export function AppShell({
         <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 md:hidden">
           <span className="text-lg font-bold text-primary">Konta</span>
           <div className="flex items-center gap-1">
+            <Link
+              href="/notifications"
+              aria-label={unreadNotifications > 0 ? `Notificações (${unreadNotifications} por ler)` : "Notificações"}
+              className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+            >
+              <Bell className="h-4 w-4" />
+              {unreadNotifications > 0 && (
+                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-danger" aria-hidden="true" />
+              )}
+            </Link>
             <Link
               href="/help"
               aria-label="Ajuda"
@@ -251,11 +274,13 @@ function NavLink({
   label,
   icon: Icon,
   active,
+  badge,
 }: {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   active: boolean;
+  badge?: number;
 }) {
   return (
     <Link
@@ -266,7 +291,12 @@ function NavLink({
       )}
     >
       <Icon className="h-4 w-4" />
-      {label}
+      <span className="flex-1">{label}</span>
+      {!!badge && badge > 0 && (
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-xs font-semibold text-white">
+          {badge > 9 ? "9+" : badge}
+        </span>
+      )}
     </Link>
   );
 }

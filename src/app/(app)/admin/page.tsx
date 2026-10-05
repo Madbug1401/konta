@@ -3,8 +3,10 @@ import { isAdminEmail } from "@/lib/auth/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { getPlatformTotals, listUsersWithActivity } from "@/lib/db/admin";
 import { listFeedback } from "@/lib/db/feedback";
+import { listRecentNotifications } from "@/lib/db/notifications";
 import { Card } from "@/components/ui/card";
 import { UserAiAccessButton } from "@/components/user-ai-access-button";
+import { NotificationComposeForm } from "@/components/notification-compose-form";
 
 // [Sugestão do utilizador — "como posso observar os meus utilizadores"]
 // Página só para o dono do projeto (ver src/lib/auth/admin.ts). Devolve
@@ -15,7 +17,12 @@ export default async function AdminPage() {
   const session = await getSessionUser();
   if (!session || !isAdminEmail(session.email)) notFound();
 
-  const [totals, users, feedback] = await Promise.all([getPlatformTotals(), listUsersWithActivity(), listFeedback()]);
+  const [totals, users, feedback, notifications] = await Promise.all([
+    getPlatformTotals(),
+    listUsersWithActivity(),
+    listFeedback(),
+    listRecentNotifications(),
+  ]);
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
@@ -67,6 +74,28 @@ export default async function AdminPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <h2 className="mb-1 text-base font-semibold text-foreground">Enviar notificação</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Mensagem visível para todos os utilizadores (sino no topo da app deles). Usa para avisos de atualização,
+          manutenção ou como os contactar.
+        </p>
+        <NotificationComposeForm />
+        {notifications.length > 0 && (
+          <div className="mt-4 flex flex-col gap-2 border-t border-border pt-3">
+            <p className="text-xs font-medium text-muted-foreground">Enviadas recentemente</p>
+            {notifications.map((n) => (
+              <div key={n.id} className="rounded-lg border border-border p-3">
+                <div className="mb-1 flex items-center justify-between gap-3">
+                  <span className="text-xs text-muted-foreground">{formatDateTime(n.createdAt)}</span>
+                </div>
+                <p className="whitespace-pre-wrap text-sm text-foreground">{n.message}</p>
+              </div>
+            ))}
           </div>
         )}
       </Card>

@@ -138,6 +138,7 @@ model User {
   debts                Debt[]
   goals                Goal[]
   feedback             Feedback[]
+  notificationReads    NotificationRead[]
 }
 
 // ----------------------------------------------------------------------------
@@ -467,4 +468,39 @@ model Feedback {
 
   @@index([userId])
   @@index([createdAt])
+}
+
+// ----------------------------------------------------------------------------
+// NOTIFICAÇÕES
+// ----------------------------------------------------------------------------
+
+// [Sugestão do utilizador — "quero enviar mensagens aos meus users, como
+// notificação"] Uma Notification é sempre um broadcast para TODOS os
+// utilizadores (sem destinatário próprio) — só o dono do projeto
+// (isAdminEmail, mesmo padrão de /admin) pode criar uma, a partir do painel
+// /admin. "Lida" é por utilizador (NotificationRead), nunca um campo único
+// na própria Notification — cada pessoa marca a sua própria cópia como
+// lida, sem afetar o que as outras veem.
+model Notification {
+  id        String             @id @default(cuid())
+  message   String
+  createdAt DateTime           @default(now())
+  reads     NotificationRead[]
+
+  @@index([createdAt])
+}
+
+// Chave composta (notificationId, userId): no máximo uma linha "lida" por
+// par notificação/utilizador — a existência da linha É o estado "lida"
+// (sem campo booleano a poder divergir da realidade), com readAt para saber
+// quando.
+model NotificationRead {
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime     @default(now())
+
+  @@id([notificationId, userId])
+  @@index([userId])
 }

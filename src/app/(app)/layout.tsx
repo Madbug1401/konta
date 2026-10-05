@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { AssistantProvider } from "@/components/ai/assistant-provider";
 import { isAdminEmail } from "@/lib/auth/admin";
 import { getSessionUser } from "@/lib/auth/session";
+import { countUnreadNotifications } from "@/lib/db/notifications";
 import { materializeDueOccurrences } from "@/lib/db/recurring-transactions";
 import { findUserById, isAiEnabled } from "@/lib/db/users";
 import { getTodayInTimezone } from "@/lib/financial-engine";
@@ -33,6 +34,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // por si mesmas (nunca confiar só em um item de menu estar escondido).
   const aiEnabled = await isAiEnabled(session.userId);
 
+  // [Sugestão do utilizador — "quero enviar mensagens aos meus users, como
+  // notificação"] Mesmo espírito do aiEnabled acima: calculado uma vez por
+  // navegação, só para decidir o número no sino (src/components/app-shell.tsx)
+  // — a página /notifications volta a ler a lista completa por si mesma.
+  const unreadNotifications = await countUnreadNotifications(session.userId);
+
   // [Correção — Konta AI, conversa a desaparecer ao navegar] `AssistantProvider`
   // fica aqui, acima de `<AppShell>{children}</AppShell>` — este layout é o
   // único ponto que o App Router NUNCA desmonta ao navegar entre páginas
@@ -43,7 +50,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // de um utilizador visível para o próximo que iniciar sessão no mesmo browser.
   return (
     <AssistantProvider>
-      <AppShell userEmail={session.email} isAdmin={isAdminEmail(session.email)} aiEnabled={aiEnabled}>
+      <AppShell
+        userEmail={session.email}
+        isAdmin={isAdminEmail(session.email)}
+        aiEnabled={aiEnabled}
+        unreadNotifications={unreadNotifications}
+      >
         {children}
       </AppShell>
     </AssistantProvider>
