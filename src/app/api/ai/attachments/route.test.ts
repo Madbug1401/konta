@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { _resetAttachmentStoreForTests } from "@/lib/ai/attachments/store";
+import { _resetAttachmentStoreForTests, getAttachment } from "@/lib/ai/attachments/store";
 import { _resetRateLimitState } from "@/lib/rate-limit";
 
 const getSessionUserMock = vi.fn();
@@ -100,6 +100,25 @@ describe("POST /api/ai/attachments", () => {
 
     expect(response.status).toBe(201);
     expect(body.kind).toBe("csv");
+    expect(uploadFileToAnthropicMock).not.toHaveBeenCalled();
+  });
+
+  it("uma folha Excel é extraída para texto e nunca enviada à Files API", async () => {
+    getSessionUserMock.mockResolvedValue(SESSION);
+    const XLSX = await import("@e965/xlsx");
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["Descrição", "Valor"], ["Renda", 2500]]), "Movimentos");
+    const bytes = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Uint8Array<ArrayBuffer>;
+    const { POST } = await import("./route");
+
+    const response = await POST(postRequest(formWithFile(bytes, "dados.xlsx")));
+    const body = await response.json();
+    const attachment = getAttachment(body.attachmentId, SESSION.userId);
+
+    expect(response.status).toBe(201);
+    expect(body.kind).toBe("spreadsheet");
+    expect(attachment?.content).toMatchObject({ form: "text" });
+    if (attachment?.content.form === "text") expect(attachment.content.text).toContain("Renda");
     expect(uploadFileToAnthropicMock).not.toHaveBeenCalled();
   });
 

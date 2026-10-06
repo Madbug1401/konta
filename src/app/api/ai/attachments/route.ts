@@ -5,9 +5,9 @@
 // rate limit PRÓPRIO (nunca partilhado com o de mensagens — um upload
 // pesado não deve consumir a quota de "conversar") → `request.formData()`
 // nativo (Web standard, sem dependência nova) → validação real do conteúdo
-// (nunca confia no MIME/extensão do cliente, ver attachments/validate.ts) →
-// imagem/PDF vai para a Anthropic Files API; TXT/CSV fica como texto
-// inline → guardado no Attachment Store (em memória, ownership-scoped) →
+// (verifica assinatura real; extensão só escolhe parser para Office) →
+// imagem/PDF vai para a Anthropic Files API; TXT/CSV/Office extraído fica
+// como texto inline → guardado no Attachment Store (em memória, ownership-scoped) →
 // devolve só o resumo seguro (nunca o `fileId`/texto ao cliente).
 // ============================================================================
 
@@ -19,6 +19,8 @@ import {
   assertPdfPageLimit,
   createAttachment,
   validateUploadedFile,
+  MAX_AUDIO_BYTES,
+  MAX_PDF_BYTES,
   type AiAttachmentContent,
   type AiAttachmentSummary,
 } from "@/lib/ai/attachments";
@@ -52,6 +54,9 @@ export const POST = withErrorHandling("api.ai.attachments.post", async (request:
   if (!form || !(file instanceof File)) {
     return NextResponse.json({ error: "Nenhum ficheiro enviado." }, { status: 400 });
   }
+  if (file.size > Math.max(MAX_AUDIO_BYTES, MAX_PDF_BYTES)) {
+    return NextResponse.json({ error: "Ficheiro demasiado grande (máximo 20 MB)." }, { status: 400 });
+  }
   // [Milestone 5c — voz] O cliente pode indicar "audio" aqui — nenhum outro
   // valor deste campo é usado para decidir o tipo (imagem/PDF/texto são
   // sempre decididos pelo conteúdo real, nunca por isto, ver validate.ts).
@@ -65,7 +70,7 @@ export const POST = withErrorHandling("api.ai.attachments.post", async (request:
   }
 
   try {
-    const validated = validateUploadedFile(bytes, typeof declaredKind === "string" ? declaredKind : null);
+    const validated = validateUploadedFile(bytes, typeof declaredKind === "string" ? declaredKind : null, file.name);
 
     if (validated.kind === "pdf") {
       await assertPdfPageLimit(bytes);
@@ -75,6 +80,9 @@ export const POST = withErrorHandling("api.ai.attachments.post", async (request:
     if (validated.kind === "image" || validated.kind === "pdf") {
       const fileId = await uploadFileToAnthropic(bytes, file.name || "ficheiro", validated.mimeType, ANTHROPIC_FILE_EXPIRES_IN_SECONDS);
       content = { form: "file", fileId, mimeType: validated.mimeType };
+    } else if (validated.kind === "word" || validated.kind === "spreadsheet") {
+      const { extractOfficeText } = await import("@/lib/ai/attachments/office");
+      content = { form: "text", text: await extractOfficeText(bytes, file.name) };
     } else {
       // "text"/"csv" — já passaram pela heurística "parece texto" em
       // validateUploadedFile, por isso a descodificação aqui nunca deveria

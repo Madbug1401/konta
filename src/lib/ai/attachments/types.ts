@@ -9,11 +9,11 @@
 // [Decisão] Duas formas de conteúdo resolvido, nunca as duas ao mesmo tempo:
 // - `fileId` — para imagem/PDF, uma referência à Anthropic Files API (nunca
 //   os bytes guardados no nosso servidor além do tempo de upload).
-// - `text` — para TXT/CSV (e, no Milestone 5c, a transcrição de áudio): o
+// - `text` — para TXT/CSV/Office extraído (e transcrição de áudio): o
 //   conteúdo já é texto, nunca precisa de upload a lado nenhum.
 // ============================================================================
 
-export const AI_ATTACHMENT_KINDS = ["image", "pdf", "text", "csv", "audio"] as const;
+export const AI_ATTACHMENT_KINDS = ["image", "pdf", "text", "csv", "word", "spreadsheet", "audio"] as const;
 export type AiAttachmentKind = (typeof AI_ATTACHMENT_KINDS)[number];
 
 export type AiAttachmentContent =

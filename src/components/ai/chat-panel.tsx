@@ -43,7 +43,7 @@ const SUGGESTIONS = ["Quanto tenho disponível?", "Quanto gastei este mês?", "M
 // [Milestone 5a] Só o que o backend sabe processar hoje (validate.ts decide
 // o tipo real pelo conteúdo — isto é só o filtro do seletor de ficheiros,
 // nunca a fonte de verdade da validação).
-const ACCEPTED_ATTACHMENT_TYPES = "image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/csv";
+const ACCEPTED_ATTACHMENT_TYPES = "image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/csv,.doc,.docx,.xls,.xlsx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 export function ChatPanel() {
   const { turns, pending, sending, error, pendingAttachments, addAttachments, removeAttachment, sendChat, confirmPending, cancelPending } =

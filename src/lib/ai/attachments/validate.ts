@@ -2,10 +2,9 @@
 // KONTA AI — Attachments: validação (Milestone 5a).
 //
 // [Segurança — secção 8/9/10 do pedido] Nunca confiar no MIME/extensão
-// declarados pelo cliente — só o próprio conteúdo do ficheiro (assinatura
-// binária) decide o que ele realmente é. Um ficheiro que declare
-// "image/png" mas comece com os bytes de um PDF é rejeitado como PNG
-// inválido, nunca aceite "porque o cliente disse que sim".
+// declarados pelo cliente para imagens/PDF/texto. Office usa a extensão
+// apenas para escolher o parser, exige assinatura ZIP/OLE e é validado pelo
+// parser antes de o conteúdo extraído entrar no Attachment Store.
 //
 // Limites como constantes explícitas (nunca env vars soltas — pedido
 // explícito de não introduzir configuração sem necessidade real): mudar um
@@ -20,13 +19,27 @@ export const MAX_ATTACHMENTS_PER_MESSAGE = 4;
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 MB — acima disto a Anthropic já degrada/rejeita.
 export const MAX_PDF_BYTES = 15 * 1024 * 1024; // 15 MB
 export const MAX_PDF_PAGES = 30; // limite de custo/processamento — pedido explícito.
-export const MAX_TEXT_BYTES = 2 * 1024 * 1024; // 2 MB — TXT/CSV entram inline no prompt, nunca "o ficheiro todo" sem limite.
+export const MAX_TEXT_BYTES = 2 * 1024 * 1024; // 2 MB — texto enviado inline, incluindo conteúdo Office extraído.
+export const MAX_OFFICE_BYTES = 10 * 1024 * 1024;
 export const MAX_AUDIO_BYTES = 20 * 1024 * 1024; // 20 MB (folga generosa para ~2min de áudio comprimido)
 export const MAX_AUDIO_SECONDS = 120; // 2 minutos — limite de custo de transcrição (Milestone 5c).
 
 interface DetectedType {
   kind: AiAttachmentKind;
   mimeType: string;
+}
+
+function officeKindFromName(filename: string): "word" | "spreadsheet" | null {
+  const extension = filename.toLowerCase().split(".").pop();
+  if (extension === "doc" || extension === "docx") return "word";
+  if (extension === "xls" || extension === "xlsx") return "spreadsheet";
+  return null;
+}
+
+function hasOfficeContainerSignature(bytes: Uint8Array): boolean {
+  const isZip = bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+  const isOle = bytes.length >= 8 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0 && bytes[4] === 0xa1 && bytes[5] === 0xb1 && bytes[6] === 0x1a && bytes[7] === 0xe1;
+  return isZip || isOle;
 }
 
 /**
@@ -107,11 +120,10 @@ export interface ValidatedFile {
  * Valida um ficheiro recebido por upload — tamanho primeiro (barato), depois
  * o conteúdo real (assinatura binária ou heurística de texto). `declaredKind`
  * vem do formulário do cliente (ex: "audio" para uma gravação) só para casos
- * em que o conteúdo não tem assinatura própria (áudio); nunca é usado para
- * decidir o tipo de imagem/PDF/texto — esses são sempre decididos pelo
- * conteúdo.
+ * em que o conteúdo não tem assinatura própria (áudio). Office usa o nome
+ * apenas para escolher o parser, que também valida o formato do documento.
  */
-export function validateUploadedFile(bytes: Uint8Array, declaredKind: string | null): ValidatedFile {
+export function validateUploadedFile(bytes: Uint8Array, declaredKind: string | null, filename = ""): ValidatedFile {
   if (bytes.length === 0) {
     throw new AttachmentError("Ficheiro vazio.");
   }
@@ -132,6 +144,17 @@ export function validateUploadedFile(bytes: Uint8Array, declaredKind: string | n
       throw new AttachmentError("Áudio demasiado grande (máximo 20 MB).");
     }
     return { kind: "audio", mimeType: "audio/webm", bytes };
+  }
+
+  const officeKind = officeKindFromName(filename);
+  if (officeKind) {
+    if (bytes.length > MAX_OFFICE_BYTES) {
+      throw new AttachmentError("Documento demasiado grande (máximo 10 MB).");
+    }
+    if (!hasOfficeContainerSignature(bytes)) {
+      throw new AttachmentError("O conteúdo não corresponde a um documento Word ou Excel válido.");
+    }
+    return { kind: officeKind, mimeType: "application/octet-stream", bytes };
   }
 
   if (looksLikeText(bytes)) {

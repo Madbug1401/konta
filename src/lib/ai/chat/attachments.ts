@@ -48,7 +48,7 @@ function attachmentToBlock(attachment: AiAttachment): ChatImageBlock | ChatDocum
     if (attachment.content.form !== "file") throw new AttachmentError("Anexo de PDF inválido.");
     return { type: "document", source: { kind: "file", fileId: attachment.content.fileId }, title: attachment.filename };
   }
-  if (attachment.kind === "text" || attachment.kind === "csv") {
+  if (attachment.kind === "text" || attachment.kind === "csv" || attachment.kind === "word" || attachment.kind === "spreadsheet") {
     if (attachment.content.form !== "text") throw new AttachmentError("Anexo de texto inválido.");
     return { type: "document", source: { kind: "text", data: wrapUntrustedText(attachment.content.text) }, title: attachment.filename };
   }

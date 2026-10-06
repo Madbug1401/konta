@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { AttachmentError } from "./types";
-import { MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, validateUploadedFile } from "./validate";
+import { MAX_IMAGE_BYTES, MAX_OFFICE_BYTES, MAX_PDF_BYTES, MAX_TEXT_BYTES, validateUploadedFile } from "./validate";
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const JPEG_SIGNATURE = [0xff, 0xd8, 0xff, 0xe0];
 const WEBP_HEADER = [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50];
 const GIF_SIGNATURE = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61];
 const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d];
+const ZIP_SIGNATURE = [0x50, 0x4b, 0x03, 0x04];
+const OLE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 
 function bytesOf(...values: number[]): Uint8Array {
   return new Uint8Array(values);
@@ -41,6 +43,26 @@ describe("validateUploadedFile — deteção por conteúdo real, nunca pelo MIME
   it("reconhece PDF pela assinatura binária", () => {
     const result = validateUploadedFile(bytesOf(...PDF_SIGNATURE, 1, 2), null);
     expect(result.kind).toBe("pdf");
+  });
+
+  it.each([
+    ["relatorio.doc", OLE_SIGNATURE, "word"],
+    ["relatorio.docx", ZIP_SIGNATURE, "word"],
+    ["dados.xls", OLE_SIGNATURE, "spreadsheet"],
+    ["dados.xlsx", ZIP_SIGNATURE, "spreadsheet"],
+  ] as const)("reconhece %s pelo contentor Office", (filename, signature, kind) => {
+    const result = validateUploadedFile(bytesOf(...signature), null, filename);
+    expect(result.kind).toBe(kind);
+  });
+
+  it("rejeita um documento Office sem assinatura de contentor válida", () => {
+    expect(() => validateUploadedFile(new TextEncoder().encode("não é Office"), null, "relatorio.docx")).toThrow(AttachmentError);
+  });
+
+  it("rejeita documentos Office acima do limite", () => {
+    const oversized = new Uint8Array(MAX_OFFICE_BYTES + 1);
+    oversized.set(ZIP_SIGNATURE);
+    expect(() => validateUploadedFile(oversized, null, "dados.xlsx")).toThrow(AttachmentError);
   });
 
   it("um ficheiro cujo conteúdo real é um PDF é tratado como PDF mesmo que o cliente declare 'csv' — o conteúdo decide, nunca o campo declarado", () => {

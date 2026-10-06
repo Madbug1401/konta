@@ -148,19 +148,23 @@ Liga, pela primeira vez, o AI Gateway ao Context Builder e ao Tool Registry: `Us
 
 ## Konta AI Multimodal — attachments, extração e propostas (Milestone 5a/5b)
 
-Adiciona imagens/PDF/TXT/CSV como input do chat (5a) e entendimento
-financeiro real desses attachments (5b) — sem criar nenhuma segunda
-arquitetura de IA, de escrita, ou de confirmação.
+Adiciona imagens/PDF/TXT/CSV e documentos Word/Excel como input do chat
+(5a) e entendimento financeiro real desses attachments (5b) — sem criar
+nenhuma segunda arquitetura de IA, de escrita, ou de confirmação.
 
 - **`src/lib/ai/attachments/`** (5a) — validação por conteúdo real (nunca
   MIME/extensão do cliente), limites, Attachment Store em memória com TTL
   (mesmo padrão do Confirmation Store), contagem de páginas de PDF
   (`pdf-lib`). `POST /api/ai/attachments` faz o upload; imagem/PDF vão para
   a Anthropic Files API (`gateway.ts::uploadFileToAnthropic`), TXT/CSV
-  ficam inline como texto.
+  ficam inline como texto e DOC/DOCX/XLS/XLSX são extraídos no servidor
+  (limite 10 MB, até 20 folhas/5000 linhas por folha e 2 MB de texto) antes
+  de ficarem inline. Imagens embutidas em documentos Office não são extraídas
+  nem submetidas a OCR; imagens anexadas diretamente continuam suportadas.
 - **`chat/attachments.ts`** (5a) — resolve `attachmentIds` (sempre
   ownership-scoped) para blocos `image`/`document` do Gateway. Texto de
-  TXT/CSV é envolvido numa boundary aleatória de 128 bits, gerada por
+  Todo o texto extraído (TXT/CSV/Office) é envolvido numa boundary aleatória
+  de 128 bits, gerada por
   chamada (`wrapUntrustedText`) — nunca uma tag fixa, para nenhum ficheiro
   a poder reproduzir e "fechar" a fronteira mais cedo (correção de
   segurança M5a.1, com testes dedicados ao ataque).
