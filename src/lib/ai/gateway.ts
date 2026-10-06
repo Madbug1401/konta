@@ -28,11 +28,10 @@ import Anthropic, { toFile } from "@anthropic-ai/sdk";
 // explícita: não trocar de modelo).
 const MODEL = "claude-sonnet-5";
 
-// [Milestone 4] Uma resposta com tool-calling pode incluir texto de
-// raciocínio + a chamada da tool; 1024 (limite do M1, pensado só para texto
-// simples) era apertado demais. 2048 continua modesto face ao limite técnico
-// do modelo (128k) — decisão de custo, não uma limitação técnica.
-const MAX_TOKENS = 2048;
+// [Milestone 4/5a] 2048 era apertado para respostas detalhadas e análise de
+// documentos/extratos. 8192 dá espaço suficiente para tool-calling e respostas
+// completas, mantendo o limite controlado por custo.
+const MAX_TOKENS = 8192;
 
 export class AiConfigError extends Error {
   constructor(message = "ANTHROPIC_API_KEY não está definido.") {
