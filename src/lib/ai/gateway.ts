@@ -29,9 +29,9 @@ import Anthropic, { toFile } from "@anthropic-ai/sdk";
 const MODEL = "claude-sonnet-5";
 
 // [Milestone 4/5a] 2048 era apertado para respostas detalhadas e análise de
-// documentos/extratos. 8192 dá espaço suficiente para tool-calling e respostas
-// completas, mantendo o limite controlado por custo.
-const MAX_TOKENS = 8192;
+// documentos/extratos. 16384 dá margem adicional para extratos grandes,
+// tool-calling e respostas completas, mantendo um teto controlado de custo.
+const MAX_TOKENS = 16384;
 
 export class AiConfigError extends Error {
   constructor(message = "ANTHROPIC_API_KEY não está definido.") {
