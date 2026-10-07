@@ -103,6 +103,7 @@ describe("formatMinor", () => {
   it("formata CVE e EUR, ambos com 2 casas decimais", () => {
     expect(formatMinor(5000n, "CVE")).toBe("50,00 CVE");
     expect(formatMinor(1050n, "EUR")).toBe("10,50 EUR");
+    expect(formatMinor(209400n, "CVE")).toBe("2094,00 CVE");
   });
 });
 

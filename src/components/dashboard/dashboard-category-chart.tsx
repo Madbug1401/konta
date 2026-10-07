@@ -2,6 +2,7 @@
 
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ACCOUNT_COLORS } from "@/lib/account-colors";
+import { formatMinor } from "@/lib/financial-engine/money";
 
 export interface CategorySpendItem {
   name: string;
@@ -46,7 +47,7 @@ export function DashboardCategoryChart({ items, currency }: { items: CategorySpe
             // `labelStyle` só cobria o nome da categoria (a "label"), nunca
             // o valor em si.
             itemStyle={{ color: "var(--color-foreground)" }}
-            formatter={(value) => [`${Number(value).toLocaleString("pt-CV")} ${currency}`, "Despesa"]}
+            formatter={(value) => [formatMinor(BigInt(value ?? 0), currency), "Despesa"]}
           />
           <Bar dataKey="amount" radius={[0, 6, 6, 0]}>
             {items.map((item, index) => (
