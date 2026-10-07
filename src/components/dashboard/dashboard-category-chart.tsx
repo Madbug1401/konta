@@ -47,7 +47,7 @@ export function DashboardCategoryChart({ items, currency }: { items: CategorySpe
             // `labelStyle` só cobria o nome da categoria (a "label"), nunca
             // o valor em si.
             itemStyle={{ color: "var(--color-foreground)" }}
-            formatter={(value) => [formatMinor(typeof value === "number" && Number.isFinite(value) ? BigInt(value) : 0n, currency), "Despesa"]}
+            formatter={(value) => [formatMinor(typeof value === "number" && Number.isSafeInteger(value) ? BigInt(value) : 0n, currency), "Despesa"]}
           />
           <Bar dataKey="amount" radius={[0, 6, 6, 0]}>
             {items.map((item, index) => (

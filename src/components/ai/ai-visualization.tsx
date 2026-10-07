@@ -15,6 +15,8 @@
 
 import { Bar, BarChart, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, AreaChart, Pie, PieChart } from "recharts";
 import { ACCOUNT_COLORS } from "@/lib/account-colors";
+import { CURRENCY_CODES } from "@/lib/currencies";
+import { formatMinor } from "@/lib/financial-engine/money";
 import type { AiVisualization } from "@/lib/analytics/visualization";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +29,12 @@ function ChartTooltip({ unit }: { unit?: string }) {
       contentStyle={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }}
       labelStyle={{ color: "var(--color-foreground)" }}
       itemStyle={{ color: "var(--color-foreground)" }}
-      formatter={(value) => [`${Number(value).toLocaleString("pt-CV")}${unit ? ` ${unit}` : ""}`, ""]}
+      formatter={(value) => {
+        if (unit && CURRENCY_CODES.some((currency) => currency === unit)) {
+          return [formatMinor(typeof value === "number" && Number.isSafeInteger(value) ? BigInt(value) : 0n, unit), ""];
+        }
+        return [`${Number(value).toLocaleString("pt-CV")}${unit ? ` ${unit}` : ""}`, ""];
+      }}
     />
   );
 }

@@ -9,6 +9,7 @@
 import { useRouter } from "next/navigation";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { ACCOUNT_COLORS } from "@/lib/account-colors";
+import { formatMinor } from "@/lib/financial-engine/money";
 
 export interface CategoryDonutSlice {
   name: string;
@@ -28,7 +29,10 @@ export function CategoryDonutChart({ slices, currency }: { slices: CategoryDonut
             contentStyle={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }}
             labelStyle={{ color: "var(--color-foreground)" }}
             itemStyle={{ color: "var(--color-foreground)" }}
-            formatter={(value) => [`${Number(value).toLocaleString("pt-CV")} ${currency}`, ""]}
+            formatter={(value) => [
+              formatMinor(typeof value === "number" && Number.isSafeInteger(value) ? BigInt(value) : 0n, currency),
+              "",
+            ]}
           />
           <Pie
             data={slices}

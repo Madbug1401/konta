@@ -13,6 +13,7 @@
 // lá via router, mesmo mecanismo de qualquer outro link da página.
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { formatMinor } from "@/lib/financial-engine/money";
 
 export interface CashflowChartPoint {
   label: string;
@@ -42,7 +43,10 @@ export function CashflowChart({ points, currency }: { points: CashflowChartPoint
               contentStyle={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }}
               labelStyle={{ color: "var(--color-foreground)" }}
               itemStyle={{ color: "var(--color-foreground)" }}
-              formatter={(value, name) => [`${Number(value).toLocaleString("pt-CV")} ${currency}`, name === "income" ? "Receitas" : "Despesas"]}
+              formatter={(value, name) => [
+                formatMinor(typeof value === "number" && Number.isSafeInteger(value) ? BigInt(value) : 0n, currency),
+                name === "income" ? "Receitas" : "Despesas",
+              ]}
             />
             <Bar dataKey="income" fill="var(--color-success)" radius={[3, 3, 0, 0]} className="cursor-pointer" onClick={handleBarClick} />
             <Bar dataKey="expense" fill="var(--color-danger)" radius={[3, 3, 0, 0]} className="cursor-pointer" onClick={handleBarClick} />
